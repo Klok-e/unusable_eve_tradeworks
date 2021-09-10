@@ -6,3 +6,10 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+rust_eveonline_esi = { git = "https://github.com/LokiVKlokeNaAndoke/rust_eveonline_esi" }
+tokio = { version = "1.11.0", features = ["full"] }
+thiserror = "1.0.29"
+
+[dependencies.reqwest]
+version = "0.11.4"
+features = ["json", "multipart", "default-tls"]
