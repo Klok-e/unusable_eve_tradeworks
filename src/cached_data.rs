@@ -1,6 +1,6 @@
 use std::{future::Future, path::Path};
 
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Serialize};
 use serde_json;
 
 #[derive(Debug)]

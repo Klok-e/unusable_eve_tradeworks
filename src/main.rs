@@ -6,12 +6,8 @@ use error::Result;
 
 use rust_eveonline_esi::apis::{
     configuration::Configuration,
-    market_api::{
-        self, GetMarketsGroupsParams, GetMarketsGroupsSuccess, GetMarketsRegionIdHistoryParams,
-        GetMarketsRegionIdHistorySuccess, GetMarketsRegionIdTypesParams,
-        GetMarketsRegionIdTypesSuccess,
-    },
-    search_api::{self, get_search, GetSearchParams, GetSearchSuccess},
+    market_api::{self, GetMarketsRegionIdHistoryParams, GetMarketsRegionIdTypesParams},
+    search_api::{get_search, GetSearchParams, GetSearchSuccess},
     universe_api::{
         self, GetUniverseConstellationsConstellationIdParams,
         GetUniverseConstellationsConstellationIdSuccess, GetUniverseSystemsSystemIdParams,
@@ -130,7 +126,7 @@ async fn run() -> Result<()> {
     .data;
 
     // all history
-    let data = CachedData::load_or_create_async("all_types_history", || async {
+    let _data = CachedData::load_or_create_async("all_types_history", || async {
         let mut all_histories = Vec::new();
         for item_type in all_types {
             let hist_for_type = market_api::get_markets_region_id_history(
