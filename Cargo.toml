@@ -10,8 +10,16 @@ rust_eveonline_esi = { git = "https://github.com/LokiVKlokeNaAndoke/rust_eveonli
 tokio = { version = "1.11.0", features = ["full"] }
 thiserror = "1.0.29"
 serde = { version = "1.0.130", features = ["derive"] }
-serde_json = "1.0.67"
+rmp-serde = "0.15.5"
+futures = "0.3.17"
+chrono = "0.4.19"
+statrs = "0.15.0"
+
 
 [dependencies.reqwest]
 version = "0.11.4"
 features = ["json", "multipart", "default-tls"]
+
+[profile.dev.package."*"]
+opt-level = 3
+debug = false

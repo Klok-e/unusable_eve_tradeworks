@@ -1,7 +1,10 @@
-use std::{future::Future, path::Path};
+use std::{
+    future::Future,
+    path::{Components, Path},
+};
 
 use serde::{de::DeserializeOwned, Serialize};
-use serde_json;
+use rmp_serde;
 
 #[derive(Debug)]
 pub struct CachedData<T> {
@@ -12,27 +15,27 @@ impl<T> CachedData<T>
 where
     T: Serialize + DeserializeOwned,
 {
-    pub fn load_or_create(path: impl AsRef<Path>, gen: impl FnOnce() -> T) -> Self {
-        let data = if path.as_ref().exists() {
-            let str = std::fs::read_to_string(path).unwrap();
-            serde_json::from_str(str.as_str()).unwrap()
-        } else {
-            gen()
-        };
-        Self { data }
-    }
-
     pub async fn load_or_create_async<F, FO>(path: impl AsRef<Path>, gen: F) -> Self
     where
         F: FnOnce() -> FO,
         FO: Future<Output = T>,
     {
         let data = if path.as_ref().exists() {
-            let str = std::fs::read_to_string(path).unwrap();
-            serde_json::from_str(str.as_str()).unwrap()
+            println!("loading path {:?} ...", path.as_ref());
+            let str = std::fs::read(path.as_ref()).unwrap();
+            let deser = rmp_serde::from_read(str.as_slice()).unwrap();
+            deser
         } else {
-            gen().await
+            println!("gen path {:?}", path.as_ref());
+            let generated = gen().await;
+            let s = rmp_serde::to_vec(&generated).unwrap();
+            let mut comp = path.as_ref().to_path_buf();
+            comp.pop();
+            std::fs::create_dir_all(comp).unwrap();
+            std::fs::write(path.as_ref(), s).unwrap();
+            generated
         };
+        println!("finished loading or gen {:?}", path.as_ref());
         Self { data }
     }
 }
