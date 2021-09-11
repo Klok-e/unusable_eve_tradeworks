@@ -1,4 +1,3 @@
-use chrono::{DateTime, Utc};
 use rust_eveonline_esi::models::GetMarketsRegionIdHistory200Ok;
 use serde::{Deserialize, Serialize};
 

@@ -137,7 +137,7 @@ async fn run() -> Result<()> {
         history(&config, all_types, the_forge, "cache/all_types_history.txt").await;
 
     // turn history into 7 day running average
-    let types_average = averages(types_history);
+    let _types_average = averages(types_history);
 
     Ok(())
 }

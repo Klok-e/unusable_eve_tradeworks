@@ -1,10 +1,7 @@
-use std::{
-    future::Future,
-    path::{Components, Path},
-};
+use std::{future::Future, path::Path};
 
-use serde::{de::DeserializeOwned, Serialize};
 use rmp_serde;
+use serde::{de::DeserializeOwned, Serialize};
 
 #[derive(Debug)]
 pub struct CachedData<T> {
