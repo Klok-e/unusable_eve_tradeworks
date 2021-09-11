@@ -1,21 +1,31 @@
 mod cached_data;
+mod consts;
 mod error;
 mod item_type;
 mod paged_all;
+mod stat;
+use std::collections::{HashMap, HashSet};
+
+use chrono::{NaiveDate, Utc};
+use consts::DATE_FMT;
 use error::Result;
 
 use futures::{stream, StreamExt};
-use rust_eveonline_esi::apis::{
-    configuration::Configuration,
-    market_api::{self, GetMarketsRegionIdHistoryParams, GetMarketsRegionIdTypesParams},
-    search_api::{get_search, GetSearchParams, GetSearchSuccess},
-    universe_api::{
-        self, GetUniverseConstellationsConstellationIdParams,
-        GetUniverseConstellationsConstellationIdSuccess, GetUniverseSystemsSystemIdParams,
-        GetUniverseSystemsSystemIdSuccess,
+use itertools::Itertools;
+use rust_eveonline_esi::{
+    apis::{
+        configuration::Configuration,
+        market_api::{self, GetMarketsRegionIdHistoryParams, GetMarketsRegionIdTypesParams},
+        search_api::{get_search, GetSearchParams, GetSearchSuccess},
+        universe_api::{
+            self, GetUniverseConstellationsConstellationIdParams,
+            GetUniverseConstellationsConstellationIdSuccess, GetUniverseSystemsSystemIdParams,
+            GetUniverseSystemsSystemIdSuccess, GetUniverseTypesTypeIdParams,
+        },
     },
+    models::GetMarketsRegionIdHistory200Ok,
 };
-use statrs::statistics::{Data, Median};
+use stat::{AverageStat, MedianStat};
 
 use crate::{
     cached_data::CachedData,
@@ -132,25 +142,138 @@ async fn run() -> Result<()> {
     .await
     .data;
 
-    // all history
-    let types_history: Vec<ItemType> =
-        history(&config, all_types, the_forge, "cache/all_types_history.txt").await;
+    // all jita history
+    let jita_history = history(
+        &config,
+        &all_types,
+        the_forge,
+        "cache/all_types_history.txt",
+    )
+    .await;
 
-    // turn history into 7 day running average
-    let _types_average = averages(types_history);
+    let t0dt = find_region_id_system(&config, "t0dt-t").await?;
+
+    // all t0dt history
+    let t0dt_history = history(&config, &all_types, t0dt, "cache/all_types_t0dt.txt").await;
+
+    // t0dt_history.iter().find(|x| x.id == 58848).map(|x| dbg!(x));
+
+    // turn history into n day average
+    let jita_types_average = averages(jita_history)
+        .into_iter()
+        .map(|x| (x.id, x.market_data))
+        .collect::<HashMap<_, _>>();
+
+    let types_average = averages(t0dt_history)
+        .into_iter()
+        .map(|x| (x.id, x.market_data))
+        .collect::<HashMap<_, _>>();
+
+    // pair
+    let pairs = jita_types_average
+        .into_iter()
+        .map(|(k, v)| SystemMarketsItem {
+            id: k,
+            source: v,
+            destination: types_average[&k].clone(),
+        })
+        .collect::<Vec<_>>();
+
+    // find items such that
+    let good_items = pairs
+        .into_iter()
+        .map(|x| {
+            let margin = x.destination.average / x.source.average;
+            (x, margin)
+        })
+        .filter(|x| x.0.destination.volume > 1.)
+        .sorted_by(|x, y| y.1.partial_cmp(&x.1).unwrap())
+        .take(30)
+        .collect::<Vec<_>>();
+
+    let items = stream::iter(good_items.iter())
+        .map(|it| {
+            let config = &config;
+            let it = it.clone();
+            async move {
+                (
+                    it.clone(),
+                    get_item_name(config, it.0.id)
+                        .await
+                        .unwrap_or("???".to_string()),
+                )
+            }
+        })
+        .buffer_unordered(16)
+        .collect::<Vec<_>>()
+        .await;
+
+    let format = items
+        .iter()
+        .map(|it| {
+            format!(
+                "{}; jita: {:.2}; t0dt: {:.2}; margin: {:.2}; volume dest: {:.2}; id: {}",
+                it.1,
+                it.0 .0.source.average,
+                it.0 .0.destination.average,
+                it.0 .1,
+                it.0 .0.destination.volume,
+                it.0 .0.id
+            )
+        })
+        .collect::<Vec<_>>();
+    println!("Maybe good items:\n{}", format.join("\n"));
+    println!();
+
+    let format = items
+        .iter()
+        .map(|it| format!("{}", it.1))
+        .collect::<Vec<_>>();
+    println!("Item names only:\n{}", format.join("\n"));
 
     Ok(())
 }
 
+#[derive(Debug, Clone)]
+pub struct SystemMarketsItem {
+    pub id: i32,
+    pub source: MarketData,
+    pub destination: MarketData,
+}
+
+async fn get_item_name(config: &Configuration, id: i32) -> Option<String> {
+    {
+        let result = universe_api::get_universe_types_type_id(
+            config,
+            GetUniverseTypesTypeIdParams {
+                type_id: id,
+                accept_language: None,
+                datasource: None,
+                if_none_match: None,
+                language: None,
+            },
+        )
+        .await;
+        match result {
+            Ok(t) => Some(t),
+            Err(e) => {
+                println!("error: {}, typeid: {}", e, id);
+                None
+            }
+        }
+    }
+    .map(|x| x.entity.unwrap().into_result().unwrap().name)
+}
+
 async fn history(
     config: &Configuration,
-    item_types: Vec<i32>,
+    item_types: &Vec<i32>,
     region: i32,
     cache_name: &str,
 ) -> Vec<ItemType> {
-    CachedData::load_or_create_async(cache_name, || async {
+    let mut data = CachedData::load_or_create_async(cache_name, || async {
         let hists = stream::iter(item_types)
-            .map(|item_type| {
+            .map(|&item_type| {
                 let config = &config;
                 async move {
                     {
@@ -201,37 +324,88 @@ async fn history(
             .collect::<Vec<_>>()
     })
     .await
-    .data
+    .data;
+
+    // fill blanks
+    for item in data.iter_mut() {
+        let history = std::mem::replace(&mut item.history, Vec::new());
+        let avg = history.iter().map(|x| x.average).median().unwrap_or(1.);
+        let high = history.iter().map(|x| x.highest).median().unwrap_or(1.);
+        let low = history.iter().map(|x| x.lowest).median().unwrap_or(1.);
+        let order = history.iter().map(|x| x.order_count).median().unwrap_or(0);
+        let vol = history.iter().map(|x| x.volume).median().unwrap_or(0);
+
+        // take earliest date
+        let mut dates = history
+            .into_iter()
+            .map(|x| {
+                let date = NaiveDate::parse_from_str(x.date.as_str(), DATE_FMT).unwrap();
+                (date, x)
+            })
+            .collect::<HashMap<_, _>>();
+        let current_date = Utc::now().naive_utc().date();
+        let min = match dates.keys().min() {
+            Some(s) => s,
+            None => {
+                item.history.push(GetMarketsRegionIdHistory200Ok {
+                    average: avg,
+                    date: current_date.format(DATE_FMT).to_string(),
+                    highest: high,
+                    lowest: low,
+                    order_count: order,
+                    volume: vol,
+                });
+                continue;
+            }
+        };
+
+        for date in min.iter_days() {
+            if dates.contains_key(&date) {
+                continue;
+            }
+
+            dates.insert(
+                date,
+                GetMarketsRegionIdHistory200Ok {
+                    average: avg,
+                    date: date.format(DATE_FMT).to_string(),
+                    highest: high,
+                    lowest: low,
+                    order_count: 0,
+                    volume: 0,
+                },
+            );
+
+            if date == current_date {
+                break;
+            }
+        }
+        let new_history = dates.into_iter().sorted_by_key(|x| x.0);
+        for it in new_history {
+            item.history.push(it.1);
+        }
+    }
+
+    data
 }
 
 fn averages(history: Vec<ItemType>) -> Vec<ItemTypeAveraged> {
     history
         .into_iter()
         .map(|tp| {
-            let lastndays = tp.history.into_iter().rev().take(7).collect::<Vec<_>>();
+            let lastndays = tp.history.into_iter().rev().take(30).collect::<Vec<_>>();
             ItemTypeAveraged {
                 id: tp.id,
                 market_data: MarketData {
-                    average: Data::new(lastndays.iter().map(|x| x.average).collect::<Vec<_>>())
-                        .median(),
-                    highest: Data::new(lastndays.iter().map(|x| x.highest).collect::<Vec<_>>())
-                        .median(),
-                    lowest: Data::new(lastndays.iter().map(|x| x.lowest).collect::<Vec<_>>())
-                        .median(),
-                    order_count: Data::new(
-                        lastndays
-                            .iter()
-                            .map(|x| x.order_count as f64)
-                            .collect::<Vec<_>>(),
-                    )
-                    .median() as i64,
-                    volume: Data::new(
-                        lastndays
-                            .iter()
-                            .map(|x| x.volume as f64)
-                            .collect::<Vec<_>>(),
-                    )
-                    .median() as i64,
+                    average: lastndays.iter().map(|x| x.average).median().unwrap(),
+                    highest: lastndays.iter().map(|x| x.highest).median().unwrap(),
+                    lowest: lastndays.iter().map(|x| x.lowest).median().unwrap(),
+                    order_count: lastndays
+                        .iter()
+                        .map(|x| x.order_count as f64)
+                        .median()
+                        .unwrap(),
+                    volume: lastndays.iter().map(|x| x.volume as f64).median().unwrap(),
                 },
             }
         })

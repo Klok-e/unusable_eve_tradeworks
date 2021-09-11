@@ -13,11 +13,11 @@ pub struct ItemTypeAveraged {
     pub market_data: MarketData,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MarketData {
     pub average: f64,
     pub highest: f64,
     pub lowest: f64,
-    pub order_count: i64,
-    pub volume: i64,
+    pub order_count: f64,
+    pub volume: f64,
 }
