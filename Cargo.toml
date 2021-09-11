@@ -9,6 +9,8 @@ edition = "2018"
 rust_eveonline_esi = { git = "https://github.com/LokiVKlokeNaAndoke/rust_eveonline_esi" }
 tokio = { version = "1.11.0", features = ["full"] }
 thiserror = "1.0.29"
+serde = { version = "1.0.130", features = ["derive"] }
+serde_json = "1.0.67"
 
 [dependencies.reqwest]
 version = "0.11.4"
