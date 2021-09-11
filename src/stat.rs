@@ -1,4 +1,3 @@
-use futures::stream::futures_unordered::Iter;
 use itertools::Itertools;
 
 pub trait AverageStat {
@@ -31,14 +30,14 @@ pub trait MedianStat<T> {
 impl<T, I> MedianStat<T> for I
 where
     I: Iterator<Item = T>,
-    T: PartialOrd+Clone,
+    T: PartialOrd + Clone,
 {
     fn median(self) -> Option<T> {
         let sorted = self
             .sorted_by(|x, y| x.partial_cmp(y).unwrap())
             .collect::<Vec<_>>();
         if sorted.len() > 0 {
-            let ind=sorted.len() / 2;
+            let ind = sorted.len() / 2;
             Some(sorted[ind].clone())
         } else {
             None

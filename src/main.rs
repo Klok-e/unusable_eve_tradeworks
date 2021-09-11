@@ -4,7 +4,7 @@ mod error;
 mod item_type;
 mod paged_all;
 mod stat;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use chrono::{NaiveDate, Utc};
 use consts::DATE_FMT;

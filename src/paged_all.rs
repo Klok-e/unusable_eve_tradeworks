@@ -1,6 +1,12 @@
 use std::{fmt::Debug, future::Future};
 
-use rust_eveonline_esi::{apis::{market_api::{GetMarketsRegionIdHistorySuccess, GetMarketsRegionIdTypesSuccess}, universe_api::GetUniverseTypesTypeIdSuccess}, models::{GetMarketsRegionIdHistory200Ok, GetUniverseTypesTypeIdOk}};
+use rust_eveonline_esi::{
+    apis::{
+        market_api::{GetMarketsRegionIdHistorySuccess, GetMarketsRegionIdTypesSuccess},
+        universe_api::GetUniverseTypesTypeIdSuccess,
+    },
+    models::{GetMarketsRegionIdHistory200Ok, GetUniverseTypesTypeIdOk},
+};
 
 pub async fn get_all_pages<T, F, TO, TOS, E>(get: F, max_items_batch: usize) -> Vec<TOS>
 where
@@ -55,9 +61,7 @@ impl ToResult<Vec<GetMarketsRegionIdHistory200Ok>, GetMarketsRegionIdHistorySucc
 impl ToResult<GetUniverseTypesTypeIdOk, GetUniverseTypesTypeIdSuccess>
     for GetUniverseTypesTypeIdSuccess
 {
-    fn into_result(
-        self,
-    ) -> Result<GetUniverseTypesTypeIdOk, GetUniverseTypesTypeIdSuccess> {
+    fn into_result(self) -> Result<GetUniverseTypesTypeIdOk, GetUniverseTypesTypeIdSuccess> {
         if let GetUniverseTypesTypeIdSuccess::Status200(ok) = self {
             Ok(ok)
         } else {
