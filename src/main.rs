@@ -23,13 +23,14 @@ use rust_eveonline_esi::{
             GetUniverseSystemsSystemIdSuccess, GetUniverseTypesTypeIdParams,
         },
     },
-    models::GetMarketsRegionIdHistory200Ok,
+    models::{GetMarketsRegionIdHistory200Ok, GetUniverseTypesTypeIdOk},
 };
 use stat::{AverageStat, MedianStat};
 
 use crate::{
     cached_data::CachedData,
-    item_type::{ItemType, ItemTypeAveraged, MarketData},
+    consts::RETRIES,
+    item_type::{ItemType, ItemTypeAveraged, MarketData, SystemMarketsItem, SystemMarketsItemData},
     paged_all::{get_all_pages, ToResult},
 };
 
@@ -176,12 +177,45 @@ async fn run() -> Result<()> {
             id: k,
             source: v,
             destination: types_average[&k].clone(),
-        })
-        .collect::<Vec<_>>();
+        });
+
+    let pairs: Vec<SystemMarketsItemData> = CachedData::load_or_create_async("cache/pairs", || {
+        let config = &config;
+        async move {
+            stream::iter(pairs)
+                .map(|it| {
+                    let it = it.clone();
+                    async move {
+                        Some(SystemMarketsItemData {
+                            desc: match get_item_stuff(config, it.id).await {
+                                Some(x) => x,
+                                None => return None,
+                            },
+                            source: it.source,
+                            destination: it.destination,
+                        })
+                    }
+                })
+                .buffer_unordered(16)
+                .collect::<Vec<Option<SystemMarketsItemData>>>()
+                .await
+                .into_iter()
+                .flatten()
+                .collect()
+        }
+    })
+    .await
+    .data;
 
     // find items such that
     let good_items = pairs
         .into_iter()
+        .filter(|x| {
+            x.desc.volume.unwrap_or_else(|| {
+                println!("no volume item: {}", x.desc.type_id);
+                1.
+            }) < 500.
+        })
         .map(|x| {
             let margin = x.destination.average / x.source.average;
             (x, margin)
@@ -191,78 +225,62 @@ async fn run() -> Result<()> {
         .take(30)
         .collect::<Vec<_>>();
 
-    let items = stream::iter(good_items.iter())
-        .map(|it| {
-            let config = &config;
-            let it = it.clone();
-            async move {
-                (
-                    it.clone(),
-                    get_item_name(config, it.0.id)
-                        .await
-                        .unwrap_or("???".to_string()),
-                )
-            }
-        })
-        .buffer_unordered(16)
-        .collect::<Vec<_>>()
-        .await;
-
-    let format = items
+    let format = good_items
         .iter()
         .map(|it| {
             format!(
                 "{}; jita: {:.2}; t0dt: {:.2}; margin: {:.2}; volume dest: {:.2}; id: {}",
+                it.0.desc.name,
+                it.0.source.average,
+                it.0.destination.average,
                 it.1,
-                it.0 .0.source.average,
-                it.0 .0.destination.average,
-                it.0 .1,
-                it.0 .0.destination.volume,
-                it.0 .0.id
+                it.0.destination.volume,
+                it.0.desc.type_id
             )
         })
         .collect::<Vec<_>>();
     println!("Maybe good items:\n{}", format.join("\n"));
     println!();
 
-    let format = items
+    let format = good_items
         .iter()
-        .map(|it| format!("{}", it.1))
+        .map(|it| format!("{}", it.0.desc.name))
         .collect::<Vec<_>>();
     println!("Item names only:\n{}", format.join("\n"));
 
     Ok(())
 }
 
-#[derive(Debug, Clone)]
-pub struct SystemMarketsItem {
-    pub id: i32,
-    pub source: MarketData,
-    pub destination: MarketData,
-}
-
-async fn get_item_name(config: &Configuration, id: i32) -> Option<String> {
+async fn get_item_stuff(config: &Configuration, id: i32) -> Option<GetUniverseTypesTypeIdOk> {
     {
-        let result = universe_api::get_universe_types_type_id(
-            config,
-            GetUniverseTypesTypeIdParams {
-                type_id: id,
-                accept_language: None,
-                datasource: None,
-                if_none_match: None,
-                language: None,
-            },
-        )
-        .await;
-        match result {
-            Ok(t) => Some(t),
-            Err(e) => {
-                println!("error: {}, typeid: {}", e, id);
-                None
-            }
+        let mut retry = 0;
+        loop {
+            let result = universe_api::get_universe_types_type_id(
+                config,
+                GetUniverseTypesTypeIdParams {
+                    type_id: id,
+                    accept_language: None,
+                    datasource: None,
+                    if_none_match: None,
+                    language: None,
+                },
+            )
+            .await;
+            break match result {
+                Ok(t) => Some(t),
+                Err(e) => {
+                    retry += 1;
+                    if retry < RETRIES {
+                        println!("error: {}, typeid: {}; retry: {}", e, id, retry);
+                        continue;
+                    }
+                    println!("error: {}, typeid: {}; retry: {}. No retries left", e, id, retry);
+                    None
+                }
+            };
         }
     }
-    .map(|x| x.entity.unwrap().into_result().unwrap().name)
+    .map(|x| x.entity.unwrap().into_result().unwrap())
 }
 
 async fn history(
@@ -296,7 +314,7 @@ async fn history(
                                     Ok(t) => t,
                                     Err(e) => {
                                         retries += 1;
-                                        if retries > 2 {
+                                        if retries > RETRIES {
                                             break None;
                                         }
                                         println!("error {}. Retrying {} ...", e, retries);
