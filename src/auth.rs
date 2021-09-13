@@ -17,7 +17,7 @@ impl Auth {
                 ?response_type=code\
                 &redirect_uri=eveauth-app://callback/\
                 &client_id={}\
-                &scope=esi-markets.structure_markets.v1",
+                &scope=esi-markets.structure_markets.v1 esi-search.search_structures.v1 esi-universe.read_structures.v1",
                 client_id
             );
 

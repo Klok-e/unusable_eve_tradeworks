@@ -12,21 +12,30 @@ use consts::DATE_FMT;
 use error::Result;
 
 use futures::{stream, StreamExt};
+use item_type::Order;
 use itertools::Itertools;
 use rust_eveonline_esi::{
     apis::{
         configuration::Configuration,
-        market_api::{self, GetMarketsRegionIdHistoryParams, GetMarketsRegionIdTypesParams},
-        search_api::{get_search, GetSearchParams, GetSearchSuccess},
+        market_api::{
+            self, GetMarketsRegionIdHistoryParams, GetMarketsRegionIdOrdersParams,
+            GetMarketsRegionIdTypesParams, GetMarketsStructuresStructureIdParams,
+        },
+        search_api::{
+            self, get_search, GetCharactersCharacterIdSearchParams, GetSearchParams,
+            GetSearchSuccess,
+        },
         universe_api::{
             self, GetUniverseConstellationsConstellationIdParams,
-            GetUniverseConstellationsConstellationIdSuccess, GetUniverseSystemsSystemIdParams,
+            GetUniverseConstellationsConstellationIdSuccess, GetUniverseStationsStationIdParams,
+            GetUniverseStructuresStructureIdParams, GetUniverseSystemsSystemIdParams,
             GetUniverseSystemsSystemIdSuccess, GetUniverseTypesTypeIdParams,
         },
     },
     models::{GetMarketsRegionIdHistory200Ok, GetUniverseTypesTypeIdOk},
 };
 use stat::{AverageStat, MedianStat};
+use tokio::sync::Mutex;
 
 use crate::{
     auth::Auth,
@@ -35,6 +44,24 @@ use crate::{
     item_type::{ItemType, ItemTypeAveraged, MarketData, SystemMarketsItem, SystemMarketsItemData},
     paged_all::{get_all_pages, ToResult},
 };
+use serde::{Deserialize, Serialize};
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CharacterInfo {
+    #[serde(rename = "CharacterID")]
+    pub character_id: i32,
+    #[serde(rename = "CharacterName")]
+    pub character_name: String,
+    #[serde(rename = "ExpiresOn")]
+    pub expires_on: String,
+    #[serde(rename = "Scopes")]
+    pub scopes: String,
+    #[serde(rename = "TokenType")]
+    pub token_type: String,
+    #[serde(rename = "CharacterOwnerHash")]
+    pub character_owner_hash: String,
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -45,9 +72,30 @@ async fn run() -> Result<()> {
     let auth = Auth::load_or_request_token().await;
 
     let mut config = Configuration::new();
-    config.oauth_access_token = Some(auth.access_token);
+    config.oauth_access_token = Some(auth.access_token.clone());
+    let character_id = {
+        let client = reqwest::Client::new();
+        client
+            .get("https://login.eveonline.com/oauth/verify")
+            .header("Authorization", format!("Bearer {}", auth.access_token))
+            .send()
+            .await
+            .unwrap()
+            .json::<CharacterInfo>()
+            .await
+            .unwrap()
+            .character_id
+    };
 
-    let the_forge = find_region_id_system(&config, "jita").await?;
+    let the_forge = find_region_id_station(
+        &config,
+        Station {
+            is_citadel: false,
+            name: "Jita IV - Moon 4 - Caldari Navy Assembly Plant",
+        },
+        character_id,
+    )
+    .await?;
 
     // all item type ids
     let all_types = CachedData::load_or_create_async("cache/all_types.txt", || {
@@ -58,7 +106,7 @@ async fn run() -> Result<()> {
                     market_api::get_markets_region_id_types(
                         config,
                         GetMarketsRegionIdTypesParams {
-                            region_id: the_forge,
+                            region_id: the_forge.region_id,
                             datasource: None,
                             if_none_match: None,
                             page: Some(page),
@@ -85,7 +133,15 @@ async fn run() -> Result<()> {
     )
     .await;
 
-    let t0dt = find_region_id_system(&config, "t0dt-t").await?;
+    let t0dt = find_region_id_station(
+        &config,
+        Station {
+            is_citadel: true,
+            name: "T0DT-T - The Firstest Imperial Palace",
+        },
+        character_id,
+    )
+    .await?;
 
     // all t0dt history
     let t0dt_history = history(&config, &all_types, t0dt, "cache/all_types_t0dt.txt").await;
@@ -164,13 +220,15 @@ async fn run() -> Result<()> {
     let format = good_items
         .iter()
         .map(|it| {
+            let sell_volume:i32 = it.0.destination.orders.iter().map(|it|it.volume_remain).sum();
             format!(
-                "{}; jita: {:.2}; t0dt: {:.2}; margin: {:.2}; volume dest: {:.2}; id: {}",
+                "{}; jita: {:.2}; t0dt: {:.2}; margin: {:.2}; volume dest: {:.2}; current volume: {}; id: {}",
                 it.0.desc.name,
                 it.0.source.highest,
                 it.0.destination.lowest,
                 it.1,
                 it.0.destination.volume,
+                sell_volume,
                 it.0.desc.type_id
             )
         })
@@ -187,29 +245,112 @@ async fn run() -> Result<()> {
     Ok(())
 }
 
-async fn find_region_id_system(config: &Configuration, sys_name: &str) -> Result<i32> {
+#[derive(Clone, Copy)]
+pub struct StationIdData {
+    pub station_id: StationId,
+    pub system_id: i32,
+    pub region_id: i32,
+}
+
+pub struct Station<'a> {
+    pub is_citadel: bool,
+    pub name: &'a str,
+}
+#[derive(Clone, Copy)]
+pub struct StationId {
+    pub is_citadel: bool,
+    pub id: i64,
+}
+
+async fn find_region_id_station(
+    config: &Configuration,
+    station: Station<'_>,
+    character_id: i32,
+) -> Result<StationIdData> {
     // find system id
-    let search_res = get_search(
-        &config,
-        GetSearchParams {
-            categories: vec!["solar_system".to_string()],
-            search: sys_name.to_string(),
-            accept_language: None,
-            datasource: None,
-            if_none_match: None,
-            language: None,
-            strict: None,
-        },
-    )
-    .await?
-    .entity
-    .unwrap();
-    let jita;
-    if let GetSearchSuccess::Status200(search_res) = search_res {
-        jita = search_res.solar_system.unwrap()[0];
+    let station_id = if station.is_citadel {
+        search_api::get_characters_character_id_search(
+            config,
+            GetCharactersCharacterIdSearchParams {
+                categories: vec!["structure".to_string()],
+                character_id: character_id,
+                search: station.name.to_string(),
+                accept_language: None,
+                datasource: None,
+                if_none_match: None,
+                language: None,
+                strict: None,
+                token: None,
+            },
+        )
+        .await?
+        .entity
+        .unwrap()
+        .into_result()
+        .unwrap()
+        .structure
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap()
     } else {
-        panic!();
-    }
+        get_search(
+            &config,
+            GetSearchParams {
+                categories: vec!["station".to_string()],
+                search: station.name.to_string(),
+                accept_language: None,
+                datasource: None,
+                if_none_match: None,
+                language: None,
+                strict: None,
+            },
+        )
+        .await?
+        .entity
+        .unwrap()
+        .into_result()
+        .unwrap()
+        .station
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap() as i64
+    };
+    let system_id = if station.is_citadel {
+        universe_api::get_universe_structures_structure_id(
+            config,
+            GetUniverseStructuresStructureIdParams {
+                structure_id: station_id,
+                datasource: None,
+                if_none_match: None,
+                token: None,
+            },
+        )
+        .await
+        .unwrap()
+        .entity
+        .unwrap()
+        .into_result()
+        .unwrap()
+        .solar_system_id
+    } else {
+        universe_api::get_universe_stations_station_id(
+            config,
+            GetUniverseStationsStationIdParams {
+                station_id: station_id as i32,
+                datasource: None,
+                if_none_match: None,
+            },
+        )
+        .await
+        .unwrap()
+        .entity
+        .unwrap()
+        .into_result()
+        .unwrap()
+        .system_id
+    };
 
     // get system constellation
     let constellation;
@@ -217,7 +358,7 @@ async fn find_region_id_system(config: &Configuration, sys_name: &str) -> Result
         universe_api::get_universe_systems_system_id(
             &config,
             GetUniverseSystemsSystemIdParams {
-                system_id: jita,
+                system_id: system_id,
                 accept_language: None,
                 datasource: None,
                 if_none_match: None,
@@ -256,7 +397,14 @@ async fn find_region_id_system(config: &Configuration, sys_name: &str) -> Result
     } else {
         panic!();
     }
-    Ok(region)
+    Ok(StationIdData {
+        station_id: StationId {
+            is_citadel: station.is_citadel,
+            id: station_id,
+        },
+        system_id: system_id,
+        region_id: region,
+    })
 }
 async fn get_item_stuff(config: &Configuration, id: i32) -> Option<GetUniverseTypesTypeIdOk> {
     {
@@ -293,16 +441,103 @@ async fn get_item_stuff(config: &Configuration, id: i32) -> Option<GetUniverseTy
     .map(|x| x.entity.unwrap().into_result().unwrap())
 }
 
+async fn get_orders_station(config: &Configuration, station: StationIdData) -> Vec<Order> {
+    if station.station_id.is_citadel {
+        get_all_pages(
+            |page| async move {
+                market_api::get_markets_structures_structure_id(
+                    config,
+                    GetMarketsStructuresStructureIdParams {
+                        structure_id: station.station_id.id,
+                        datasource: None,
+                        if_none_match: None,
+                        page: Some(page),
+                        token: None,
+                    },
+                )
+                .await
+                .unwrap()
+                .entity
+                .unwrap()
+            },
+            1000,
+        )
+        .await
+        .into_iter()
+        .map(|it| Order {
+            duration: it.duration,
+            is_buy_order: it.is_buy_order,
+            issued: it.issued,
+            location_id: it.location_id,
+            min_volume: it.min_volume,
+            order_id: it.order_id,
+            price: it.price,
+            type_id: it.type_id,
+            volume_remain: it.volume_remain,
+            volume_total: it.volume_total,
+        })
+        .collect::<Vec<_>>()
+    } else {
+        get_all_pages(
+            |page| async move {
+                market_api::get_markets_region_id_orders(
+                    config,
+                    GetMarketsRegionIdOrdersParams {
+                        order_type: "all".to_string(),
+                        region_id: station.region_id,
+                        datasource: None,
+                        if_none_match: None,
+                        page: Some(page),
+                        type_id: None,
+                    },
+                )
+                .await
+                .unwrap()
+                .entity
+                .unwrap()
+            },
+            1000,
+        )
+        .await
+        .into_iter()
+        .filter(|it| it.system_id == station.system_id)
+        .map(|it| Order {
+            duration: it.duration,
+            is_buy_order: it.is_buy_order,
+            issued: it.issued,
+            location_id: it.location_id,
+            min_volume: it.min_volume,
+            order_id: it.order_id,
+            price: it.price,
+            type_id: it.type_id,
+            volume_remain: it.volume_remain,
+            volume_total: it.volume_total,
+        })
+        .collect::<Vec<_>>()
+    }
+}
+
 async fn history(
     config: &Configuration,
     item_types: &Vec<i32>,
-    region: i32,
+    station: StationIdData,
     cache_name: &str,
 ) -> Vec<ItemType> {
     let mut data = CachedData::load_or_create_async(cache_name, || async {
+        let station_orders = get_orders_station(config, station).await;
+        let station_orders = Mutex::new(
+            station_orders
+                .into_iter()
+                .group_by(|x| x.type_id)
+                .into_iter()
+                .map(|(k, v)| (k, v.collect::<Vec<_>>()))
+                .collect::<HashMap<_, _>>(),
+        );
+
         let hists = stream::iter(item_types)
             .map(|&item_type| {
                 let config = &config;
+                let station_orders = &station_orders;
                 async move {
                     let mut retries = 0;
                     loop {
@@ -311,7 +546,7 @@ async fn history(
                             let region_hist_result = market_api::get_markets_region_id_history(
                                 config,
                                 GetMarketsRegionIdHistoryParams {
-                                    region_id: region,
+                                    region_id: station.region_id,
                                     type_id: item_type,
                                     datasource: None,
                                     if_none_match: None,
@@ -337,6 +572,10 @@ async fn history(
                         break Some(ItemType {
                             id: item_type,
                             history: hist_for_type,
+                            orders: std::mem::replace(
+                                station_orders.lock().await.get_mut(&item_type).unwrap(),
+                                Vec::new(),
+                            ),
                         });
                     }
                 }
@@ -432,6 +671,7 @@ fn averages(history: Vec<ItemType>) -> Vec<ItemTypeAveraged> {
                         .median()
                         .unwrap(),
                     volume: lastndays.iter().map(|x| x.volume as f64).median().unwrap(),
+                    orders: tp.orders,
                 },
             }
         })

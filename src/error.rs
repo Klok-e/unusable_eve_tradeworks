@@ -1,5 +1,7 @@
 use rust_eveonline_esi::apis::{
-    self, market_api::GetMarketsGroupsError, search_api::GetSearchError,
+    self,
+    market_api::GetMarketsGroupsError,
+    search_api::{GetCharactersCharacterIdSearchError, GetSearchError},
 };
 use thiserror::Error;
 
@@ -9,6 +11,8 @@ pub enum Error {
     MarketGroups(#[from] apis::Error<GetMarketsGroupsError>),
     #[error("search")]
     Search(#[from] apis::Error<GetSearchError>),
+    #[error("structure search")]
+    StructSearch(#[from] apis::Error<GetCharactersCharacterIdSearchError>),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -1,10 +1,28 @@
-use rust_eveonline_esi::models::{GetMarketsRegionIdHistory200Ok, GetUniverseTypesTypeIdOk};
+use rust_eveonline_esi::models::{
+    get_characters_character_id_orders_200_ok::Range, GetMarketsRegionIdHistory200Ok,
+    GetUniverseTypesTypeIdOk,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ItemType {
     pub id: i32,
     pub history: Vec<GetMarketsRegionIdHistory200Ok>,
+    pub orders: Vec<Order>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Order {
+    pub duration: i32,
+    pub is_buy_order: bool,
+    pub issued: String,
+    pub location_id: i64,
+    pub min_volume: i32,
+    pub order_id: i64,
+    pub price: f64,
+    pub type_id: i32,
+    pub volume_remain: i32,
+    pub volume_total: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -20,6 +38,7 @@ pub struct MarketData {
     pub lowest: f64,
     pub order_count: f64,
     pub volume: f64,
+    pub orders: Vec<Order>,
 }
 #[derive(Debug, Clone)]
 pub struct SystemMarketsItem {

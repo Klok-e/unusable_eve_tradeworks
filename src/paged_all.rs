@@ -2,10 +2,22 @@ use std::{fmt::Debug, future::Future};
 
 use rust_eveonline_esi::{
     apis::{
-        market_api::{GetMarketsRegionIdHistorySuccess, GetMarketsRegionIdTypesSuccess},
-        universe_api::GetUniverseTypesTypeIdSuccess,
+        market_api::{
+            GetMarketsRegionIdHistorySuccess, GetMarketsRegionIdOrdersSuccess,
+            GetMarketsRegionIdTypesSuccess, GetMarketsStructuresStructureIdSuccess,
+        },
+        search_api::{GetCharactersCharacterIdSearchSuccess, GetSearchSuccess},
+        universe_api::{
+            GetUniverseStationsStationIdSuccess, GetUniverseStructuresStructureIdSuccess,
+            GetUniverseTypesTypeIdSuccess,
+        },
     },
-    models::{GetMarketsRegionIdHistory200Ok, GetUniverseTypesTypeIdOk},
+    models::{
+        GetCharactersCharacterIdSearchOk, GetMarketsRegionIdHistory200Ok,
+        GetMarketsRegionIdOrders200Ok, GetMarketsStructuresStructureId200Ok, GetSearchOk,
+        GetUniverseStationsStationIdOk, GetUniverseStructuresStructureIdOk,
+        GetUniverseTypesTypeIdOk,
+    },
 };
 
 pub async fn get_all_pages<T, F, TO, TOS, E>(get: F, max_items_batch: usize) -> Vec<TOS>
@@ -63,6 +75,82 @@ impl ToResult<GetUniverseTypesTypeIdOk, GetUniverseTypesTypeIdSuccess>
 {
     fn into_result(self) -> Result<GetUniverseTypesTypeIdOk, GetUniverseTypesTypeIdSuccess> {
         if let GetUniverseTypesTypeIdSuccess::Status200(ok) = self {
+            Ok(ok)
+        } else {
+            Err(self)
+        }
+    }
+}
+
+impl ToResult<GetCharactersCharacterIdSearchOk, GetCharactersCharacterIdSearchSuccess>
+    for GetCharactersCharacterIdSearchSuccess
+{
+    fn into_result(
+        self,
+    ) -> Result<GetCharactersCharacterIdSearchOk, GetCharactersCharacterIdSearchSuccess> {
+        if let GetCharactersCharacterIdSearchSuccess::Status200(ok) = self {
+            Ok(ok)
+        } else {
+            Err(self)
+        }
+    }
+}
+impl ToResult<GetSearchOk, GetSearchSuccess> for GetSearchSuccess {
+    fn into_result(self) -> Result<GetSearchOk, GetSearchSuccess> {
+        if let GetSearchSuccess::Status200(ok) = self {
+            Ok(ok)
+        } else {
+            Err(self)
+        }
+    }
+}
+impl ToResult<GetUniverseStructuresStructureIdOk, GetUniverseStructuresStructureIdSuccess>
+    for GetUniverseStructuresStructureIdSuccess
+{
+    fn into_result(
+        self,
+    ) -> Result<GetUniverseStructuresStructureIdOk, GetUniverseStructuresStructureIdSuccess> {
+        if let GetUniverseStructuresStructureIdSuccess::Status200(ok) = self {
+            Ok(ok)
+        } else {
+            Err(self)
+        }
+    }
+}
+impl ToResult<GetUniverseStationsStationIdOk, GetUniverseStationsStationIdSuccess>
+    for GetUniverseStationsStationIdSuccess
+{
+    fn into_result(
+        self,
+    ) -> Result<GetUniverseStationsStationIdOk, GetUniverseStationsStationIdSuccess> {
+        if let GetUniverseStationsStationIdSuccess::Status200(ok) = self {
+            Ok(ok)
+        } else {
+            Err(self)
+        }
+    }
+}
+impl ToResult<Vec<GetMarketsStructuresStructureId200Ok>, GetMarketsStructuresStructureIdSuccess>
+    for GetMarketsStructuresStructureIdSuccess
+{
+    fn into_result(
+        self,
+    ) -> Result<Vec<GetMarketsStructuresStructureId200Ok>, GetMarketsStructuresStructureIdSuccess>
+    {
+        if let GetMarketsStructuresStructureIdSuccess::Status200(ok) = self {
+            Ok(ok)
+        } else {
+            Err(self)
+        }
+    }
+}
+impl ToResult<Vec<GetMarketsRegionIdOrders200Ok>, GetMarketsRegionIdOrdersSuccess>
+    for GetMarketsRegionIdOrdersSuccess
+{
+    fn into_result(
+        self,
+    ) -> Result<Vec<GetMarketsRegionIdOrders200Ok>, GetMarketsRegionIdOrdersSuccess> {
+        if let GetMarketsRegionIdOrdersSuccess::Status200(ok) = self {
             Ok(ok)
         } else {
             Err(self)
