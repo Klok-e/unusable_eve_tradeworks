@@ -1,3 +1,4 @@
+mod auth;
 mod cached_data;
 mod consts;
 mod error;
@@ -28,6 +29,7 @@ use rust_eveonline_esi::{
 use stat::{AverageStat, MedianStat};
 
 use crate::{
+    auth::Auth,
     cached_data::CachedData,
     consts::RETRIES,
     item_type::{ItemType, ItemTypeAveraged, MarketData, SystemMarketsItem, SystemMarketsItemData},
@@ -39,80 +41,11 @@ async fn main() -> Result<()> {
     run().await
 }
 
-async fn find_region_id_system(config: &Configuration, sys_name: &str) -> Result<i32> {
-    // find system id
-    let search_res = get_search(
-        &config,
-        GetSearchParams {
-            categories: vec!["solar_system".to_string()],
-            search: sys_name.to_string(),
-            accept_language: None,
-            datasource: None,
-            if_none_match: None,
-            language: None,
-            strict: None,
-        },
-    )
-    .await?
-    .entity
-    .unwrap();
-    let jita;
-    if let GetSearchSuccess::Status200(search_res) = search_res {
-        jita = search_res.solar_system.unwrap()[0];
-    } else {
-        panic!();
-    }
-
-    // get system constellation
-    let constellation;
-    if let GetUniverseSystemsSystemIdSuccess::Status200(jita_const) =
-        universe_api::get_universe_systems_system_id(
-            &config,
-            GetUniverseSystemsSystemIdParams {
-                system_id: jita,
-                accept_language: None,
-                datasource: None,
-                if_none_match: None,
-                language: None,
-            },
-        )
-        .await
-        .unwrap()
-        .entity
-        .unwrap()
-    {
-        constellation = jita_const.constellation_id;
-    } else {
-        panic!();
-    }
-
-    // get system region
-    let region;
-    if let GetUniverseConstellationsConstellationIdSuccess::Status200(ok) =
-        universe_api::get_universe_constellations_constellation_id(
-            &config,
-            GetUniverseConstellationsConstellationIdParams {
-                constellation_id: constellation,
-                accept_language: None,
-                datasource: None,
-                if_none_match: None,
-                language: None,
-            },
-        )
-        .await
-        .unwrap()
-        .entity
-        .unwrap()
-    {
-        region = ok.region_id;
-    } else {
-        panic!();
-    }
-    Ok(region)
-}
-
 async fn run() -> Result<()> {
-    let config = Configuration::new();
+    let auth = Auth::load_or_request_token().await;
+
+    let mut config = Configuration::new();
+    config.oauth_access_token = Some(auth.access_token);
 
     let the_forge = find_region_id_system(&config, "jita").await?;
 
@@ -215,10 +148,10 @@ async fn run() -> Result<()> {
     let good_items = pairs
         .into_iter()
         .map(|x| {
-            let buy_price = x.source.highest * (1. + broker_fee);
+            let buy_price = x.source.average * (1. + broker_fee);
             let expenses = buy_price + x.desc.volume.unwrap() as f64 * freight_cost_iskm3;
 
-            let sell_price = x.destination.lowest * (1. - broker_fee - sales_tax);
+            let sell_price = x.destination.average * (1. - broker_fee - sales_tax);
 
             let margin = sell_price / expenses;
             (x, margin)
@@ -254,6 +187,77 @@ async fn run() -> Result<()> {
     Ok(())
 }
 
+async fn find_region_id_system(config: &Configuration, sys_name: &str) -> Result<i32> {
+    // find system id
+    let search_res = get_search(
+        &config,
+        GetSearchParams {
+            categories: vec!["solar_system".to_string()],
+            search: sys_name.to_string(),
+            accept_language: None,
+            datasource: None,
+            if_none_match: None,
+            language: None,
+            strict: None,
+        },
+    )
+    .await?
+    .entity
+    .unwrap();
+    let jita;
+    if let GetSearchSuccess::Status200(search_res) = search_res {
+        jita = search_res.solar_system.unwrap()[0];
+    } else {
+        panic!();
+    }
+
+    // get system constellation
+    let constellation;
+    if let GetUniverseSystemsSystemIdSuccess::Status200(jita_const) =
+        universe_api::get_universe_systems_system_id(
+            &config,
+            GetUniverseSystemsSystemIdParams {
+                system_id: jita,
+                accept_language: None,
+                datasource: None,
+                if_none_match: None,
+                language: None,
+            },
+        )
+        .await
+        .unwrap()
+        .entity
+        .unwrap()
+    {
+        constellation = jita_const.constellation_id;
+    } else {
+        panic!();
+    }
+
+    // get system region
+    let region;
+    if let GetUniverseConstellationsConstellationIdSuccess::Status200(ok) =
+        universe_api::get_universe_constellations_constellation_id(
+            &config,
+            GetUniverseConstellationsConstellationIdParams {
+                constellation_id: constellation,
+                accept_language: None,
+                datasource: None,
+                if_none_match: None,
+                language: None,
+            },
+        )
+        .await
+        .unwrap()
+        .entity
+        .unwrap()
+    {
+        region = ok.region_id;
+    } else {
+        panic!();
+    }
+    Ok(region)
+}
 async fn get_item_stuff(config: &Configuration, id: i32) -> Option<GetUniverseTypesTypeIdOk> {
     {
         let mut retry = 0;

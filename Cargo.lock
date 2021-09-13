@@ -1093,6 +1093,7 @@ checksum = "8ccb82d61f80a663efe1f787a51b16b5a51e3314d6ac365b08639f52387b33f3"
 name = "unusable_eve_tradeworks"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "chrono",
  "futures",
  "itertools",
@@ -1100,6 +1101,7 @@ dependencies = [
  "rmp-serde",
  "rust_eveonline_esi",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
 ]
