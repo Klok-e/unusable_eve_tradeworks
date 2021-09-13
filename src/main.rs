@@ -188,7 +188,7 @@ async fn run() -> Result<()> {
                     async move {
                         Some(SystemMarketsItemData {
                             desc: match get_item_stuff(config, it.id).await {
-                                Some(x) => x,
+                                Some(x) => x.into(),
                                 None => return None,
                             },
                             source: it.source,
@@ -207,17 +207,20 @@ async fn run() -> Result<()> {
     .await
     .data;
 
+    let sales_tax = 0.05;
+    let broker_fee = 0.02;
+    let freight_cost_iskm3 = 1500.;
+
     // find items such that
     let good_items = pairs
         .into_iter()
-        .filter(|x| {
-            x.desc.volume.unwrap_or_else(|| {
-                println!("no volume item: {}", x.desc.type_id);
-                1.
-            }) < 500.
-        })
         .map(|x| {
-            let margin = x.destination.average / x.source.average;
+            let buy_price = x.source.highest * (1. + broker_fee);
+            let expenses = buy_price + x.desc.volume.unwrap() as f64 * freight_cost_iskm3;
+
+            let sell_price = x.destination.lowest * (1. - broker_fee - sales_tax);
+
+            let margin = sell_price / expenses;
             (x, margin)
         })
         .filter(|x| x.0.destination.volume > 1.)
@@ -231,8 +234,8 @@ async fn run() -> Result<()> {
             format!(
                 "{}; jita: {:.2}; t0dt: {:.2}; margin: {:.2}; volume dest: {:.2}; id: {}",
                 it.0.desc.name,
-                it.0.source.average,
-                it.0.destination.average,
+                it.0.source.highest,
+                it.0.destination.lowest,
                 it.1,
                 it.0.destination.volume,
                 it.0.desc.type_id
@@ -274,7 +277,10 @@ async fn get_item_stuff(config: &Configuration, id: i32) -> Option<GetUniverseTy
                         println!("error: {}, typeid: {}; retry: {}", e, id, retry);
                         continue;
                     }
-                    println!("error: {}, typeid: {}; retry: {}. No retries left", e, id, retry);
+                    println!(
+                        "error: {}, typeid: {}; retry: {}. No retries left",
+                        e, id, retry
+                    );
                     None
                 }
             };
@@ -297,7 +303,7 @@ async fn history(
                     {
                         let mut retries = 0;
                         loop {
-                            println!("get type {}", item_type);
+                            // println!("get type {}", item_type);
                             let hist_for_type = {
                                 let region_hist_result = market_api::get_markets_region_id_history(
                                     config,
