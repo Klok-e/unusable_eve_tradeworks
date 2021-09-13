@@ -300,42 +300,40 @@ async fn history(
             .map(|&item_type| {
                 let config = &config;
                 async move {
-                    {
-                        let mut retries = 0;
-                        loop {
-                            // println!("get type {}", item_type);
-                            let hist_for_type = {
-                                let region_hist_result = market_api::get_markets_region_id_history(
-                                    config,
-                                    GetMarketsRegionIdHistoryParams {
-                                        region_id: region,
-                                        type_id: item_type,
-                                        datasource: None,
-                                        if_none_match: None,
-                                    },
-                                )
-                                .await;
-                                // retry on error
-                                match region_hist_result {
-                                    Ok(t) => t,
-                                    Err(e) => {
-                                        retries += 1;
-                                        if retries > RETRIES {
-                                            break None;
-                                        }
-                                        println!("error {}. Retrying {} ...", e, retries);
-                                        continue;
+                    let mut retries = 0;
+                    loop {
+                        // println!("get type {}", item_type);
+                        let hist_for_type = {
+                            let region_hist_result = market_api::get_markets_region_id_history(
+                                config,
+                                GetMarketsRegionIdHistoryParams {
+                                    region_id: region,
+                                    type_id: item_type,
+                                    datasource: None,
+                                    if_none_match: None,
+                                },
+                            )
+                            .await;
+                            // retry on error
+                            match region_hist_result {
+                                Ok(t) => t,
+                                Err(e) => {
+                                    retries += 1;
+                                    if retries > RETRIES {
+                                        break None;
                                     }
+                                    println!("error {}. Retrying {} ...", e, retries);
+                                    continue;
                                 }
                             }
-                            .entity
-                            .unwrap();
-                            let hist_for_type = hist_for_type.into_result().unwrap();
-                            break Some(ItemType {
-                                id: item_type,
-                                history: hist_for_type,
-                            });
                         }
+                        .entity
+                        .unwrap();
+                        let hist_for_type = hist_for_type.into_result().unwrap();
+                        break Some(ItemType {
+                            id: item_type,
+                            history: hist_for_type,
+                        });
                     }
                 }
             })
