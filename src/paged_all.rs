@@ -144,16 +144,16 @@ impl ToResult<Vec<GetMarketsStructuresStructureId200Ok>, GetMarketsStructuresStr
         }
     }
 }
-impl ToResult<Vec<GetMarketsRegionIdOrders200Ok>, GetMarketsRegionIdOrdersSuccess>
-    for GetMarketsRegionIdOrdersSuccess
+impl ToResult<Vec<GetMarketsRegionIdOrders200Ok>, Option<GetMarketsRegionIdOrdersSuccess>>
+    for Option<GetMarketsRegionIdOrdersSuccess>
 {
     fn into_result(
         self,
-    ) -> Result<Vec<GetMarketsRegionIdOrders200Ok>, GetMarketsRegionIdOrdersSuccess> {
-        if let GetMarketsRegionIdOrdersSuccess::Status200(ok) = self {
-            Ok(ok)
-        } else {
-            Err(self)
+    ) -> Result<Vec<GetMarketsRegionIdOrders200Ok>, Option<GetMarketsRegionIdOrdersSuccess>> {
+        match self {
+            Some(GetMarketsRegionIdOrdersSuccess::Status200(ok)) => Ok(ok),
+            Some(_) => Err(self),
+            None => Ok(Vec::new()),
         }
     }
 }

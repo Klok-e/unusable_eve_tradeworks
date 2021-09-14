@@ -20,7 +20,8 @@ use rust_eveonline_esi::{
     apis::{
         configuration::Configuration,
         market_api::{
-            self, GetMarketsRegionIdHistoryParams, GetMarketsRegionIdOrdersParams,
+            self, GetMarketsRegionIdHistoryError, GetMarketsRegionIdHistoryParams,
+            GetMarketsRegionIdOrdersError, GetMarketsRegionIdOrdersParams,
             GetMarketsRegionIdTypesParams, GetMarketsStructuresStructureIdParams,
         },
         search_api::{
@@ -33,8 +34,11 @@ use rust_eveonline_esi::{
             GetUniverseStructuresStructureIdParams, GetUniverseSystemsSystemIdParams,
             GetUniverseSystemsSystemIdSuccess, GetUniverseTypesTypeIdParams,
         },
+        Error,
     },
-    models::{GetMarketsRegionIdHistory200Ok, GetUniverseTypesTypeIdOk},
+    models::{
+        GetMarketsRegionIdHistory200Ok, GetMarketsRegionIdOrders200Ok, GetUniverseTypesTypeIdOk,
+    },
 };
 use stat::{AverageStat, MedianStat};
 use term_table::{row::Row, table_cell::TableCell, TableBuilder};
@@ -479,9 +483,8 @@ async fn find_region_id_station(
 }
 async fn get_item_stuff(config: &Configuration, id: i32) -> Option<GetUniverseTypesTypeIdOk> {
     {
-        let mut retry = 0;
-        loop {
-            let result = universe_api::get_universe_types_type_id(
+        retry::retry(|| async {
+            universe_api::get_universe_types_type_id(
                 config,
                 GetUniverseTypesTypeIdParams {
                     type_id: id,
@@ -491,23 +494,9 @@ async fn get_item_stuff(config: &Configuration, id: i32) -> Option<GetUniverseTy
                     language: None,
                 },
             )
-            .await;
-            break match result {
-                Ok(t) => Some(t),
-                Err(e) => {
-                    retry += 1;
-                    if retry < RETRIES {
-                        println!("error: {}, typeid: {}; retry: {}", e, id, retry);
-                        continue;
-                    }
-                    println!(
-                        "error: {}, typeid: {}; retry: {}. No retries left",
-                        e, id, retry
-                    );
-                    None
-                }
-            };
-        }
+            .await
+        })
+        .await
     }
     .map(|x| x.entity.unwrap().into_result().unwrap())
 }
@@ -549,42 +538,45 @@ async fn get_orders_station(config: &Configuration, station: StationIdData) -> V
         })
         .collect::<Vec<_>>()
     } else {
-        get_all_pages(
+        let pages: Vec<GetMarketsRegionIdOrders200Ok> = get_all_pages(
             |page| async move {
-                market_api::get_markets_region_id_orders(
-                    config,
-                    GetMarketsRegionIdOrdersParams {
-                        order_type: "all".to_string(),
-                        region_id: station.region_id,
-                        datasource: None,
-                        if_none_match: None,
-                        page: Some(page),
-                        type_id: None,
-                    },
-                )
+                retry::retry::<_, _, _, Error<GetMarketsRegionIdOrdersError>>(|| async {
+                    Ok(market_api::get_markets_region_id_orders(
+                        config,
+                        GetMarketsRegionIdOrdersParams {
+                            order_type: "all".to_string(),
+                            region_id: station.region_id,
+                            datasource: None,
+                            if_none_match: None,
+                            page: Some(page),
+                            type_id: None,
+                        },
+                    )
+                    .await?
+                    .entity
+                    .unwrap())
+                })
                 .await
-                .unwrap()
-                .entity
-                .unwrap()
             },
             1000,
         )
-        .await
-        .into_iter()
-        .filter(|it| it.system_id == station.system_id)
-        .map(|it| Order {
-            duration: it.duration,
-            is_buy_order: it.is_buy_order,
-            issued: it.issued,
-            location_id: it.location_id,
-            min_volume: it.min_volume,
-            order_id: it.order_id,
-            price: it.price,
-            type_id: it.type_id,
-            volume_remain: it.volume_remain,
-            volume_total: it.volume_total,
-        })
-        .collect::<Vec<_>>()
+        .await;
+        pages
+            .into_iter()
+            .filter(|it| it.system_id == station.system_id)
+            .map(|it| Order {
+                duration: it.duration,
+                is_buy_order: it.is_buy_order,
+                issued: it.issued,
+                location_id: it.location_id,
+                min_volume: it.min_volume,
+                order_id: it.order_id,
+                price: it.price,
+                type_id: it.type_id,
+                volume_remain: it.volume_remain,
+                volume_total: it.volume_total,
+            })
+            .collect::<Vec<_>>()
     }
 }
 
@@ -594,7 +586,52 @@ async fn history(
     station: StationIdData,
     cache_name: &str,
 ) -> Vec<ItemType> {
-    let mut data = CachedData::load_or_create_async(cache_name, || async {
+    async fn get_item_type_history(
+        config: &Configuration,
+        station: StationIdData,
+        item_type: i32,
+        station_orders: &Mutex<HashMap<i32, Vec<Order>>>,
+    ) -> Option<ItemType> {
+        let res: Option<ItemType> =
+            retry::retry::<_, _, _, Error<GetMarketsRegionIdHistoryError>>(|| async {
+                // println!("get type {}", item_type);
+                let hist_for_type = market_api::get_markets_region_id_history(
+                    config,
+                    GetMarketsRegionIdHistoryParams {
+                        region_id: station.region_id,
+                        type_id: item_type,
+                        datasource: None,
+                        if_none_match: None,
+                    },
+                )
+                .await?
+                .entity
+                .unwrap();
+                let hist_for_type = hist_for_type.into_result().unwrap();
+                let mut dummy_empty_vec = Vec::new();
+                Ok(ItemType {
+                    id: item_type,
+                    history: hist_for_type,
+                    orders: std::mem::replace(
+                        station_orders
+                            .lock()
+                            .await
+                            .get_mut(&item_type)
+                            .unwrap_or(&mut dummy_empty_vec),
+                        Vec::new(),
+                    ),
+                })
+            })
+            .await;
+        res
+    }
+
+    async fn download_history(
+        config: &Configuration,
+        item_types: &Vec<i32>,
+        station: StationIdData,
+        cache_name: &str,
+    ) -> Vec<ItemType> {
         println!("loading station orders: {}", cache_name);
         let station_orders = get_orders_station(config, station).await;
         println!("loading station orders finished: {}", cache_name);
@@ -607,64 +644,26 @@ async fn history(
                 .collect::<HashMap<_, _>>(),
         );
 
-        let hists = stream::iter(item_types)
-            .map(|&item_type| {
-                let config = &config;
-                let station_orders = &station_orders;
-                async move {
-                    let mut retries = 0;
-                    loop {
-                        // println!("get type {}", item_type);
-                        let hist_for_type = {
-                            let region_hist_result = market_api::get_markets_region_id_history(
-                                config,
-                                GetMarketsRegionIdHistoryParams {
-                                    region_id: station.region_id,
-                                    type_id: item_type,
-                                    datasource: None,
-                                    if_none_match: None,
-                                },
-                            )
-                            .await;
-                            // retry on error
-                            match region_hist_result {
-                                Ok(t) => t,
-                                Err(e) => {
-                                    retries += 1;
-                                    if retries > RETRIES {
-                                        break None;
-                                    }
-                                    println!("error {}. Retrying {} ...", e, retries);
-                                    continue;
-                                }
-                            }
-                        }
-                        .entity
-                        .unwrap();
-                        let hist_for_type = hist_for_type.into_result().unwrap();
-                        let mut dummy_empty_vec = Vec::new();
-                        break Some(ItemType {
-                            id: item_type,
-                            history: hist_for_type,
-                            orders: std::mem::replace(
-                                station_orders
-                                    .lock()
-                                    .await
-                                    .get_mut(&item_type)
-                                    .unwrap_or(&mut dummy_empty_vec),
-                                Vec::new(),
-                            ),
-                        });
+        let hists =
+            stream::iter(item_types)
+                .map(|&item_type| {
+                    let config = &config;
+                    let station_orders = &station_orders;
+                    async move {
+                        get_item_type_history(config, station, item_type, &station_orders).await
                     }
-                }
-            })
-            .buffer_unordered(16);
+                })
+                .buffer_unordered(16);
         hists
             .collect::<Vec<_>>()
             .await
             .into_iter()
             .flatten()
             .collect::<Vec<_>>()
+    }
+
+    let mut data = CachedData::load_or_create_async(cache_name, || async {
+        download_history(config, item_types, station, cache_name).await
     })
     .await
     .data;
