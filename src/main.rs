@@ -1,9 +1,11 @@
 mod auth;
 mod cached_data;
+mod config;
 mod consts;
 mod error;
 mod item_type;
 mod paged_all;
+mod retry;
 mod stat;
 use std::collections::HashMap;
 
@@ -35,32 +37,28 @@ use rust_eveonline_esi::{
     models::{GetMarketsRegionIdHistory200Ok, GetUniverseTypesTypeIdOk},
 };
 use stat::{AverageStat, MedianStat};
+use term_table::{row::Row, table_cell::TableCell, TableBuilder};
 use tokio::sync::Mutex;
 
 use crate::{
     auth::Auth,
     cached_data::CachedData,
+    config::Config,
     consts::RETRIES,
     item_type::{ItemType, ItemTypeAveraged, MarketData, SystemMarketsItem, SystemMarketsItemData},
     paged_all::{get_all_pages, ToResult},
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CharacterInfo {
-    #[serde(rename = "CharacterID")]
-    pub character_id: i32,
-    #[serde(rename = "CharacterName")]
-    pub character_name: String,
-    #[serde(rename = "ExpiresOn")]
-    pub expires_on: String,
-    #[serde(rename = "Scopes")]
-    pub scopes: String,
-    #[serde(rename = "TokenType")]
-    pub token_type: String,
-    #[serde(rename = "CharacterOwnerHash")]
-    pub character_owner_hash: String,
+    pub scp: Vec<String>,
+    pub jti: String,
+    pub kid: String,
+    pub sub: String,
+    pub azp: String,
+    pub tenant: String,
+    pub tier: String,
 }
 
 #[tokio::main]
@@ -69,23 +67,25 @@ async fn main() -> Result<()> {
 }
 
 async fn run() -> Result<()> {
-    let auth = Auth::load_or_request_token().await;
+    let program_config = Config::from_file("config.json");
+    let auth = Auth::load_or_request_token(&program_config).await;
 
     let mut config = Configuration::new();
     config.oauth_access_token = Some(auth.access_token.clone());
-    let character_id = {
-        let client = reqwest::Client::new();
-        client
-            .get("https://login.eveonline.com/oauth/verify")
-            .header("Authorization", format!("Bearer {}", auth.access_token))
-            .send()
-            .await
+
+    // TODO: dangerous plese don't use in production
+    let character_info =
+        jsonwebtoken::dangerous_insecure_decode::<CharacterInfo>(auth.access_token.as_str())
             .unwrap()
-            .json::<CharacterInfo>()
-            .await
-            .unwrap()
-            .character_id
-    };
+            .claims;
+    let character_id = character_info
+        .sub
+        .split(":")
+        .skip(2)
+        .next()
+        .unwrap()
+        .parse()
+        .unwrap();
 
     let the_forge = find_region_id_station(
         &config,
@@ -98,7 +98,7 @@ async fn run() -> Result<()> {
     .await?;
 
     // all item type ids
-    let all_types = CachedData::load_or_create_async("cache/all_types.txt", || {
+    let all_types = CachedData::load_or_create_async("cache/all_item_types.txt", || {
         get_all_pages(
             |page| {
                 let config = &config;
@@ -129,7 +129,7 @@ async fn run() -> Result<()> {
         &config,
         &all_types,
         the_forge,
-        "cache/all_types_history.txt",
+        "cache/jita_all_types_history.txt",
     )
     .await;
 
@@ -137,14 +137,20 @@ async fn run() -> Result<()> {
         &config,
         Station {
             is_citadel: true,
-            name: "T0DT-T - The Firstest Imperial Palace",
+            name: "T0DT-T - Couch of Legends",
         },
         character_id,
     )
     .await?;
 
     // all t0dt history
-    let t0dt_history = history(&config, &all_types, t0dt, "cache/all_types_t0dt.txt").await;
+    let t0dt_history = history(
+        &config,
+        &all_types,
+        t0dt,
+        "cache/t0dt_all_types_history.txt",
+    )
+    .await;
 
     // t0dt_history.iter().find(|x| x.id == 58848).map(|x| dbg!(x));
 
@@ -210,30 +216,60 @@ async fn run() -> Result<()> {
             let sell_price = x.destination.average * (1. - broker_fee - sales_tax);
 
             let margin = sell_price / expenses;
-            (x, margin)
+            let rough_profit = (sell_price - expenses) * x.destination.volume;
+            (x, margin, rough_profit)
         })
-        .filter(|x| x.0.destination.volume > 1.)
-        .sorted_by(|x, y| y.1.partial_cmp(&x.1).unwrap())
+        .filter(|x| x.1 > 20.)
+        .filter(|x| {
+            let sell_volume: i32 =
+                x.0.destination
+                    .orders
+                    .iter()
+                    .filter(|x| !x.is_buy_order)
+                    .map(|x| x.volume_remain)
+                    .sum();
+            if sell_volume > 0 {
+                let avgvolume_to_sellvolume = x.0.destination.volume / sell_volume as f64;
+                avgvolume_to_sellvolume > 0.5
+            } else {
+                true
+            }
+        })
+        .sorted_by(|x, y| y.2.partial_cmp(&x.2).unwrap())
         .take(30)
         .collect::<Vec<_>>();
 
-    let format = good_items
-        .iter()
-        .map(|it| {
-            let sell_volume:i32 = it.0.destination.orders.iter().map(|it|it.volume_remain).sum();
-            format!(
-                "{}; jita: {:.2}; t0dt: {:.2}; margin: {:.2}; volume dest: {:.2}; current volume: {}; id: {}",
-                it.0.desc.name,
-                it.0.source.highest,
-                it.0.destination.lowest,
-                it.1,
-                it.0.destination.volume,
-                sell_volume,
-                it.0.desc.type_id
-            )
-        })
-        .collect::<Vec<_>>();
-    println!("Maybe good items:\n{}", format.join("\n"));
+    let rows = std::iter::once(Row::new(vec![
+        TableCell::new("id"),
+        TableCell::new("jita prc"),
+        TableCell::new("t0dt prc"),
+        TableCell::new("margin"),
+        TableCell::new("vlm src"),
+        TableCell::new("vlm dst"),
+        TableCell::new("on mkt dst"),
+        TableCell::new("item id"),
+    ]))
+    .chain(good_items.iter().map(|it| {
+        let sell_volume: i32 = dbg!(&it.0.destination.orders)
+            .iter()
+            .filter(|x| !x.is_buy_order)
+            .map(|it| it.volume_remain)
+            .sum();
+
+        Row::new(vec![
+            TableCell::new(it.0.desc.name.clone()),
+            TableCell::new(it.0.source.average),
+            TableCell::new(it.0.destination.average),
+            TableCell::new(it.1),
+            TableCell::new(it.0.source.volume),
+            TableCell::new(it.0.destination.volume),
+            TableCell::new(sell_volume),
+            TableCell::new(it.0.desc.type_id),
+        ])
+    }))
+    .collect::<Vec<_>>();
+    let table = TableBuilder::new().rows(rows).build();
+    println!("Maybe good items:\n{}", table.render());
     println!();
 
     let format = good_items
@@ -262,6 +298,44 @@ pub struct StationId {
     pub id: i64,
 }
 
+// read structure names
+// let names = stream::iter(structure_ids)
+//     .map(|id| async move {
+//         let name = universe_api::get_universe_structures_structure_id(
+//             config,
+//             GetUniverseStructuresStructureIdParams {
+//                 structure_id: id,
+//                 datasource: None,
+//                 if_none_match: None,
+//                 token: None,
+//             },
+//         )
+//         .await
+//         .unwrap()
+//         .entity
+//         .unwrap()
+//         .into_result()
+//         .unwrap()
+//         .name;
+//         (id, name)
+//     })
+//     .buffer_unordered(16)
+//     .collect::<Vec<(i64, String)>>()
+//     .await;
+// println!("-----------------------------");
+// println!(
+//     "Choose a structure:\n{}",
+//     names
+//         .iter()
+//         .enumerate()
+//         .map(|(i, (_, name))| format!("{}) {}", i, name))
+//         .join("\n")
+// );
+// let mut input = String::new();
+// std::io::stdin().read_line(&mut input).unwrap();
+// let index = input.trim().parse::<usize>().unwrap();
+// names[index].0
+
 async fn find_region_id_station(
     config: &Configuration,
     station: Station<'_>,
@@ -289,10 +363,7 @@ async fn find_region_id_station(
         .into_result()
         .unwrap()
         .structure
-        .unwrap()
-        .into_iter()
-        .next()
-        .unwrap()
+        .unwrap()[0]
     } else {
         get_search(
             &config,
@@ -524,7 +595,9 @@ async fn history(
     cache_name: &str,
 ) -> Vec<ItemType> {
     let mut data = CachedData::load_or_create_async(cache_name, || async {
+        println!("loading station orders: {}", cache_name);
         let station_orders = get_orders_station(config, station).await;
+        println!("loading station orders finished: {}", cache_name);
         let station_orders = Mutex::new(
             station_orders
                 .into_iter()
@@ -569,11 +642,16 @@ async fn history(
                         .entity
                         .unwrap();
                         let hist_for_type = hist_for_type.into_result().unwrap();
+                        let mut dummy_empty_vec = Vec::new();
                         break Some(ItemType {
                             id: item_type,
                             history: hist_for_type,
                             orders: std::mem::replace(
-                                station_orders.lock().await.get_mut(&item_type).unwrap(),
+                                station_orders
+                                    .lock()
+                                    .await
+                                    .get_mut(&item_type)
+                                    .unwrap_or(&mut dummy_empty_vec),
                                 Vec::new(),
                             ),
                         });
@@ -658,19 +736,19 @@ fn averages(history: Vec<ItemType>) -> Vec<ItemTypeAveraged> {
     history
         .into_iter()
         .map(|tp| {
-            let lastndays = tp.history.into_iter().rev().take(30).collect::<Vec<_>>();
+            let lastndays = tp.history.into_iter().rev().take(14).collect::<Vec<_>>();
             ItemTypeAveraged {
                 id: tp.id,
                 market_data: MarketData {
-                    average: lastndays.iter().map(|x| x.average).median().unwrap(),
-                    highest: lastndays.iter().map(|x| x.highest).median().unwrap(),
-                    lowest: lastndays.iter().map(|x| x.lowest).median().unwrap(),
+                    average: lastndays.iter().map(|x| x.average).average().unwrap(),
+                    highest: lastndays.iter().map(|x| x.highest).average().unwrap(),
+                    lowest: lastndays.iter().map(|x| x.lowest).average().unwrap(),
                     order_count: lastndays
                         .iter()
                         .map(|x| x.order_count as f64)
                         .median()
                         .unwrap(),
-                    volume: lastndays.iter().map(|x| x.volume as f64).median().unwrap(),
+                    volume: lastndays.iter().map(|x| x.volume as f64).average().unwrap(),
                     orders: tp.orders,
                 },
             }
