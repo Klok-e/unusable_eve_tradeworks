@@ -26,7 +26,6 @@ use rust_eveonline_esi::{
         },
         search_api::{
             self, get_search, GetCharactersCharacterIdSearchParams, GetSearchParams,
-            GetSearchSuccess,
         },
         universe_api::{
             self, GetUniverseConstellationsConstellationIdParams,
@@ -41,14 +40,13 @@ use rust_eveonline_esi::{
     },
 };
 use stat::{AverageStat, MedianStat};
-use term_table::{row::Row, table_cell::TableCell, TableBuilder, TableStyle};
+use term_table::{row::Row, table_cell::TableCell, TableBuilder};
 use tokio::sync::Mutex;
 
 use crate::{
     auth::Auth,
     cached_data::CachedData,
     config::Config,
-    consts::RETRIES,
     item_type::{ItemType, ItemTypeAveraged, MarketData, SystemMarketsItem, SystemMarketsItemData},
     paged_all::{get_all_pages, ToResult},
 };
