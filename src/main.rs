@@ -16,6 +16,7 @@ use error::Result;
 use futures::{stream, StreamExt};
 use item_type::Order;
 use itertools::Itertools;
+use ordered_float::NotNan;
 use rust_eveonline_esi::{
     apis::{
         configuration::Configuration,
@@ -211,12 +212,12 @@ async fn run() -> Result<()> {
     let good_items = pairs
         .into_iter()
         .map(|x| {
-            let buy_price = x.source.average * (1. + broker_fee);
+            let buy_price = x.source.highest * (1. + broker_fee);
             let expenses = buy_price + x.desc.volume.unwrap() as f64 * freight_cost_iskm3;
 
             let sell_price = x.destination.average * (1. - broker_fee - sales_tax);
 
-            let margin = sell_price / expenses;
+            let margin = (sell_price - expenses) / expenses;
             let rough_profit = (sell_price - expenses) * x.destination.volume;
             let sell_volume: i32 = x
                 .destination
@@ -237,9 +238,12 @@ async fn run() -> Result<()> {
                 rough_profit: rough_profit,
                 sell_volume,
                 recommend_buy: recommend_buy_vol as i32,
+                expenses,
+                sell_price,
             }
         })
         .filter(|x| x.margin > MARGIN_CUTOFF)
+        .filter(|x| x.market.source.volume > 100.)
         .filter(|x| {
             if x.sell_volume > 0 {
                 let avgvolume_to_sellvolume = x.market.destination.volume / x.sell_volume as f64;
@@ -248,14 +252,8 @@ async fn run() -> Result<()> {
                 true
             }
         })
-        .sorted_by(|x, y| {
-            y.market
-                .destination
-                .volume
-                .partial_cmp(&x.market.destination.volume)
-                .unwrap()
-        })
-        .take(30)
+        .sorted_unstable_by_key(|x| NotNan::new(-x.rough_profit).unwrap())
+        .take(15)
         .collect::<Vec<_>>();
 
     let rows = std::iter::once(Row::new(vec![
@@ -263,19 +261,23 @@ async fn run() -> Result<()> {
         TableCell::new("item name"),
         TableCell::new("jita prc"),
         TableCell::new("t0dt prc"),
+        TableCell::new("expenses"),
+        TableCell::new("sell prc"),
         TableCell::new("margin"),
         TableCell::new("vlm src"),
         TableCell::new("vlm dst"),
-        TableCell::new("on mkt dst"),
+        TableCell::new("on mkt"),
         TableCell::new("rough prft"),
-        TableCell::new("rcmnd buy vlm"),
+        TableCell::new("rcmnd vlm"),
     ]))
     .chain(good_items.iter().map(|it| {
         Row::new(vec![
             TableCell::new(format!("{}", it.market.desc.type_id)),
             TableCell::new(format!("{}", it.market.desc.name.clone())),
-            TableCell::new(format!("{:.2}", it.market.source.average)),
+            TableCell::new(format!("{:.2}", it.market.source.highest)),
             TableCell::new(format!("{:.2}", it.market.destination.average)),
+            TableCell::new(format!("{:.2}", it.expenses)),
+            TableCell::new(format!("{:.2}", it.sell_price)),
             TableCell::new(format!("{:.2}", it.margin)),
             TableCell::new(format!("{:.2}", it.market.source.volume)),
             TableCell::new(format!("{:.2}", it.market.destination.volume)),
@@ -291,7 +293,7 @@ async fn run() -> Result<()> {
 
     let format = good_items
         .iter()
-        .map(|it| format!("{} ; {}", it.market.desc.name, it.recommend_buy))
+        .map(|it| format!("{} {}", it.market.desc.name, it.recommend_buy))
         .collect::<Vec<_>>();
     println!("Item names only:\n{}", format.join("\n"));
 
@@ -304,6 +306,8 @@ pub struct PairCalculatedData {
     pub rough_profit: f64,
     pub sell_volume: i32,
     pub recommend_buy: i32,
+    expenses: f64,
+    sell_price: f64,
 }
 
 #[derive(Clone, Copy)]
