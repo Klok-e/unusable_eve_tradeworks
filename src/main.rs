@@ -45,6 +45,7 @@ use crate::{
     auth::Auth,
     cached_data::CachedData,
     config::Config,
+    consts::{AVGVOLUME_TO_SELLVOLUME_CUTOFF, MARGIN_CUTOFF},
     item_type::{ItemType, ItemTypeAveraged, MarketData, SystemMarketsItem, SystemMarketsItemData},
     paged_all::{get_all_pages, ToResult},
 };
@@ -217,28 +218,41 @@ async fn run() -> Result<()> {
 
             let margin = sell_price / expenses;
             let rough_profit = (sell_price - expenses) * x.destination.volume;
-            (x, margin, rough_profit)
+            let sell_volume: i32 = x
+                .destination
+                .orders
+                .iter()
+                .filter(|x| !x.is_buy_order)
+                .map(|x| x.volume_remain)
+                .sum();
+
+            let recommend_buy_vol = 1f64.max(
+                (x.destination.volume / AVGVOLUME_TO_SELLVOLUME_CUTOFF - sell_volume as f64)
+                    .floor(),
+            );
+
+            PairCalculatedData {
+                market: x,
+                margin: margin,
+                rough_profit: rough_profit,
+                sell_volume,
+                recommend_buy: recommend_buy_vol as i32,
+            }
         })
-        .filter(|x| x.1 > 20.)
+        .filter(|x| x.margin > MARGIN_CUTOFF)
         .filter(|x| {
-            let sell_volume: i32 =
-                x.0.destination
-                    .orders
-                    .iter()
-                    .filter(|x| !x.is_buy_order)
-                    .map(|x| x.volume_remain)
-                    .sum();
-            if sell_volume > 0 {
-                let avgvolume_to_sellvolume = x.0.destination.volume / sell_volume as f64;
-                avgvolume_to_sellvolume > 0.14
+            if x.sell_volume > 0 {
+                let avgvolume_to_sellvolume = x.market.destination.volume / x.sell_volume as f64;
+                avgvolume_to_sellvolume > AVGVOLUME_TO_SELLVOLUME_CUTOFF
             } else {
                 true
             }
         })
         .sorted_by(|x, y| {
-            y.0.destination
+            y.market
+                .destination
                 .volume
-                .partial_cmp(&x.0.destination.volume)
+                .partial_cmp(&x.market.destination.volume)
                 .unwrap()
         })
         .take(30)
@@ -254,24 +268,20 @@ async fn run() -> Result<()> {
         TableCell::new("vlm dst"),
         TableCell::new("on mkt dst"),
         TableCell::new("rough prft"),
+        TableCell::new("rcmnd buy vlm"),
     ]))
     .chain(good_items.iter().map(|it| {
-        let sell_volume: i32 = dbg!(&it.0.destination.orders)
-            .iter()
-            .filter(|x| !x.is_buy_order)
-            .map(|it| it.volume_remain)
-            .sum();
-
         Row::new(vec![
-            TableCell::new(format!("{}", it.0.desc.type_id)),
-            TableCell::new(format!("{}", it.0.desc.name.clone())),
-            TableCell::new(format!("{:.2}", it.0.source.average)),
-            TableCell::new(format!("{:.2}", it.0.destination.average)),
-            TableCell::new(format!("{:.2}", it.1)),
-            TableCell::new(format!("{:.2}", it.0.source.volume)),
-            TableCell::new(format!("{:.2}", it.0.destination.volume)),
-            TableCell::new(format!("{:.2}", sell_volume)),
-            TableCell::new(format!("{:.2}", it.2)),
+            TableCell::new(format!("{}", it.market.desc.type_id)),
+            TableCell::new(format!("{}", it.market.desc.name.clone())),
+            TableCell::new(format!("{:.2}", it.market.source.average)),
+            TableCell::new(format!("{:.2}", it.market.destination.average)),
+            TableCell::new(format!("{:.2}", it.margin)),
+            TableCell::new(format!("{:.2}", it.market.source.volume)),
+            TableCell::new(format!("{:.2}", it.market.destination.volume)),
+            TableCell::new(format!("{:.2}", it.sell_volume)),
+            TableCell::new(format!("{:.2}", it.rough_profit)),
+            TableCell::new(format!("{}", it.recommend_buy)),
         ])
     }))
     .collect::<Vec<_>>();
@@ -281,11 +291,19 @@ async fn run() -> Result<()> {
 
     let format = good_items
         .iter()
-        .map(|it| format!("{}", it.0.desc.name))
+        .map(|it| format!("{} ; {}", it.market.desc.name, it.recommend_buy))
         .collect::<Vec<_>>();
     println!("Item names only:\n{}", format.join("\n"));
 
     Ok(())
+}
+
+pub struct PairCalculatedData {
+    pub market: SystemMarketsItemData,
+    pub margin: f64,
+    pub rough_profit: f64,
+    pub sell_volume: i32,
+    pub recommend_buy: i32,
 }
 
 #[derive(Clone, Copy)]
