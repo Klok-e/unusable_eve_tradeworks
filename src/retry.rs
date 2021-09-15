@@ -28,7 +28,7 @@ where
                 }
                 retries += 1;
                 if retries <= RETRIES {
-                    println!("error: {}", e);
+                    println!("error: {}; retry: {}", e, retries);
                     continue;
                 }
                 None
@@ -52,7 +52,7 @@ pub trait IntoCcpError {
 impl IntoCcpError for rust_eveonline_esi::apis::Error<GetUniverseTypesTypeIdError> {
     fn as_ccp_error(&self) -> CcpError {
         match self {
-            rust_eveonline_esi::apis::Error::Reqwest(error) => error
+            rust_eveonline_esi::apis::Error::Reqwest(error) => dbg!(error)
                 .status()
                 .map(|status| {
                     if status.as_u16() == 420 {

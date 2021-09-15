@@ -10,7 +10,7 @@ mod stat;
 use std::collections::HashMap;
 
 use chrono::{NaiveDate, Utc};
-use consts::DATE_FMT;
+use consts::{DATE_FMT, DAYS_AVERAGE};
 use error::Result;
 
 use futures::{stream, StreamExt};
@@ -41,7 +41,7 @@ use rust_eveonline_esi::{
     },
 };
 use stat::{AverageStat, MedianStat};
-use term_table::{row::Row, table_cell::TableCell, TableBuilder};
+use term_table::{row::Row, table_cell::TableCell, TableBuilder, TableStyle};
 use tokio::sync::Mutex;
 
 use crate::{
@@ -234,24 +234,30 @@ async fn run() -> Result<()> {
                     .sum();
             if sell_volume > 0 {
                 let avgvolume_to_sellvolume = x.0.destination.volume / sell_volume as f64;
-                avgvolume_to_sellvolume > 0.5
+                avgvolume_to_sellvolume > 0.14
             } else {
                 true
             }
         })
-        .sorted_by(|x, y| y.2.partial_cmp(&x.2).unwrap())
+        .sorted_by(|x, y| {
+            y.0.destination
+                .volume
+                .partial_cmp(&x.0.destination.volume)
+                .unwrap()
+        })
         .take(30)
         .collect::<Vec<_>>();
 
     let rows = std::iter::once(Row::new(vec![
-        TableCell::new("id"),
+        TableCell::new("item id"),
+        TableCell::new("item name"),
         TableCell::new("jita prc"),
         TableCell::new("t0dt prc"),
         TableCell::new("margin"),
         TableCell::new("vlm src"),
         TableCell::new("vlm dst"),
         TableCell::new("on mkt dst"),
-        TableCell::new("item id"),
+        TableCell::new("rough prft"),
     ]))
     .chain(good_items.iter().map(|it| {
         let sell_volume: i32 = dbg!(&it.0.destination.orders)
@@ -261,14 +267,15 @@ async fn run() -> Result<()> {
             .sum();
 
         Row::new(vec![
-            TableCell::new(it.0.desc.name.clone()),
-            TableCell::new(it.0.source.average),
-            TableCell::new(it.0.destination.average),
-            TableCell::new(it.1),
-            TableCell::new(it.0.source.volume),
-            TableCell::new(it.0.destination.volume),
-            TableCell::new(sell_volume),
-            TableCell::new(it.0.desc.type_id),
+            TableCell::new(format!("{}", it.0.desc.type_id)),
+            TableCell::new(format!("{}", it.0.desc.name.clone())),
+            TableCell::new(format!("{:.2}", it.0.source.average)),
+            TableCell::new(format!("{:.2}", it.0.destination.average)),
+            TableCell::new(format!("{:.2}", it.1)),
+            TableCell::new(format!("{:.2}", it.0.source.volume)),
+            TableCell::new(format!("{:.2}", it.0.destination.volume)),
+            TableCell::new(format!("{:.2}", sell_volume)),
+            TableCell::new(format!("{:.2}", it.2)),
         ])
     }))
     .collect::<Vec<_>>();
@@ -301,44 +308,6 @@ pub struct StationId {
     pub is_citadel: bool,
     pub id: i64,
 }
-
-// read structure names
-// let names = stream::iter(structure_ids)
-//     .map(|id| async move {
-//         let name = universe_api::get_universe_structures_structure_id(
-//             config,
-//             GetUniverseStructuresStructureIdParams {
-//                 structure_id: id,
-//                 datasource: None,
-//                 if_none_match: None,
-//                 token: None,
-//             },
-//         )
-//         .await
-//         .unwrap()
-//         .entity
-//         .unwrap()
-//         .into_result()
-//         .unwrap()
-//         .name;
-//         (id, name)
-//     })
-//     .buffer_unordered(16)
-//     .collect::<Vec<(i64, String)>>()
-//     .await;
-// println!("-----------------------------");
-// println!(
-//     "Choose a structure:\n{}",
-//     names
-//         .iter()
-//         .enumerate()
-//         .map(|(i, (_, name))| format!("{}) {}", i, name))
-//         .join("\n")
-// );
-// let mut input = String::new();
-// std::io::stdin().read_line(&mut input).unwrap();
-// let index = input.trim().parse::<usize>().unwrap();
-// names[index].0
 
 async fn find_region_id_station(
     config: &Configuration,
@@ -635,14 +604,8 @@ async fn history(
         println!("loading station orders: {}", cache_name);
         let station_orders = get_orders_station(config, station).await;
         println!("loading station orders finished: {}", cache_name);
-        let station_orders = Mutex::new(
-            station_orders
-                .into_iter()
-                .group_by(|x| x.type_id)
-                .into_iter()
-                .map(|(k, v)| (k, v.collect::<Vec<_>>()))
-                .collect::<HashMap<_, _>>(),
-        );
+        let station_orders =
+            Mutex::new(station_orders.into_iter().into_group_map_by(|x| x.type_id));
 
         let hists =
             stream::iter(item_types)
@@ -735,7 +698,12 @@ fn averages(history: Vec<ItemType>) -> Vec<ItemTypeAveraged> {
     history
         .into_iter()
         .map(|tp| {
-            let lastndays = tp.history.into_iter().rev().take(14).collect::<Vec<_>>();
+            let lastndays = tp
+                .history
+                .into_iter()
+                .rev()
+                .take(DAYS_AVERAGE)
+                .collect::<Vec<_>>();
             ItemTypeAveraged {
                 id: tp.id,
                 market_data: MarketData {
