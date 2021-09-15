@@ -1,7 +1,4 @@
-use rust_eveonline_esi::models::{
-    GetMarketsRegionIdHistory200Ok,
-    GetUniverseTypesTypeIdOk,
-};
+use rust_eveonline_esi::models::{GetMarketsRegionIdHistory200Ok, GetUniverseTypesTypeIdOk};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]

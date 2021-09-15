@@ -24,9 +24,7 @@ use rust_eveonline_esi::{
             GetMarketsRegionIdOrdersError, GetMarketsRegionIdOrdersParams,
             GetMarketsRegionIdTypesParams, GetMarketsStructuresStructureIdParams,
         },
-        search_api::{
-            self, get_search, GetCharactersCharacterIdSearchParams, GetSearchParams,
-        },
+        search_api::{self, get_search, GetCharactersCharacterIdSearchParams, GetSearchParams},
         universe_api::{
             self, GetUniverseConstellationsConstellationIdParams,
             GetUniverseConstellationsConstellationIdSuccess, GetUniverseStationsStationIdParams,
