@@ -47,8 +47,8 @@ use crate::{
     cached_data::CachedData,
     config::Config,
     consts::{
-        BROKER_FEE, FREIGHT_COST_ISKM3, MARGIN_CUTOFF, MAX_FILLED_FOR_DAYS_CUTOFF, RCMND_FILL_DAYS,
-        SALES_TAX,
+        BROKER_FEE, FREIGHT_COST_ISKM3, ITEMS_TAKE, MARGIN_CUTOFF, MAX_FILLED_FOR_DAYS_CUTOFF,
+        MIN_SRC_VOLUME, RCMND_FILL_DAYS, SALES_TAX,
     },
     item_type::{ItemType, ItemTypeAveraged, MarketData, SystemMarketsItem, SystemMarketsItemData},
     paged_all::{get_all_pages, ToResult},
@@ -236,7 +236,7 @@ async fn run() -> Result<()> {
             }
         })
         .filter(|x| x.margin > MARGIN_CUTOFF)
-        .filter(|x| x.market.source.volume > 100.)
+        .filter(|x| x.market.source.volume > MIN_SRC_VOLUME)
         .filter(|x| {
             if let Some(filled_for_days) = x.filled_for_days {
                 filled_for_days < MAX_FILLED_FOR_DAYS_CUTOFF
@@ -245,7 +245,7 @@ async fn run() -> Result<()> {
             }
         })
         .sorted_unstable_by_key(|x| NotNan::new(-x.rough_profit).unwrap())
-        .take(15)
+        .take(ITEMS_TAKE)
         .collect::<Vec<_>>();
 
     let rows = std::iter::once(Row::new(vec![
