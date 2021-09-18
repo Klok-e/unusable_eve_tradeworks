@@ -46,7 +46,7 @@ use crate::{
     auth::Auth,
     cached_data::CachedData,
     config::Config,
-    consts::{AVGVOLUME_TO_SELLVOLUME_CUTOFF, MARGIN_CUTOFF},
+    consts::{MARGIN_CUTOFF, MAX_FILLED_FOR_DAYS_CUTOFF, RCMND_FILL_DAYS},
     item_type::{ItemType, ItemTypeAveraged, MarketData, SystemMarketsItem, SystemMarketsItemData},
     paged_all::{get_all_pages, ToResult},
 };
@@ -89,120 +89,108 @@ async fn run() -> Result<()> {
         .parse()
         .unwrap();
 
-    let the_forge = find_region_id_station(
-        &config,
-        Station {
-            is_citadel: false,
-            name: "Jita IV - Moon 4 - Caldari Navy Assembly Plant",
-        },
-        character_id,
-    )
-    .await?;
-
-    // all item type ids
-    let all_types = CachedData::load_or_create_async("cache/all_item_types.txt", || {
-        get_all_pages(
-            |page| {
-                let config = &config;
-                async move {
-                    market_api::get_markets_region_id_types(
-                        config,
-                        GetMarketsRegionIdTypesParams {
-                            region_id: the_forge.region_id,
-                            datasource: None,
-                            if_none_match: None,
-                            page: Some(page),
-                        },
-                    )
-                    .await
-                    .unwrap()
-                    .entity
-                    .unwrap()
-                }
-            },
-            1000,
-        )
-    })
-    .await
-    .data;
-
-    // all jita history
-    let jita_history = history(
-        &config,
-        &all_types,
-        the_forge,
-        "cache/jita_all_types_history.txt",
-    )
-    .await;
-
-    let t0dt = find_region_id_station(
-        &config,
-        Station {
-            is_citadel: true,
-            name: "T0DT-T - Couch of Legends",
-        },
-        character_id,
-    )
-    .await?;
-
-    // all t0dt history
-    let t0dt_history = history(
-        &config,
-        &all_types,
-        t0dt,
-        "cache/t0dt_all_types_history.txt",
-    )
-    .await;
-
-    // t0dt_history.iter().find(|x| x.id == 58848).map(|x| dbg!(x));
-
-    // turn history into n day average
-    let jita_types_average = averages(jita_history)
-        .into_iter()
-        .map(|x| (x.id, x.market_data))
-        .collect::<HashMap<_, _>>();
-
-    let types_average = averages(t0dt_history)
-        .into_iter()
-        .map(|x| (x.id, x.market_data))
-        .collect::<HashMap<_, _>>();
-
-    // pair
-    let pairs = jita_types_average
-        .into_iter()
-        .map(|(k, v)| SystemMarketsItem {
-            id: k,
-            source: v,
-            destination: types_average[&k].clone(),
-        });
-
-    let pairs: Vec<SystemMarketsItemData> = CachedData::load_or_create_async("cache/pairs", || {
-        let config = &config;
-        async move {
-            stream::iter(pairs)
-                .map(|it| {
-                    let it = it.clone();
-                    async move {
-                        Some(SystemMarketsItemData {
-                            desc: match get_item_stuff(config, it.id).await {
-                                Some(x) => x.into(),
-                                None => return None,
-                            },
-                            source: it.source,
-                            destination: it.destination,
-                        })
-                    }
-                })
-                .buffer_unordered(16)
-                .collect::<Vec<Option<SystemMarketsItemData>>>()
+    let pairs: Vec<SystemMarketsItemData> =
+        CachedData::load_or_create_async("cache/path_data", || {
+            let config = &config;
+            async move {
+                let the_forge = find_region_id_station(
+                    &config,
+                    Station {
+                        is_citadel: false,
+                        name: "Jita IV - Moon 4 - Caldari Navy Assembly Plant",
+                    },
+                    character_id,
+                )
                 .await
-                .into_iter()
-                .flatten()
-                .collect()
-        }
-    })
-    .await
-    .data;
+                .unwrap();
+
+                // all item type ids
+                let all_types = get_all_pages(
+                    |page| {
+                        let config = &config;
+                        async move {
+                            market_api::get_markets_region_id_types(
+                                config,
+                                GetMarketsRegionIdTypesParams {
+                                    region_id: the_forge.region_id,
+                                    datasource: None,
+                                    if_none_match: None,
+                                    page: Some(page),
+                                },
+                            )
+                            .await
+                            .unwrap()
+                            .entity
+                            .unwrap()
+                        }
+                    },
+                    1000,
+                )
+                .await;
+
+                // all jita history
+                let jita_history = history(&config, &all_types, the_forge).await;
+
+                let t0dt = find_region_id_station(
+                    &config,
+                    Station {
+                        is_citadel: true,
+                        name: "T0DT-T - Couch of Legends",
+                    },
+                    character_id,
+                )
+                .await
+                .unwrap();
+
+                // all t0dt history
+                let t0dt_history = history(&config, &all_types, t0dt).await;
+
+                // t0dt_history.iter().find(|x| x.id == 58848).map(|x| dbg!(x));
+
+                // turn history into n day average
+                let jita_types_average = averages(jita_history)
+                    .into_iter()
+                    .map(|x| (x.id, x.market_data))
+                    .collect::<HashMap<_, _>>();
+
+                let types_average = averages(t0dt_history)
+                    .into_iter()
+                    .map(|x| (x.id, x.market_data))
+                    .collect::<HashMap<_, _>>();
+
+                // pair
+                let pairs = jita_types_average
+                    .into_iter()
+                    .map(|(k, v)| SystemMarketsItem {
+                        id: k,
+                        source: v,
+                        destination: types_average[&k].clone(),
+                    });
+
+                stream::iter(pairs)
+                    .map(|it| {
+                        let it = it.clone();
+                        async move {
+                            Some(SystemMarketsItemData {
+                                desc: match get_item_stuff(config, it.id).await {
+                                    Some(x) => x.into(),
+                                    None => return None,
+                                },
+                                source: it.source,
+                                destination: it.destination,
+                            })
+                        }
+                    })
+                    .buffer_unordered(16)
+                    .collect::<Vec<Option<SystemMarketsItemData>>>()
+                    .await
+                    .into_iter()
+                    .flatten()
+                    .collect()
+            }
+        })
+        .await
+        .data;
 
     let sales_tax = 0.05;
     let broker_fee = 0.02;
@@ -212,13 +200,6 @@ async fn run() -> Result<()> {
     let good_items = pairs
         .into_iter()
         .map(|x| {
-            let buy_price = x.source.highest * (1. + broker_fee);
-            let expenses = buy_price + x.desc.volume.unwrap() as f64 * freight_cost_iskm3;
-
-            let sell_price = x.destination.average * (1. - broker_fee - sales_tax);
-
-            let margin = (sell_price - expenses) / expenses;
-            let rough_profit = (sell_price - expenses) * x.destination.volume;
             let sell_volume: i32 = x
                 .destination
                 .orders
@@ -227,27 +208,39 @@ async fn run() -> Result<()> {
                 .map(|x| x.volume_remain)
                 .sum();
 
-            let recommend_buy_vol = 1f64.max(
-                (x.destination.volume / AVGVOLUME_TO_SELLVOLUME_CUTOFF - sell_volume as f64)
-                    .floor(),
-            );
+            let buy_price = x.source.highest * (1. + broker_fee);
+            let expenses = buy_price + x.desc.volume.unwrap() as f64 * freight_cost_iskm3;
+
+            let sell_price = x.destination.average * (1. - broker_fee - sales_tax);
+
+            let margin = (sell_price - expenses) / expenses;
+
+            let recommend_buy_vol = (x.destination.volume * MAX_FILLED_FOR_DAYS_CUTOFF
+                - sell_volume as f64)
+                .floor()
+                .clamp(0., x.destination.volume * RCMND_FILL_DAYS);
+
+            let rough_profit = (sell_price - expenses) * recommend_buy_vol;
+
+            let filled_for_days =
+                (x.destination.volume > 0.).then(|| 1. / x.destination.volume * sell_volume as f64);
 
             PairCalculatedData {
                 market: x,
-                margin: margin,
-                rough_profit: rough_profit,
+                margin,
+                rough_profit,
                 sell_volume,
                 recommend_buy: recommend_buy_vol as i32,
                 expenses,
                 sell_price,
+                filled_for_days,
             }
         })
         .filter(|x| x.margin > MARGIN_CUTOFF)
         .filter(|x| x.market.source.volume > 100.)
         .filter(|x| {
-            if x.sell_volume > 0 {
-                let avgvolume_to_sellvolume = x.market.destination.volume / x.sell_volume as f64;
-                avgvolume_to_sellvolume > AVGVOLUME_TO_SELLVOLUME_CUTOFF
+            if let Some(filled_for_days) = x.filled_for_days {
+                filled_for_days < MAX_FILLED_FOR_DAYS_CUTOFF
             } else {
                 true
             }
@@ -269,6 +262,7 @@ async fn run() -> Result<()> {
         TableCell::new("on mkt"),
         TableCell::new("rough prft"),
         TableCell::new("rcmnd vlm"),
+        TableCell::new("fld fr dy"),
     ]))
     .chain(good_items.iter().map(|it| {
         Row::new(vec![
@@ -284,6 +278,10 @@ async fn run() -> Result<()> {
             TableCell::new(format!("{:.2}", it.sell_volume)),
             TableCell::new(format!("{:.2}", it.rough_profit)),
             TableCell::new(format!("{}", it.recommend_buy)),
+            TableCell::new(
+                it.filled_for_days
+                    .map_or("N/A".to_string(), |x| format!("{:.2}", x)),
+            ),
         ])
     }))
     .collect::<Vec<_>>();
@@ -308,6 +306,7 @@ pub struct PairCalculatedData {
     pub recommend_buy: i32,
     expenses: f64,
     sell_price: f64,
+    filled_for_days: Option<f64>,
 }
 
 #[derive(Clone, Copy)]
@@ -571,7 +570,6 @@ async fn history(
     config: &Configuration,
     item_types: &Vec<i32>,
     station: StationIdData,
-    cache_name: &str,
 ) -> Vec<ItemType> {
     async fn get_item_type_history(
         config: &Configuration,
@@ -617,11 +615,10 @@ async fn history(
         config: &Configuration,
         item_types: &Vec<i32>,
         station: StationIdData,
-        cache_name: &str,
     ) -> Vec<ItemType> {
-        println!("loading station orders: {}", cache_name);
+        println!("loading station orders");
         let station_orders = get_orders_station(config, station).await;
-        println!("loading station orders finished: {}", cache_name);
+        println!("loading station orders finished");
         let station_orders =
             Mutex::new(station_orders.into_iter().into_group_map_by(|x| x.type_id));
 
@@ -643,11 +640,7 @@ async fn history(
             .collect::<Vec<_>>()
     }
 
-    let mut data = CachedData::load_or_create_async(cache_name, || async {
-        download_history(config, item_types, station, cache_name).await
-    })
-    .await
-    .data;
+    let mut data = download_history(config, item_types, station).await;
 
     // fill blanks
     for item in data.iter_mut() {
