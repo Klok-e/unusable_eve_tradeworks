@@ -48,7 +48,7 @@ use crate::{
     config::Config,
     consts::{
         BROKER_FEE, FREIGHT_COST_ISKM3, ITEMS_TAKE, MARGIN_CUTOFF, MAX_FILLED_FOR_DAYS_CUTOFF,
-        MIN_SRC_VOLUME, RCMND_FILL_DAYS, SALES_TAX,
+        MIN_DST_VOLUME, MIN_SRC_VOLUME, RCMND_FILL_DAYS, SALES_TAX,
     },
     item_type::{ItemType, ItemTypeAveraged, MarketData, SystemMarketsItem, SystemMarketsItemData},
     paged_all::{get_all_pages, ToResult},
@@ -216,7 +216,8 @@ async fn run() -> Result<()> {
             let recommend_buy_vol = (x.destination.volume * MAX_FILLED_FOR_DAYS_CUTOFF
                 - sell_volume as f64)
                 .floor()
-                .clamp(0., x.destination.volume * RCMND_FILL_DAYS);
+                .clamp(1., (x.destination.volume * RCMND_FILL_DAYS).max(1.))
+                .floor();
 
             let rough_profit = (sell_price - expenses) * recommend_buy_vol;
 
@@ -235,7 +236,9 @@ async fn run() -> Result<()> {
             }
         })
         .filter(|x| x.margin > MARGIN_CUTOFF)
-        .filter(|x| x.market.source.volume > MIN_SRC_VOLUME)
+        .filter(|x| {
+            x.market.source.volume > MIN_SRC_VOLUME && x.market.destination.volume > MIN_DST_VOLUME
+        })
         .filter(|x| {
             if let Some(filled_for_days) = x.filled_for_days {
                 filled_for_days < MAX_FILLED_FOR_DAYS_CUTOFF
@@ -721,7 +724,7 @@ fn averages(history: Vec<ItemType>) -> Vec<ItemTypeAveraged> {
                     order_count: lastndays
                         .iter()
                         .map(|x| x.order_count as f64)
-                        .median()
+                        .average()
                         .unwrap(),
                     volume: lastndays.iter().map(|x| x.volume as f64).average().unwrap(),
                     orders: tp.orders,
