@@ -8,5 +8,5 @@ pub const MARGIN_CUTOFF: f64 = 0.3;
 pub const SALES_TAX: f64 = 0.05;
 pub const BROKER_FEE: f64 = 0.02;
 pub const FREIGHT_COST_ISKM3: f64 = 1500.;
-pub const ITEMS_TAKE: usize = 15;
+pub const ITEMS_TAKE: usize = 30;
 pub const MIN_SRC_VOLUME: f64 = 100.;
