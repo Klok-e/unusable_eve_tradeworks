@@ -46,7 +46,10 @@ use crate::{
     auth::Auth,
     cached_data::CachedData,
     config::Config,
-    consts::{MARGIN_CUTOFF, MAX_FILLED_FOR_DAYS_CUTOFF, RCMND_FILL_DAYS},
+    consts::{
+        BROKER_FEE, FREIGHT_COST_ISKM3, MARGIN_CUTOFF, MAX_FILLED_FOR_DAYS_CUTOFF, RCMND_FILL_DAYS,
+        SALES_TAX,
+    },
     item_type::{ItemType, ItemTypeAveraged, MarketData, SystemMarketsItem, SystemMarketsItemData},
     paged_all::{get_all_pages, ToResult},
 };
@@ -192,10 +195,6 @@ async fn run() -> Result<()> {
         .await
         .data;
 
-    let sales_tax = 0.05;
-    let broker_fee = 0.02;
-    let freight_cost_iskm3 = 1500.;
-
     // find items such that
     let good_items = pairs
         .into_iter()
@@ -208,10 +207,10 @@ async fn run() -> Result<()> {
                 .map(|x| x.volume_remain)
                 .sum();
 
-            let buy_price = x.source.highest * (1. + broker_fee);
-            let expenses = buy_price + x.desc.volume.unwrap() as f64 * freight_cost_iskm3;
+            let buy_price = x.source.highest * (1. + BROKER_FEE);
+            let expenses = buy_price + x.desc.volume.unwrap() as f64 * FREIGHT_COST_ISKM3;
 
-            let sell_price = x.destination.average * (1. - broker_fee - sales_tax);
+            let sell_price = x.destination.average * (1. - BROKER_FEE - SALES_TAX);
 
             let margin = (sell_price - expenses) / expenses;
 
