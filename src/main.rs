@@ -85,7 +85,8 @@ async fn run() -> Result<()> {
             .claims;
     let character_id = character_info
         .sub
-        .split(':').nth(2)
+        .split(':')
+        .nth(2)
         .unwrap()
         .parse()
         .unwrap();
@@ -565,7 +566,7 @@ async fn get_orders_station(config: &Configuration, station: StationIdData) -> V
 
 async fn history(
     config: &Configuration,
-    item_types: &Vec<i32>,
+    item_types: &[i32],
     station: StationIdData,
 ) -> Vec<ItemType> {
     async fn get_item_type_history(
@@ -594,11 +595,13 @@ async fn history(
                 Ok(ItemType {
                     id: item_type,
                     history: hist_for_type,
-                    orders: std::mem::take(station_orders
+                    orders: std::mem::take(
+                        station_orders
                             .lock()
                             .await
                             .get_mut(&item_type)
-                            .unwrap_or(&mut dummy_empty_vec)),
+                            .unwrap_or(&mut dummy_empty_vec),
+                    ),
                 })
             })
             .await;
@@ -607,7 +610,7 @@ async fn history(
 
     async fn download_history(
         config: &Configuration,
-        item_types: &Vec<i32>,
+        item_types: &[i32],
         station: StationIdData,
     ) -> Vec<ItemType> {
         println!("loading station orders");

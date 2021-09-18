@@ -1,8 +1,6 @@
 use std::{future::Future, path::Path};
 
-
 use serde::{de::DeserializeOwned, Serialize};
-
 
 #[derive(Debug)]
 pub struct CachedData<T> {
