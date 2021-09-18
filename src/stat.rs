@@ -36,7 +36,7 @@ where
         let sorted = self
             .sorted_by(|x, y| x.partial_cmp(y).unwrap())
             .collect::<Vec<_>>();
-        if sorted.len() > 0 {
+        if !sorted.is_empty() {
             let ind = sorted.len() / 2;
             Some(sorted[ind].clone())
         } else {

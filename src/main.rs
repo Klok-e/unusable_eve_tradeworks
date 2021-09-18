@@ -85,9 +85,7 @@ async fn run() -> Result<()> {
             .claims;
     let character_id = character_info
         .sub
-        .split(":")
-        .skip(2)
-        .next()
+        .split(':').nth(2)
         .unwrap()
         .parse()
         .unwrap();
@@ -97,7 +95,7 @@ async fn run() -> Result<()> {
             let config = &config;
             async move {
                 let the_forge = find_region_id_station(
-                    &config,
+                    config,
                     Station {
                         is_citadel: false,
                         name: "Jita IV - Moon 4 - Caldari Navy Assembly Plant",
@@ -132,10 +130,10 @@ async fn run() -> Result<()> {
                 .await;
 
                 // all jita history
-                let jita_history = history(&config, &all_types, the_forge).await;
+                let jita_history = history(config, &all_types, the_forge).await;
 
                 let t0dt = find_region_id_station(
-                    &config,
+                    config,
                     Station {
                         is_citadel: true,
                         name: "T0DT-T - Couch of Legends",
@@ -146,7 +144,7 @@ async fn run() -> Result<()> {
                 .unwrap();
 
                 // all t0dt history
-                let t0dt_history = history(&config, &all_types, t0dt).await;
+                let t0dt_history = history(config, &all_types, t0dt).await;
 
                 // t0dt_history.iter().find(|x| x.id == 58848).map(|x| dbg!(x));
 
@@ -172,7 +170,7 @@ async fn run() -> Result<()> {
 
                 stream::iter(pairs)
                     .map(|it| {
-                        let it = it.clone();
+                        let it = it;
                         async move {
                             Some(SystemMarketsItemData {
                                 desc: match get_item_stuff(config, it.id).await {
@@ -266,7 +264,7 @@ async fn run() -> Result<()> {
     .chain(good_items.iter().map(|it| {
         Row::new(vec![
             TableCell::new(format!("{}", it.market.desc.type_id)),
-            TableCell::new(format!("{}", it.market.desc.name.clone())),
+            TableCell::new(it.market.desc.name.clone()),
             TableCell::new(format!("{:.2}", it.market.source.highest)),
             TableCell::new(format!("{:.2}", it.market.destination.average)),
             TableCell::new(format!("{:.2}", it.expenses)),
@@ -336,7 +334,7 @@ async fn find_region_id_station(
             config,
             GetCharactersCharacterIdSearchParams {
                 categories: vec!["structure".to_string()],
-                character_id: character_id,
+                character_id,
                 search: station.name.to_string(),
                 accept_language: None,
                 datasource: None,
@@ -355,7 +353,7 @@ async fn find_region_id_station(
         .unwrap()[0]
     } else {
         get_search(
-            &config,
+            config,
             GetSearchParams {
                 categories: vec!["station".to_string()],
                 search: station.name.to_string(),
@@ -416,9 +414,9 @@ async fn find_region_id_station(
     let constellation;
     if let GetUniverseSystemsSystemIdSuccess::Status200(jita_const) =
         universe_api::get_universe_systems_system_id(
-            &config,
+            config,
             GetUniverseSystemsSystemIdParams {
-                system_id: system_id,
+                system_id,
                 accept_language: None,
                 datasource: None,
                 if_none_match: None,
@@ -439,7 +437,7 @@ async fn find_region_id_station(
     let region;
     if let GetUniverseConstellationsConstellationIdSuccess::Status200(ok) =
         universe_api::get_universe_constellations_constellation_id(
-            &config,
+            config,
             GetUniverseConstellationsConstellationIdParams {
                 constellation_id: constellation,
                 accept_language: None,
@@ -462,7 +460,7 @@ async fn find_region_id_station(
             is_citadel: station.is_citadel,
             id: station_id,
         },
-        system_id: system_id,
+        system_id,
         region_id: region,
     })
 }
@@ -596,14 +594,11 @@ async fn history(
                 Ok(ItemType {
                     id: item_type,
                     history: hist_for_type,
-                    orders: std::mem::replace(
-                        station_orders
+                    orders: std::mem::take(station_orders
                             .lock()
                             .await
                             .get_mut(&item_type)
-                            .unwrap_or(&mut dummy_empty_vec),
-                        Vec::new(),
-                    ),
+                            .unwrap_or(&mut dummy_empty_vec)),
                 })
             })
             .await;
@@ -627,7 +622,7 @@ async fn history(
                     let config = &config;
                     let station_orders = &station_orders;
                     async move {
-                        get_item_type_history(config, station, item_type, &station_orders).await
+                        get_item_type_history(config, station, item_type, station_orders).await
                     }
                 })
                 .buffer_unordered(16);
@@ -643,7 +638,7 @@ async fn history(
 
     // fill blanks
     for item in data.iter_mut() {
-        let history = std::mem::replace(&mut item.history, Vec::new());
+        let history = std::mem::take(&mut item.history);
         let avg = history.iter().map(|x| x.average).median().unwrap_or(1.);
         let high = history.iter().map(|x| x.highest).median().unwrap_or(1.);
         let low = history.iter().map(|x| x.lowest).median().unwrap_or(1.);
