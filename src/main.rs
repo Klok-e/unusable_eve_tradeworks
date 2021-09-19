@@ -236,7 +236,8 @@ async fn run() -> Result<()> {
                         .filter(|x| !x.is_buy_order)
                         .sorted_by_key(|x| NotNan::new(x.price).unwrap())
                     {
-                        recommend_bought_volume += order.volume_remain.min(recommend_buy_vol as i32);
+                        recommend_bought_volume +=
+                            order.volume_remain.min(recommend_buy_vol as i32);
                         max_price = order.price;
                         if recommend_buy_vol as i32 <= recommend_bought_volume {
                             break;
