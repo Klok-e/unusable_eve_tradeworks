@@ -16,6 +16,7 @@ pub fn setup_logger() -> Result<(), fern::InitError> {
             std::fs::OpenOptions::new()
                 .write(true)
                 .create(true)
+                .truncate(true)
                 .open("cache/output.log")?,
         )
         .apply()?;

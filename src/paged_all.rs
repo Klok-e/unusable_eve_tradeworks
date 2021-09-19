@@ -30,7 +30,7 @@ where
     let mut all_types = Vec::new();
     let mut page = 1;
     loop {
-        println!("Get page {}", page);
+        log::info!("Get page {}", page);
         let types = get(page).await;
         let mut types = types.into_result().unwrap();
         let var_name = types.len() < max_items_batch;

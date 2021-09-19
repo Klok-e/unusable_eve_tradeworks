@@ -112,28 +112,29 @@ async fn run() -> Result<()> {
                 .unwrap();
 
                 // all item type ids
-                let all_types = get_all_pages(
-                    |page| {
-                        let config = &config;
-                        async move {
-                            market_api::get_markets_region_id_types(
-                                config,
-                                GetMarketsRegionIdTypesParams {
-                                    region_id: the_forge.region_id,
-                                    datasource: None,
-                                    if_none_match: None,
-                                    page: Some(page),
-                                },
-                            )
-                            .await
-                            .unwrap()
-                            .entity
-                            .unwrap()
-                        }
-                    },
-                    1000,
-                )
-                .await;
+                // let all_types = get_all_pages(
+                //     |page| {
+                //         let config = &config;
+                //         async move {
+                //             market_api::get_markets_region_id_types(
+                //                 config,
+                //                 GetMarketsRegionIdTypesParams {
+                //                     region_id: the_forge.region_id,
+                //                     datasource: None,
+                //                     if_none_match: None,
+                //                     page: Some(page),
+                //                 },
+                //             )
+                //             .await
+                //             .unwrap()
+                //             .entity
+                //             .unwrap()
+                //         }
+                //     },
+                //     1000,
+                // )
+                // .await;
+                let all_types = vec![32047];
 
                 // all jita history
                 let jita_history = history(config, &all_types, the_forge).await;
