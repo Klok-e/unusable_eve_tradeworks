@@ -4,6 +4,7 @@ mod config;
 mod consts;
 mod error;
 mod item_type;
+mod logger;
 mod paged_all;
 mod retry;
 mod stat;
@@ -72,6 +73,8 @@ async fn main() -> Result<()> {
 }
 
 async fn run() -> Result<()> {
+    logger::setup_logger()?;
+
     let program_config = Config::from_file("config.json");
     let auth = Auth::load_or_request_token(&program_config).await;
 
@@ -251,11 +254,11 @@ async fn run() -> Result<()> {
         .collect::<Vec<_>>();
 
     let rows = std::iter::once(Row::new(vec![
+        TableCell::new("expenses"),
         TableCell::new("item id"),
         TableCell::new("item name"),
         TableCell::new("jita prc"),
         TableCell::new("t0dt prc"),
-        TableCell::new("expenses"),
         TableCell::new("sell prc"),
         TableCell::new("margin"),
         TableCell::new("vlm src"),
@@ -267,11 +270,11 @@ async fn run() -> Result<()> {
     ]))
     .chain(good_items.iter().map(|it| {
         Row::new(vec![
+            TableCell::new(format!("{:.2}", it.expenses)),
             TableCell::new(format!("{}", it.market.desc.type_id)),
             TableCell::new(it.market.desc.name.clone()),
             TableCell::new(format!("{:.2}", it.market.source.highest)),
             TableCell::new(format!("{:.2}", it.market.destination.average)),
-            TableCell::new(format!("{:.2}", it.expenses)),
             TableCell::new(format!("{:.2}", it.sell_price)),
             TableCell::new(format!("{:.2}", it.margin)),
             TableCell::new(format!("{:.2}", it.market.source.volume)),
@@ -580,7 +583,6 @@ async fn history(
     ) -> Option<ItemType> {
         let res: Option<ItemType> =
             retry::retry::<_, _, _, Error<GetMarketsRegionIdHistoryError>>(|| async {
-                // println!("get type {}", item_type);
                 let hist_for_type = market_api::get_markets_region_id_history(
                     config,
                     GetMarketsRegionIdHistoryParams {
@@ -616,9 +618,9 @@ async fn history(
         item_types: &[i32],
         station: StationIdData,
     ) -> Vec<ItemType> {
-        println!("loading station orders");
+        log::info!("loading station orders");
         let station_orders = get_orders_station(config, station).await;
-        println!("loading station orders finished");
+        log::info!("loading station orders finished");
         let station_orders =
             Mutex::new(station_orders.into_iter().into_group_map_by(|x| x.type_id));
 

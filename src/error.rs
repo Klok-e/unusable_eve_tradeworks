@@ -13,6 +13,8 @@ pub enum Error {
     Search(#[from] apis::Error<GetSearchError>),
     #[error("structure search")]
     StructSearch(#[from] apis::Error<GetCharactersCharacterIdSearchError>),
+    #[error("Logger initialization failure")]
+    Log(#[from] fern::InitError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

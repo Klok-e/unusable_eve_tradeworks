@@ -8,32 +8,42 @@ use rust_eveonline_esi::apis::{
 };
 use thiserror::Error;
 
-pub async fn retry<T, Fut, F, E>(func: F) -> Option<T>
+#[track_caller]
+pub fn retry<T, Fut, F, E>(func: F) -> impl Future<Output = Option<T>>
 where
     Fut: Future<Output = Result<T, E>>,
     F: Fn() -> Fut,
     E: IntoCcpError + Display,
 {
-    let mut retries = 0;
-    loop {
-        break match func().await {
-            Ok(ok) => Some(ok),
-            Err(e) => {
-                let err = e.as_ccp_error();
-                if let CcpError::ErrorLimited = err {
-                    println!("error: {}", e);
-                    println!("error limited error. Sleeping...");
-                    tokio::time::sleep(Duration::from_secs_f32(30.)).await;
-                    continue;
+    let caller = std::panic::Location::caller();
+    async move {
+        let mut retries = 0;
+        loop {
+            break match func().await {
+                Ok(ok) => Some(ok),
+                Err(e) => {
+                    let err = e.as_ccp_error();
+                    if let CcpError::ErrorLimited = err {
+                        log::warn!("[{}] error limited: {}", caller, e);
+                        log::warn!("Sleeping...");
+                        tokio::time::sleep(Duration::from_secs_f32(30.)).await;
+                        continue;
+                    }
+                    retries += 1;
+                    if retries <= RETRIES {
+                        log::info!("[{}] error: {}; retry: {}", caller, e, retries);
+                        continue;
+                    }
+                    log::warn!(
+                        "[{}] error: {}; retry: {}. No more retries left.",
+                        caller,
+                        e,
+                        retries
+                    );
+                    None
                 }
-                retries += 1;
-                if retries <= RETRIES {
-                    println!("error: {}; retry: {}", e, retries);
-                    continue;
-                }
-                None
-            }
-        };
+            };
+        }
     }
 }
 
