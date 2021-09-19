@@ -1,3 +1,5 @@
+#![feature(bool_to_option)]
+
 mod auth;
 mod cached_data;
 mod config;
@@ -209,18 +211,45 @@ async fn run() -> Result<()> {
                 .map(|x| x.volume_remain)
                 .sum();
 
-            let buy_price = x.source.highest * (1. + BROKER_FEE);
-            let expenses = buy_price + x.desc.volume.unwrap() as f64 * FREIGHT_COST_ISKM3;
-
-            let sell_price = x.destination.average * (1. - BROKER_FEE - SALES_TAX);
-
-            let margin = (sell_price - expenses) / expenses;
-
             let recommend_buy_vol = (x.destination.volume * MAX_FILLED_FOR_DAYS_CUTOFF
                 - sell_volume as f64)
                 .floor()
                 .clamp(1., (x.destination.volume * RCMND_FILL_DAYS).max(1.))
                 .floor();
+
+            let max_price = x
+                .source
+                .orders
+                .iter()
+                .filter(|x| !x.is_buy_order)
+                .next()
+                .is_none()
+                .then_some(x.source.highest)
+                .unwrap_or_else(|| {
+                    let mut recommend_bought_volume = 0;
+                    let mut max_price = 0.;
+                    for order in x
+                        .source
+                        .orders
+                        .iter()
+                        .filter(|x| !x.is_buy_order)
+                        .sorted_by_key(|x| NotNan::new(x.price).unwrap())
+                    {
+                        recommend_bought_volume += order.volume_remain.min(recommend_bought_volume);
+                        max_price = order.price;
+                        if recommend_buy_vol as i32 <= recommend_bought_volume {
+                            break;
+                        }
+                    }
+                    max_price
+                });
+
+            let buy_price = max_price * (1. + BROKER_FEE);
+            let expenses = buy_price + x.desc.volume.unwrap() as f64 * FREIGHT_COST_ISKM3;
+
+            let sell_price = x.destination.average * (1. - BROKER_FEE - SALES_TAX);
+
+            let margin = (sell_price - expenses) / expenses;
 
             let rough_profit = (sell_price - expenses) * recommend_buy_vol;
 
@@ -236,6 +265,7 @@ async fn run() -> Result<()> {
                 expenses,
                 sell_price,
                 filled_for_days,
+                max_buy_price: max_price,
             }
         })
         .filter(|x| x.margin > MARGIN_CUTOFF)
@@ -254,11 +284,11 @@ async fn run() -> Result<()> {
         .collect::<Vec<_>>();
 
     let rows = std::iter::once(Row::new(vec![
-        TableCell::new("expenses"),
         TableCell::new("item id"),
         TableCell::new("item name"),
         TableCell::new("jita prc"),
         TableCell::new("t0dt prc"),
+        TableCell::new("expenses"),
         TableCell::new("sell prc"),
         TableCell::new("margin"),
         TableCell::new("vlm src"),
@@ -270,11 +300,11 @@ async fn run() -> Result<()> {
     ]))
     .chain(good_items.iter().map(|it| {
         Row::new(vec![
-            TableCell::new(format!("{:.2}", it.expenses)),
             TableCell::new(format!("{}", it.market.desc.type_id)),
             TableCell::new(it.market.desc.name.clone()),
-            TableCell::new(format!("{:.2}", it.market.source.highest)),
+            TableCell::new(format!("{:.2}", it.max_buy_price)),
             TableCell::new(format!("{:.2}", it.market.destination.average)),
+            TableCell::new(format!("{:.2}", it.expenses)),
             TableCell::new(format!("{:.2}", it.sell_price)),
             TableCell::new(format!("{:.2}", it.margin)),
             TableCell::new(format!("{:.2}", it.market.source.volume)),
@@ -308,9 +338,10 @@ pub struct PairCalculatedData {
     pub rough_profit: f64,
     pub sell_volume: i32,
     pub recommend_buy: i32,
-    expenses: f64,
-    sell_price: f64,
-    filled_for_days: Option<f64>,
+    pub expenses: f64,
+    pub sell_price: f64,
+    pub filled_for_days: Option<f64>,
+    pub max_buy_price: f64,
 }
 
 #[derive(Clone, Copy)]
