@@ -13,7 +13,7 @@ mod stat;
 use std::collections::HashMap;
 
 use chrono::{NaiveDate, Utc};
-use consts::{DATE_FMT, DAYS_AVERAGE};
+use consts::DATE_FMT;
 use error::Result;
 
 use futures::{stream, StreamExt};
@@ -48,11 +48,7 @@ use tokio::sync::Mutex;
 use crate::{
     auth::Auth,
     cached_data::CachedData,
-    config::Config,
-    consts::{
-        BROKER_FEE, FREIGHT_COST_ISKM3, ITEMS_TAKE, MARGIN_CUTOFF, MAX_FILLED_FOR_DAYS_CUTOFF,
-        MIN_DST_VOLUME, MIN_SRC_VOLUME, RCMND_FILL_DAYS, SALES_TAX,
-    },
+    config::{AuthConfig, Config},
     item_type::{ItemType, ItemTypeAveraged, MarketData, SystemMarketsItem, SystemMarketsItemData},
     paged_all::{get_all_pages, ToResult},
 };
@@ -77,11 +73,13 @@ async fn main() -> Result<()> {
 async fn run() -> Result<()> {
     logger::setup_logger()?;
 
-    let program_config = Config::from_file("config.json");
+    let config = Config::from_file_json("config.json")?;
+
+    let program_config = AuthConfig::from_file("auth.json");
     let auth = Auth::load_or_request_token(&program_config).await;
 
-    let mut config = Configuration::new();
-    config.oauth_access_token = Some(auth.access_token.clone());
+    let mut esi_config = Configuration::new();
+    esi_config.oauth_access_token = Some(auth.access_token.clone());
 
     // TODO: dangerous plese don't use in production
     let character_info =
@@ -98,10 +96,11 @@ async fn run() -> Result<()> {
 
     let pairs: Vec<SystemMarketsItemData> =
         CachedData::load_or_create_async("cache/path_data", || {
+            let esi_config = &esi_config;
             let config = &config;
             async move {
                 let the_forge = find_region_id_station(
-                    config,
+                    esi_config,
                     Station {
                         is_citadel: false,
                         name: "Jita IV - Moon 4 - Caldari Navy Assembly Plant",
@@ -114,7 +113,7 @@ async fn run() -> Result<()> {
                 // all item type ids
                 let all_types = get_all_pages(
                     |page| {
-                        let config = &config;
+                        let config = &esi_config;
                         async move {
                             market_api::get_markets_region_id_types(
                                 config,
@@ -137,10 +136,10 @@ async fn run() -> Result<()> {
                 // let all_types = vec![32047];
 
                 // all jita history
-                let jita_history = history(config, &all_types, the_forge).await;
+                let jita_history = history(esi_config, &all_types, the_forge).await;
 
                 let t0dt = find_region_id_station(
-                    config,
+                    esi_config,
                     Station {
                         is_citadel: true,
                         name: "T0DT-T - Couch of Legends",
@@ -151,17 +150,17 @@ async fn run() -> Result<()> {
                 .unwrap();
 
                 // all t0dt history
-                let t0dt_history = history(config, &all_types, t0dt).await;
+                let t0dt_history = history(esi_config, &all_types, t0dt).await;
 
                 // t0dt_history.iter().find(|x| x.id == 58848).map(|x| dbg!(x));
 
                 // turn history into n day average
-                let jita_types_average = averages(jita_history)
+                let jita_types_average = averages(config, jita_history)
                     .into_iter()
                     .map(|x| (x.id, x.market_data))
                     .collect::<HashMap<_, _>>();
 
-                let types_average = averages(t0dt_history)
+                let types_average = averages(config, t0dt_history)
                     .into_iter()
                     .map(|x| (x.id, x.market_data))
                     .collect::<HashMap<_, _>>();
@@ -180,7 +179,7 @@ async fn run() -> Result<()> {
                         let it = it;
                         async move {
                             Some(SystemMarketsItemData {
-                                desc: match get_item_stuff(config, it.id).await {
+                                desc: match get_item_stuff(esi_config, it.id).await {
                                     Some(x) => x.into(),
                                     None => return None,
                                 },
@@ -212,19 +211,11 @@ async fn run() -> Result<()> {
                 .map(|x| x.volume_remain)
                 .sum();
 
-            let recommend_buy_vol = (x.destination.volume * MAX_FILLED_FOR_DAYS_CUTOFF
-                - sell_volume as f64)
-                .floor()
-                .clamp(1., (x.destination.volume * RCMND_FILL_DAYS).max(1.))
-                .floor();
+            let recommend_buy_vol = (x.destination.volume * config.rcmnd_fill_days)
+                .max(1.)
+                .floor() as i32;
 
-            let max_price = x
-                .source
-                .orders
-                .iter()
-                .filter(|x| !x.is_buy_order)
-                .next()
-                .is_none()
+            let max_price = (!x.source.orders.iter().any(|x| !x.is_buy_order))
                 .then_some(x.source.highest)
                 .unwrap_or_else(|| {
                     let mut recommend_bought_volume = 0;
@@ -236,24 +227,23 @@ async fn run() -> Result<()> {
                         .filter(|x| !x.is_buy_order)
                         .sorted_by_key(|x| NotNan::new(x.price).unwrap())
                     {
-                        recommend_bought_volume +=
-                            order.volume_remain.min(recommend_buy_vol as i32);
+                        recommend_bought_volume += order.volume_remain.min(recommend_buy_vol);
                         max_price = order.price;
-                        if recommend_buy_vol as i32 <= recommend_bought_volume {
+                        if recommend_buy_vol <= recommend_bought_volume {
                             break;
                         }
                     }
                     max_price
                 });
 
-            let buy_price = max_price * (1. + BROKER_FEE);
-            let expenses = buy_price + x.desc.volume.unwrap() as f64 * FREIGHT_COST_ISKM3;
+            let buy_price = max_price * (1. + config.broker_fee);
+            let expenses = buy_price + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3;
 
-            let sell_price = x.destination.average * (1. - BROKER_FEE - SALES_TAX);
+            let sell_price = x.destination.average * (1. - config.broker_fee - config.sales_tax);
 
             let margin = (sell_price - expenses) / expenses;
 
-            let rough_profit = (sell_price - expenses) * recommend_buy_vol;
+            let rough_profit = (sell_price - expenses) * recommend_buy_vol as f64;
 
             let filled_for_days =
                 (x.destination.volume > 0.).then(|| 1. / x.destination.volume * sell_volume as f64);
@@ -263,26 +253,27 @@ async fn run() -> Result<()> {
                 margin,
                 rough_profit,
                 sell_volume,
-                recommend_buy: recommend_buy_vol as i32,
+                recommend_buy: recommend_buy_vol,
                 expenses,
                 sell_price,
                 filled_for_days,
                 max_buy_price: max_price,
             }
         })
-        .filter(|x| x.margin > MARGIN_CUTOFF)
+        .filter(|x| x.margin > config.margin_cutoff)
         .filter(|x| {
-            x.market.source.volume > MIN_SRC_VOLUME && x.market.destination.volume > MIN_DST_VOLUME
+            x.market.source.volume > config.min_src_volume
+                && x.market.destination.volume > config.min_dst_volume
         })
         .filter(|x| {
             if let Some(filled_for_days) = x.filled_for_days {
-                filled_for_days < MAX_FILLED_FOR_DAYS_CUTOFF
+                filled_for_days < config.max_filled_for_days_cutoff
             } else {
                 true
             }
         })
         .sorted_unstable_by_key(|x| NotNan::new(-x.rough_profit).unwrap())
-        .take(ITEMS_TAKE)
+        .take(config.items_take)
         .collect::<Vec<_>>();
 
     let rows = std::iter::once(Row::new(vec![
@@ -740,7 +731,7 @@ async fn history(
     data
 }
 
-fn averages(history: Vec<ItemType>) -> Vec<ItemTypeAveraged> {
+fn averages(config: &Config, history: Vec<ItemType>) -> Vec<ItemTypeAveraged> {
     history
         .into_iter()
         .map(|tp| {
@@ -748,7 +739,7 @@ fn averages(history: Vec<ItemType>) -> Vec<ItemTypeAveraged> {
                 .history
                 .into_iter()
                 .rev()
-                .take(DAYS_AVERAGE)
+                .take(config.days_average)
                 .collect::<Vec<_>>();
             ItemTypeAveraged {
                 id: tp.id,

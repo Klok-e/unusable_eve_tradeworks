@@ -1,4 +1,4 @@
-use crate::{cached_data::CachedData, config::Config};
+use crate::{cached_data::CachedData, config::AuthConfig};
 use chrono::{DateTime, Duration, Utc};
 use reqwest::{self, Url};
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,7 @@ pub struct Auth {
 }
 
 impl Auth {
-    pub async fn load_or_request_token(config: &Config) -> Self {
+    pub async fn load_or_request_token(config: &AuthConfig) -> Self {
         let path = "cache/auth";
         let mut data = CachedData::load_or_create_json_async(path, || Self::request_new(config))
             .await
@@ -46,7 +46,7 @@ impl Auth {
         data
     }
 
-    async fn request_new(config: &Config) -> Self {
+    async fn request_new(config: &AuthConfig) -> Self {
         let scopes = vec![
             "esi-markets.structure_markets.v1",
             "esi-search.search_structures.v1",
