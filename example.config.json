@@ -1,0 +1,12 @@
+{
+  "days_average": 7,
+  "max_filled_for_days_cutoff": 2,
+  "rcmnd_fill_days": 1,
+  "margin_cutoff": 0.15,
+  "sales_tax": 0.05,
+  "broker_fee": 0.02,
+  "freight_cost_iskm3": 1500,
+  "items_take": 20,
+  "min_src_volume": 50,
+  "min_dst_volume": 0.1
+}
