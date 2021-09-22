@@ -31,7 +31,6 @@ where
                     }
                     retries += 1;
                     if retries <= RETRIES {
-                        log::info!("[{}] error: {}; retry: {}", caller, e, retries);
                         continue;
                     }
                     log::warn!(

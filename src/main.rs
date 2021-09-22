@@ -166,13 +166,22 @@ async fn run() -> Result<()> {
                     .collect::<HashMap<_, _>>();
 
                 // pair
-                let pairs = jita_types_average
-                    .into_iter()
-                    .map(|(k, v)| SystemMarketsItem {
+                let pairs = jita_types_average.into_iter().flat_map(|(k, v)| {
+                    Some(SystemMarketsItem {
                         id: k,
                         source: v,
-                        destination: types_average[&k].clone(),
-                    });
+                        destination: match types_average.get(&k) {
+                            Some(x) => x.clone(),
+                            None => {
+                                log::warn!(
+                                    "Destination history didn't have history for item: {}",
+                                    k
+                                );
+                                return None;
+                            }
+                        },
+                    })
+                });
 
                 stream::iter(pairs)
                     .map(|it| {
