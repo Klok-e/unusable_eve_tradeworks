@@ -43,7 +43,7 @@ use rust_eveonline_esi::{
 };
 use stat::{AverageStat, MedianStat};
 use term_table::{row::Row, table_cell::TableCell, TableBuilder};
-use tokio::sync::Mutex;
+use tokio::{join, sync::Mutex};
 
 use crate::{
     auth::Auth,
@@ -135,9 +135,6 @@ async fn run() -> Result<()> {
                 .await;
                 // let all_types = vec![32047];
 
-                // all jita history
-                let jita_history = history(esi_config, &all_types, the_forge).await;
-
                 let t0dt = find_region_id_station(
                     esi_config,
                     Station {
@@ -149,8 +146,13 @@ async fn run() -> Result<()> {
                 .await
                 .unwrap();
 
+                // all jita history
+                let jita_history = history(esi_config, &all_types, the_forge);
+
                 // all t0dt history
-                let t0dt_history = history(esi_config, &all_types, t0dt).await;
+                let t0dt_history = history(esi_config, &all_types, t0dt);
+
+                let (jita_history, t0dt_history) = join!(jita_history, t0dt_history);
 
                 // t0dt_history.iter().find(|x| x.id == 58848).map(|x| dbg!(x));
 
