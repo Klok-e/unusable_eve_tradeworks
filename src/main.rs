@@ -133,7 +133,7 @@ async fn run() -> Result<()> {
                     1000,
                 )
                 .await;
-                // let all_types = vec![32047];
+                // let all_types = vec![16278];
 
                 let t0dt = find_region_id_station(
                     esi_config,
@@ -222,11 +222,19 @@ async fn run() -> Result<()> {
                 .map(|x| x.volume_remain)
                 .sum();
 
+            let dest_sell_price = x
+                .destination
+                .orders
+                .iter()
+                .filter(|x| !x.is_buy_order)
+                .min_by_key(|x| NotNan::new(x.price).unwrap())
+                .map_or(x.destination.average, |x| x.price);
+
             let recommend_buy_vol = (x.destination.volume * config.rcmnd_fill_days)
                 .max(1.)
                 .floor() as i32;
 
-            let max_price = (!x.source.orders.iter().any(|x| !x.is_buy_order))
+            let src_sell_order_price = (!x.source.orders.iter().any(|x| !x.is_buy_order))
                 .then_some(x.source.highest)
                 .unwrap_or_else(|| {
                     let mut recommend_bought_volume = 0;
@@ -247,10 +255,10 @@ async fn run() -> Result<()> {
                     max_price
                 });
 
-            let buy_price = max_price * (1. + config.broker_fee);
+            let buy_price = src_sell_order_price * (1. + config.broker_fee);
             let expenses = buy_price + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3;
 
-            let sell_price = x.destination.average * (1. - config.broker_fee - config.sales_tax);
+            let sell_price = dest_sell_price * (1. - config.broker_fee - config.sales_tax);
 
             let margin = (sell_price - expenses) / expenses;
 
@@ -268,7 +276,8 @@ async fn run() -> Result<()> {
                 expenses,
                 sell_price,
                 filled_for_days,
-                max_buy_price: max_price,
+                max_buy_price: src_sell_order_price,
+                dest_min_sell_price: dest_sell_price,
             }
         })
         .filter(|x| x.margin > config.margin_cutoff)
@@ -307,7 +316,7 @@ async fn run() -> Result<()> {
             TableCell::new(format!("{}", it.market.desc.type_id)),
             TableCell::new(it.market.desc.name.clone()),
             TableCell::new(format!("{:.2}", it.max_buy_price)),
-            TableCell::new(format!("{:.2}", it.market.destination.average)),
+            TableCell::new(format!("{:.2}", it.dest_min_sell_price)),
             TableCell::new(format!("{:.2}", it.expenses)),
             TableCell::new(format!("{:.2}", it.sell_price)),
             TableCell::new(format!("{:.2}", it.margin)),
@@ -346,6 +355,7 @@ pub struct PairCalculatedData {
     pub sell_price: f64,
     pub filled_for_days: Option<f64>,
     pub max_buy_price: f64,
+    pub dest_min_sell_price: f64,
 }
 
 #[derive(Clone, Copy)]
