@@ -49,6 +49,7 @@ use crate::{
     auth::Auth,
     cached_data::CachedData,
     config::{AuthConfig, Config},
+    consts::ITEM_NAME_MAX_LENGTH,
     item_type::{ItemType, ItemTypeAveraged, MarketData, SystemMarketsItem, SystemMarketsItemData},
     paged_all::{get_all_pages, ToResult},
 };
@@ -99,16 +100,10 @@ async fn run() -> Result<()> {
             let esi_config = &esi_config;
             let config = &config;
             async move {
-                let the_forge = find_region_id_station(
-                    esi_config,
-                    Station {
-                        is_citadel: false,
-                        name: "Jita IV - Moon 4 - Caldari Navy Assembly Plant",
-                    },
-                    character_id,
-                )
-                .await
-                .unwrap();
+                let source_region =
+                    find_region_id_station(esi_config, config.source.clone(), character_id)
+                        .await
+                        .unwrap();
 
                 // all item type ids
                 let all_types = get_all_pages(
@@ -118,7 +113,7 @@ async fn run() -> Result<()> {
                             market_api::get_markets_region_id_types(
                                 config,
                                 GetMarketsRegionIdTypesParams {
-                                    region_id: the_forge.region_id,
+                                    region_id: source_region.region_id,
                                     datasource: None,
                                     if_none_match: None,
                                     page: Some(page),
@@ -135,44 +130,38 @@ async fn run() -> Result<()> {
                 .await;
                 // let all_types = vec![16278];
 
-                let t0dt = find_region_id_station(
-                    esi_config,
-                    Station {
-                        is_citadel: true,
-                        name: "T0DT-T - Couch of Legends",
-                    },
-                    character_id,
-                )
-                .await
-                .unwrap();
+                let dest_region =
+                    find_region_id_station(esi_config, config.destination.clone(), character_id)
+                        .await
+                        .unwrap();
 
                 // all jita history
-                let jita_history = history(esi_config, &all_types, the_forge);
+                let source_history = history(esi_config, &all_types, source_region);
 
                 // all t0dt history
-                let t0dt_history = history(esi_config, &all_types, t0dt);
+                let dest_history = history(esi_config, &all_types, dest_region);
 
-                let (jita_history, t0dt_history) = join!(jita_history, t0dt_history);
+                let (source_history, dest_history) = join!(source_history, dest_history);
 
                 // t0dt_history.iter().find(|x| x.id == 58848).map(|x| dbg!(x));
 
                 // turn history into n day average
-                let jita_types_average = averages(config, jita_history)
+                let source_types_average = averages(config, source_history)
                     .into_iter()
                     .map(|x| (x.id, x.market_data))
                     .collect::<HashMap<_, _>>();
 
-                let types_average = averages(config, t0dt_history)
+                let dest_types_average = averages(config, dest_history)
                     .into_iter()
                     .map(|x| (x.id, x.market_data))
                     .collect::<HashMap<_, _>>();
 
                 // pair
-                let pairs = jita_types_average.into_iter().flat_map(|(k, v)| {
+                let pairs = source_types_average.into_iter().flat_map(|(k, v)| {
                     Some(SystemMarketsItem {
                         id: k,
                         source: v,
-                        destination: match types_average.get(&k) {
+                        destination: match dest_types_average.get(&k) {
                             Some(x) => x.clone(),
                             None => {
                                 log::warn!(
@@ -276,7 +265,7 @@ async fn run() -> Result<()> {
                 expenses,
                 sell_price,
                 filled_for_days,
-                max_buy_price: src_sell_order_price,
+                src_buy_price: src_sell_order_price,
                 dest_min_sell_price: dest_sell_price,
             }
         })
@@ -297,10 +286,10 @@ async fn run() -> Result<()> {
         .collect::<Vec<_>>();
 
     let rows = std::iter::once(Row::new(vec![
-        TableCell::new("item id"),
+        TableCell::new("id"),
         TableCell::new("item name"),
-        TableCell::new("jita prc"),
-        TableCell::new("t0dt prc"),
+        TableCell::new("src prc"),
+        TableCell::new("dst prc"),
         TableCell::new("expenses"),
         TableCell::new("sell prc"),
         TableCell::new("margin"),
@@ -312,10 +301,12 @@ async fn run() -> Result<()> {
         TableCell::new("fld fr dy"),
     ]))
     .chain(good_items.iter().map(|it| {
+        let short_name =
+            it.market.desc.name[..(ITEM_NAME_MAX_LENGTH.min(it.market.desc.name.len()))].to_owned();
         Row::new(vec![
             TableCell::new(format!("{}", it.market.desc.type_id)),
-            TableCell::new(it.market.desc.name.clone()),
-            TableCell::new(format!("{:.2}", it.max_buy_price)),
+            TableCell::new(short_name),
+            TableCell::new(format!("{:.2}", it.src_buy_price)),
             TableCell::new(format!("{:.2}", it.dest_min_sell_price)),
             TableCell::new(format!("{:.2}", it.expenses)),
             TableCell::new(format!("{:.2}", it.sell_price)),
@@ -354,7 +345,7 @@ pub struct PairCalculatedData {
     pub expenses: f64,
     pub sell_price: f64,
     pub filled_for_days: Option<f64>,
-    pub max_buy_price: f64,
+    pub src_buy_price: f64,
     pub dest_min_sell_price: f64,
 }
 
@@ -365,9 +356,10 @@ pub struct StationIdData {
     pub region_id: i32,
 }
 
-pub struct Station<'a> {
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Station {
     pub is_citadel: bool,
-    pub name: &'a str,
+    pub name: String,
 }
 #[derive(Clone, Copy)]
 pub struct StationId {
@@ -377,7 +369,7 @@ pub struct StationId {
 
 async fn find_region_id_station(
     config: &Configuration,
-    station: Station<'_>,
+    station: Station,
     character_id: i32,
 ) -> Result<StationIdData> {
     // find system id

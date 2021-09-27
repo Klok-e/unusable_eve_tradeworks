@@ -8,5 +8,13 @@
   "freight_cost_iskm3": 1500,
   "items_take": 20,
   "min_src_volume": 50,
-  "min_dst_volume": 0.1
+  "min_dst_volume": 0.1,
+  "source": {
+    "is_citadel": false,
+    "name": "Jita IV - Moon 4 - Caldari Navy Assembly Plant"
+  },
+  "destination": {
+    "is_citadel": true,
+    "name": "T0DT-T - Couch of Legends"
+  }
 }

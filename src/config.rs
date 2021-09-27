@@ -2,6 +2,8 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::Station;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AuthConfig {
     pub client_id: String,
@@ -16,7 +18,7 @@ impl AuthConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
     pub days_average: usize,
     pub max_filled_for_days_cutoff: f64,
@@ -28,6 +30,8 @@ pub struct Config {
     pub items_take: usize,
     pub min_src_volume: f64,
     pub min_dst_volume: f64,
+    pub source: Station,
+    pub destination: Station,
 }
 
 impl Config {

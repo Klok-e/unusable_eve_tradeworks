@@ -5,6 +5,7 @@ use futures::Future;
 use rust_eveonline_esi::apis::{
     market_api::{GetMarketsRegionIdHistoryError, GetMarketsRegionIdOrdersError},
     universe_api::GetUniverseTypesTypeIdError,
+    ResponseContent,
 };
 use thiserror::Error;
 
@@ -61,16 +62,13 @@ pub trait IntoCcpError {
 impl IntoCcpError for rust_eveonline_esi::apis::Error<GetUniverseTypesTypeIdError> {
     fn as_ccp_error(&self) -> CcpError {
         match self {
-            rust_eveonline_esi::apis::Error::Reqwest(error) => dbg!(error)
-                .status()
-                .map(|status| {
-                    if status.as_u16() == 420 {
-                        CcpError::ErrorLimited
-                    } else {
-                        CcpError::Other
-                    }
-                })
-                .unwrap_or(CcpError::Other),
+            rust_eveonline_esi::apis::Error::ResponseError(ResponseContent { status, .. }) => {
+                if status.as_u16() == 420 {
+                    CcpError::ErrorLimited
+                } else {
+                    CcpError::Other
+                }
+            }
             _ => CcpError::Other,
         }
     }
@@ -78,16 +76,13 @@ impl IntoCcpError for rust_eveonline_esi::apis::Error<GetUniverseTypesTypeIdErro
 impl IntoCcpError for rust_eveonline_esi::apis::Error<GetMarketsRegionIdHistoryError> {
     fn as_ccp_error(&self) -> CcpError {
         match self {
-            rust_eveonline_esi::apis::Error::Reqwest(error) => error
-                .status()
-                .map(|status| {
-                    if status.as_u16() == 420 {
-                        CcpError::ErrorLimited
-                    } else {
-                        CcpError::Other
-                    }
-                })
-                .unwrap_or(CcpError::Other),
+            rust_eveonline_esi::apis::Error::ResponseError(ResponseContent { status, .. }) => {
+                if status.as_u16() == 420 {
+                    CcpError::ErrorLimited
+                } else {
+                    CcpError::Other
+                }
+            }
             _ => CcpError::Other,
         }
     }
@@ -95,16 +90,13 @@ impl IntoCcpError for rust_eveonline_esi::apis::Error<GetMarketsRegionIdHistoryE
 impl IntoCcpError for rust_eveonline_esi::apis::Error<GetMarketsRegionIdOrdersError> {
     fn as_ccp_error(&self) -> CcpError {
         match self {
-            rust_eveonline_esi::apis::Error::Reqwest(error) => error
-                .status()
-                .map(|status| {
-                    if status.as_u16() == 420 {
-                        CcpError::ErrorLimited
-                    } else {
-                        CcpError::Other
-                    }
-                })
-                .unwrap_or(CcpError::Other),
+            rust_eveonline_esi::apis::Error::ResponseError(ResponseContent { status, .. }) => {
+                if status.as_u16() == 420 {
+                    CcpError::ErrorLimited
+                } else {
+                    CcpError::Other
+                }
+            }
             _ => CcpError::Other,
         }
     }
