@@ -6,6 +6,7 @@
   "sales_tax": 0.05,
   "broker_fee": 0.02,
   "freight_cost_iskm3": 1500,
+  "freight_cost_collateral_percent": 0.01,
   "items_take": 20,
   "min_src_volume": 50,
   "min_dst_volume": 0.1,

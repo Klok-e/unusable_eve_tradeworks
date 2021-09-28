@@ -245,7 +245,9 @@ async fn run() -> Result<()> {
                 });
 
             let buy_price = src_sell_order_price * (1. + config.broker_fee);
-            let expenses = buy_price + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3;
+            let expenses = buy_price
+                + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
+                + src_sell_order_price * config.freight_cost_collateral_percent;
 
             let sell_price = dest_sell_price * (1. - config.broker_fee - config.sales_tax);
 
