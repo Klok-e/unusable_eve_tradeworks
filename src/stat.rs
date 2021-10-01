@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use ordered_float::NotNan;
 
 pub trait AverageStat {
     fn average(self) -> Option<f64>;
@@ -23,22 +24,23 @@ where
     }
 }
 
-pub trait MedianStat<T> {
-    fn median(self) -> Option<T>;
+pub trait MedianStat {
+    fn median(self) -> Option<NotNan<f64>>;
 }
 
-impl<T, I> MedianStat<T> for I
+impl<I> MedianStat for I
 where
-    I: Iterator<Item = T>,
-    T: PartialOrd + Clone,
+    I: Iterator<Item = NotNan<f64>>,
 {
-    fn median(self) -> Option<T> {
-        let sorted = self
-            .sorted_by(|x, y| x.partial_cmp(y).unwrap())
-            .collect::<Vec<_>>();
+    fn median(self) -> Option<NotNan<f64>> {
+        let sorted = self.sorted_by(|x, y| x.cmp(y)).collect::<Vec<_>>();
         if !sorted.is_empty() {
-            let ind = sorted.len() / 2;
-            Some(sorted[ind].clone())
+            if sorted.len() % 2 == 0 {
+                let val = (sorted[sorted.len() / 2] + sorted[sorted.len() / 2 + 1]) / 2.;
+                Some(val)
+            } else {
+                Some(sorted[(sorted.len() / 2)])
+            }
         } else {
             None
         }

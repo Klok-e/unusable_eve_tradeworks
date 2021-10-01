@@ -12,7 +12,7 @@ mod retry;
 mod stat;
 use std::collections::HashMap;
 
-use chrono::{NaiveDate, Utc};
+use chrono::{Duration, NaiveDate, Utc};
 use consts::DATE_FMT;
 use error::Result;
 
@@ -41,7 +41,7 @@ use rust_eveonline_esi::{
         GetMarketsRegionIdHistory200Ok, GetMarketsRegionIdOrders200Ok, GetUniverseTypesTypeIdOk,
     },
 };
-use stat::{AverageStat, MedianStat};
+use stat::MedianStat;
 use term_table::{row::Row, table_cell::TableCell, TableBuilder};
 use tokio::{join, sync::Mutex};
 
@@ -686,11 +686,24 @@ async fn history(
     // fill blanks
     for item in data.iter_mut() {
         let history = std::mem::take(&mut item.history);
-        let avg = history.iter().map(|x| x.average).median().unwrap_or(1.);
-        let high = history.iter().map(|x| x.highest).median().unwrap_or(1.);
-        let low = history.iter().map(|x| x.lowest).median().unwrap_or(1.);
-        let order = history.iter().map(|x| x.order_count).median().unwrap_or(0);
-        let vol = history.iter().map(|x| x.volume).median().unwrap_or(0);
+        let avg = history
+            .iter()
+            .map(|x| x.average)
+            .map(to_not_nan)
+            .median()
+            .unwrap_or_else(|| to_not_nan(1.));
+        let high = history
+            .iter()
+            .map(|x| x.highest)
+            .map(to_not_nan)
+            .median()
+            .unwrap_or_else(|| to_not_nan(1.));
+        let low = history
+            .iter()
+            .map(|x| x.lowest)
+            .map(to_not_nan)
+            .median()
+            .unwrap_or_else(|| to_not_nan(1.));
 
         // take earliest date
         let mut dates = history
@@ -701,22 +714,9 @@ async fn history(
             })
             .collect::<HashMap<_, _>>();
         let current_date = Utc::now().naive_utc().date();
-        let min = match dates.keys().min() {
-            Some(s) => s,
-            None => {
-                item.history.push(GetMarketsRegionIdHistory200Ok {
-                    average: avg,
-                    date: current_date.format(DATE_FMT).to_string(),
-                    highest: high,
-                    lowest: low,
-                    order_count: order,
-                    volume: vol,
-                });
-                continue;
-            }
-        };
+        let past_date = current_date - Duration::days(360);
 
-        for date in min.iter_days() {
+        for date in past_date.iter_days() {
             if dates.contains_key(&date) {
                 continue;
             }
@@ -724,10 +724,10 @@ async fn history(
             dates.insert(
                 date,
                 GetMarketsRegionIdHistory200Ok {
-                    average: avg,
+                    average: *avg,
                     date: date.format(DATE_FMT).to_string(),
-                    highest: high,
-                    lowest: low,
+                    highest: *high,
+                    lowest: *low,
                     order_count: 0,
                     volume: 0,
                 },
@@ -759,18 +759,43 @@ fn averages(config: &Config, history: Vec<ItemType>) -> Vec<ItemTypeAveraged> {
             ItemTypeAveraged {
                 id: tp.id,
                 market_data: MarketData {
-                    average: lastndays.iter().map(|x| x.average).average().unwrap(),
-                    highest: lastndays.iter().map(|x| x.highest).average().unwrap(),
-                    lowest: lastndays.iter().map(|x| x.lowest).average().unwrap(),
-                    order_count: lastndays
+                    average: *lastndays
+                        .iter()
+                        .map(|x| x.average)
+                        .map(to_not_nan)
+                        .median()
+                        .unwrap(),
+                    highest: *lastndays
+                        .iter()
+                        .map(|x| x.highest)
+                        .map(to_not_nan)
+                        .median()
+                        .unwrap(),
+                    lowest: *lastndays
+                        .iter()
+                        .map(|x| x.lowest)
+                        .map(to_not_nan)
+                        .median()
+                        .unwrap(),
+                    order_count: *lastndays
                         .iter()
                         .map(|x| x.order_count as f64)
-                        .average()
+                        .map(to_not_nan)
+                        .median()
                         .unwrap(),
-                    volume: lastndays.iter().map(|x| x.volume as f64).average().unwrap(),
+                    volume: *lastndays
+                        .iter()
+                        .map(|x| x.volume as f64)
+                        .map(to_not_nan)
+                        .median()
+                        .unwrap(),
                     orders: tp.orders,
                 },
             }
         })
         .collect::<Vec<_>>()
+}
+
+fn to_not_nan(x: f64) -> NotNan<f64> {
+    NotNan::new(x).unwrap()
 }
