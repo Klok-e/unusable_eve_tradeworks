@@ -1,4 +1,4 @@
 /target
 /cache/
-/config.json
+/config*.json
 /auth.json

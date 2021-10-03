@@ -2,6 +2,7 @@
 
 mod auth;
 mod cached_data;
+mod cli;
 mod config;
 mod consts;
 mod error;
@@ -74,7 +75,10 @@ async fn main() -> Result<()> {
 async fn run() -> Result<()> {
     logger::setup_logger()?;
 
-    let config = Config::from_file_json("config.json")?;
+    let cli_args = cli::matches();
+
+    let config_file_name = cli_args.value_of(cli::CONFIG).unwrap_or("config.json");
+    let config = Config::from_file_json(config_file_name)?;
 
     let program_config = AuthConfig::from_file("auth.json");
     let auth = Auth::load_or_request_token(&program_config).await;
@@ -96,7 +100,7 @@ async fn run() -> Result<()> {
         .unwrap();
 
     let pairs: Vec<SystemMarketsItemData> =
-        CachedData::load_or_create_async("cache/path_data", || {
+        CachedData::load_or_create_async(format!("cache/{}-path_data", config_file_name), || {
             let esi_config = &esi_config;
             let config = &config;
             async move {
@@ -203,9 +207,43 @@ async fn run() -> Result<()> {
     let good_items = pairs
         .into_iter()
         .map(|x| {
-            let sell_volume: i32 = x
+            let src_market_volume: i32 = x
+                .source
+                .orders
+                .iter()
+                .filter(|x| !x.is_buy_order)
+                .map(|x| x.volume_remain)
+                .sum();
+
+            let src_perc_sell_orders = x
+                .source
+                .orders
+                .iter()
+                .filter(|x| !x.is_buy_order)
+                .filter(|x| x.volume_remain as f64 / src_market_volume as f64 > 0.05)
+                .collect::<Vec<_>>();
+            let src_market_volume: i32 = src_perc_sell_orders
+                .iter()
+                .filter(|x| !x.is_buy_order)
+                .map(|x| x.volume_remain)
+                .sum();
+
+            let dest_market_volume: i32 = x
                 .destination
                 .orders
+                .iter()
+                .filter(|x| !x.is_buy_order)
+                .map(|x| x.volume_remain)
+                .sum();
+
+            let dst_perc_sell_orders = x
+                .destination
+                .orders
+                .iter()
+                .filter(|x| !x.is_buy_order)
+                .filter(|x| x.volume_remain as f64 / dest_market_volume as f64 > 0.05)
+                .collect::<Vec<_>>();
+            let dest_market_volume: i32 = dst_perc_sell_orders
                 .iter()
                 .filter(|x| !x.is_buy_order)
                 .map(|x| x.volume_remain)
@@ -221,6 +259,7 @@ async fn run() -> Result<()> {
 
             let recommend_buy_vol = (x.destination.volume * config.rcmnd_fill_days)
                 .max(1.)
+                .min(src_market_volume as f64)
                 .floor() as i32;
 
             let src_sell_order_price = (!x.source.orders.iter().any(|x| !x.is_buy_order))
@@ -255,20 +294,21 @@ async fn run() -> Result<()> {
 
             let rough_profit = (sell_price - expenses) * recommend_buy_vol as f64;
 
-            let filled_for_days =
-                (x.destination.volume > 0.).then(|| 1. / x.destination.volume * sell_volume as f64);
+            let filled_for_days = (x.destination.volume > 0.)
+                .then(|| 1. / x.destination.volume * dest_market_volume as f64);
 
             PairCalculatedData {
                 market: x,
                 margin,
                 rough_profit,
-                sell_volume,
+                market_dest_volume: dest_market_volume,
                 recommend_buy: recommend_buy_vol,
                 expenses,
                 sell_price,
                 filled_for_days,
                 src_buy_price: src_sell_order_price,
                 dest_min_sell_price: dest_sell_price,
+                market_src_volume: src_market_volume,
             }
         })
         .filter(|x| x.margin > config.margin_cutoff)
@@ -297,7 +337,8 @@ async fn run() -> Result<()> {
         TableCell::new("margin"),
         TableCell::new("vlm src"),
         TableCell::new("vlm dst"),
-        TableCell::new("on mkt"),
+        TableCell::new("mkt src"),
+        TableCell::new("mkt dst"),
         TableCell::new("rough prft"),
         TableCell::new("rcmnd vlm"),
         TableCell::new("fld fr dy"),
@@ -315,7 +356,8 @@ async fn run() -> Result<()> {
             TableCell::new(format!("{:.2}", it.margin)),
             TableCell::new(format!("{:.2}", it.market.source.volume)),
             TableCell::new(format!("{:.2}", it.market.destination.volume)),
-            TableCell::new(format!("{:.2}", it.sell_volume)),
+            TableCell::new(format!("{:.2}", it.market_src_volume)),
+            TableCell::new(format!("{:.2}", it.market_dest_volume)),
             TableCell::new(format!("{:.2}", it.rough_profit)),
             TableCell::new(format!("{}", it.recommend_buy)),
             TableCell::new(
@@ -342,13 +384,14 @@ pub struct PairCalculatedData {
     pub market: SystemMarketsItemData,
     pub margin: f64,
     pub rough_profit: f64,
-    pub sell_volume: i32,
+    pub market_dest_volume: i32,
     pub recommend_buy: i32,
     pub expenses: f64,
     pub sell_price: f64,
     pub filled_for_days: Option<f64>,
     pub src_buy_price: f64,
     pub dest_min_sell_price: f64,
+    market_src_volume: i32,
 }
 
 #[derive(Clone, Copy)]
