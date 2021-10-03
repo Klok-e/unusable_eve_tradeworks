@@ -41,7 +41,7 @@ use rust_eveonline_esi::{
         GetMarketsRegionIdHistory200Ok, GetMarketsRegionIdOrders200Ok, GetUniverseTypesTypeIdOk,
     },
 };
-use stat::MedianStat;
+use stat::{AverageStat, MedianStat};
 use term_table::{row::Row, table_cell::TableCell, TableBuilder};
 use tokio::{join, sync::Mutex};
 
@@ -49,7 +49,7 @@ use crate::{
     auth::Auth,
     cached_data::CachedData,
     config::{AuthConfig, Config},
-    consts::ITEM_NAME_MAX_LENGTH,
+    consts::{BUFFER_UNORDERED, ITEM_NAME_MAX_LENGTH},
     item_type::{ItemType, ItemTypeAveraged, MarketData, SystemMarketsItem, SystemMarketsItemData},
     paged_all::{get_all_pages, ToResult},
 };
@@ -188,7 +188,7 @@ async fn run() -> Result<()> {
                             })
                         }
                     })
-                    .buffer_unordered(16)
+                    .buffer_unordered(BUFFER_UNORDERED)
                     .collect::<Vec<Option<SystemMarketsItemData>>>()
                     .await
                     .into_iter()
@@ -672,7 +672,7 @@ async fn history(
                         get_item_type_history(config, station, item_type, station_orders).await
                     }
                 })
-                .buffer_unordered(16);
+                .buffer_unordered(BUFFER_UNORDERED);
         hists
             .collect::<Vec<_>>()
             .await
@@ -763,31 +763,31 @@ fn averages(config: &Config, history: Vec<ItemType>) -> Vec<ItemTypeAveraged> {
                         .iter()
                         .map(|x| x.average)
                         .map(to_not_nan)
-                        .median()
+                        .average()
                         .unwrap(),
                     highest: *lastndays
                         .iter()
                         .map(|x| x.highest)
                         .map(to_not_nan)
-                        .median()
+                        .average()
                         .unwrap(),
                     lowest: *lastndays
                         .iter()
                         .map(|x| x.lowest)
                         .map(to_not_nan)
-                        .median()
+                        .average()
                         .unwrap(),
                     order_count: *lastndays
                         .iter()
                         .map(|x| x.order_count as f64)
                         .map(to_not_nan)
-                        .median()
+                        .average()
                         .unwrap(),
                     volume: *lastndays
                         .iter()
                         .map(|x| x.volume as f64)
                         .map(to_not_nan)
-                        .median()
+                        .average()
                         .unwrap(),
                     orders: tp.orders,
                 },
