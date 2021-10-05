@@ -25,16 +25,16 @@ use rust_eveonline_esi::apis::{
     market_api::{self, GetMarketsRegionIdTypesParams},
 };
 
-use term_table::{row::Row, table_cell::TableCell, TableBuilder};
+use term_table::TableBuilder;
 use tokio::join;
 
 use crate::{
     auth::Auth,
     cached_data::CachedData,
     config::{AuthConfig, Config},
-    consts::{BUFFER_UNORDERED, ITEM_NAME_MAX_LENGTH},
-    good_items::get_good_items_sell_sell,
-    item_type::{ItemTypeAveraged, SystemMarketsItem, SystemMarketsItemData},
+    consts::BUFFER_UNORDERED,
+    good_items::{get_good_items_sell_sell, make_table_sell_sell},
+    item_type::{SystemMarketsItem, SystemMarketsItemData},
     paged_all::get_all_pages,
     requests::{find_region_id_station, get_item_stuff, history},
 };
@@ -183,47 +183,8 @@ async fn run() -> Result<()> {
         .data;
 
     let good_items = get_good_items_sell_sell(pairs, &config);
+    let rows = make_table_sell_sell(&good_items);
 
-    let rows = std::iter::once(Row::new(vec![
-        TableCell::new("id"),
-        TableCell::new("item name"),
-        TableCell::new("src prc"),
-        TableCell::new("dst prc"),
-        TableCell::new("expenses"),
-        TableCell::new("sell prc"),
-        TableCell::new("margin"),
-        TableCell::new("vlm src"),
-        TableCell::new("vlm dst"),
-        TableCell::new("mkt src"),
-        TableCell::new("mkt dst"),
-        TableCell::new("rough prft"),
-        TableCell::new("rcmnd vlm"),
-        TableCell::new("fld fr dy"),
-    ]))
-    .chain(good_items.iter().map(|it| {
-        let short_name =
-            it.market.desc.name[..(ITEM_NAME_MAX_LENGTH.min(it.market.desc.name.len()))].to_owned();
-        Row::new(vec![
-            TableCell::new(format!("{}", it.market.desc.type_id)),
-            TableCell::new(short_name),
-            TableCell::new(format!("{:.2}", it.src_buy_price)),
-            TableCell::new(format!("{:.2}", it.dest_min_sell_price)),
-            TableCell::new(format!("{:.2}", it.expenses)),
-            TableCell::new(format!("{:.2}", it.sell_price)),
-            TableCell::new(format!("{:.2}", it.margin)),
-            TableCell::new(format!("{:.2}", it.src_avgs.volume)),
-            TableCell::new(format!("{:.2}", it.dst_avgs.volume)),
-            TableCell::new(format!("{:.2}", it.market_src_volume)),
-            TableCell::new(format!("{:.2}", it.market_dest_volume)),
-            TableCell::new(format!("{:.2}", it.rough_profit)),
-            TableCell::new(format!("{}", it.recommend_buy)),
-            TableCell::new(
-                it.filled_for_days
-                    .map_or("N/A".to_string(), |x| format!("{:.2}", x)),
-            ),
-        ])
-    }))
-    .collect::<Vec<_>>();
     let table = TableBuilder::new().rows(rows).build();
     println!("Maybe good items:\n{}", table.render());
     println!();
@@ -235,22 +196,6 @@ async fn run() -> Result<()> {
     println!("Item names only:\n{}", format.join("\n"));
 
     Ok(())
-}
-
-pub struct PairCalculatedData {
-    pub market: SystemMarketsItemData,
-    pub margin: f64,
-    pub rough_profit: f64,
-    pub market_dest_volume: i32,
-    pub recommend_buy: i32,
-    pub expenses: f64,
-    pub sell_price: f64,
-    pub filled_for_days: Option<f64>,
-    pub src_buy_price: f64,
-    pub dest_min_sell_price: f64,
-    market_src_volume: i32,
-    src_avgs: ItemTypeAveraged,
-    dst_avgs: ItemTypeAveraged,
 }
 
 #[derive(Clone, Copy)]
