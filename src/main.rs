@@ -33,7 +33,10 @@ use crate::{
     cached_data::CachedData,
     config::{AuthConfig, Config},
     consts::BUFFER_UNORDERED,
-    good_items::{get_good_items_sell_sell, make_table_sell_sell},
+    good_items::{
+        get_good_items_sell_buy, get_good_items_sell_sell, make_table_sell_buy,
+        make_table_sell_sell,
+    },
     item_type::{SystemMarketsItem, SystemMarketsItemData},
     paged_all::get_all_pages,
     requests::{find_region_id_station, get_item_stuff, history},
@@ -83,7 +86,7 @@ async fn run() -> Result<()> {
         .parse()
         .unwrap();
 
-    let pairs: Vec<SystemMarketsItemData> =
+    let mut pairs: Vec<SystemMarketsItemData> =
         CachedData::load_or_create_async(format!("cache/{}-path_data", config_file_name), || {
             let esi_config = &esi_config;
             let config = &config;
@@ -182,20 +185,61 @@ async fn run() -> Result<()> {
         .await
         .data;
 
-    let good_items = get_good_items_sell_sell(pairs, &config);
-    let rows = make_table_sell_sell(&good_items);
+    if let Some(v) = cli_args
+        .value_of(cli::DEBUG_ITEM_ID)
+        .map(|x| x.parse::<i32>().ok())
+        .flatten()
+    {
+        pairs.retain(|x| x.desc.type_id == v);
+    }
+
+    let simple_list: Vec<_>;
+    let rows = {
+        let sell_sell = cli_args.is_present(cli::SELL_SELL);
+        let sell_buy = cli_args.is_present(cli::SELL_BUY);
+        if sell_sell || !sell_buy {
+            log::trace!("Sell sell path.");
+            let good_items = get_good_items_sell_sell(pairs, &config);
+            simple_list = good_items
+                .iter()
+                .map(|x| SimpleDisplay {
+                    name: x.market.desc.name.clone(),
+                    recommend_buy: x.recommend_buy,
+                })
+                .collect();
+            make_table_sell_sell(&good_items)
+        } else {
+            log::trace!("Sell buy path.");
+            let good_items = get_good_items_sell_buy(pairs, &config);
+            simple_list = good_items
+                .iter()
+                .map(|x| SimpleDisplay {
+                    name: x.market.desc.name.clone(),
+                    recommend_buy: x.recommend_buy,
+                })
+                .collect();
+            make_table_sell_buy(&good_items)
+        }
+    };
 
     let table = TableBuilder::new().rows(rows).build();
     println!("Maybe good items:\n{}", table.render());
-    println!();
 
-    let format = good_items
-        .iter()
-        .map(|it| format!("{} {}", it.market.desc.name, it.recommend_buy))
-        .collect::<Vec<_>>();
-    println!("Item names only:\n{}", format.join("\n"));
+    if cli_args.is_present(cli::DISPLAY_SIMPLE_LIST) {
+        println!();
 
+        let format = simple_list
+            .iter()
+            .map(|it| format!("{} {}", it.name, it.recommend_buy))
+            .collect::<Vec<_>>();
+        println!("Item names only:\n{}", format.join("\n"));
+    }
     Ok(())
+}
+
+struct SimpleDisplay {
+    pub name: String,
+    pub recommend_buy: i32,
 }
 
 #[derive(Clone, Copy)]

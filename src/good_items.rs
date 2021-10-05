@@ -87,7 +87,7 @@ pub fn get_good_items_sell_sell(
         .collect::<Vec<_>>()
 }
 
-pub fn make_table_sell_sell(good_items: &[PairCalculatedDataSellSell]) -> Vec<Row> {
+pub fn make_table_sell_sell<'a, 'b>(good_items: &'a [PairCalculatedDataSellSell]) -> Vec<Row<'b>> {
     let rows = std::iter::once(Row::new(vec![
         TableCell::new("id"),
         TableCell::new("item name"),
@@ -157,6 +157,9 @@ pub fn get_good_items_sell_buy(
             let src_mkt_orders = x.source.orders.iter().only_substantial_orders();
             let src_mkt_volume = src_mkt_orders.iter().copied().sell_order_volume();
 
+            let dst_mkt_orders = x.destination.orders.iter().only_substantial_orders();
+            let dst_mkt_volume: i32 = dst_mkt_orders.iter().copied().sell_order_volume();
+
             let src_avgs = averages(config, &x.source.history);
             let dst_avgs = averages(config, &x.destination.history);
 
@@ -175,12 +178,12 @@ pub fn get_good_items_sell_buy(
                         + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
                         + src_avgs.highest * config.freight_cost_collateral_percent;
 
-                    let sell_price = order.price * (1. - config.broker_fee - config.sales_tax);
+                    let profit = order.price * (1. - config.broker_fee - config.sales_tax);
 
-                    if expenses <= sell_price {
+                    if expenses <= profit {
                         break;
                     }
-                    sum_sell_price += sell_price;
+                    sum_sell_price += order.price;
                     recommend_bought_volume += order.volume_remain;
                 }
                 (
@@ -211,11 +214,10 @@ pub fn get_good_items_sell_buy(
                 market: x,
                 margin,
                 rough_profit,
-                market_dest_volume: 0,
+                market_dest_volume: dst_mkt_volume,
                 recommend_buy: recommend_buy_vol,
                 expenses,
                 sell_price,
-                filled_for_days: None,
                 src_buy_price: src_sell_order_price,
                 dest_min_sell_price: dest_sell_price,
                 market_src_volume: src_mkt_volume,
@@ -227,19 +229,12 @@ pub fn get_good_items_sell_buy(
         .filter(|x| {
             x.src_avgs.volume > config.min_src_volume && x.dst_avgs.volume > config.min_dst_volume
         })
-        .filter(|x| {
-            if let Some(filled_for_days) = x.filled_for_days {
-                filled_for_days < config.max_filled_for_days_cutoff
-            } else {
-                true
-            }
-        })
         .sorted_unstable_by_key(|x| NotNan::new(-x.rough_profit).unwrap())
         .take(config.items_take)
         .collect::<Vec<_>>()
 }
 
-pub fn make_table_sell_buy(good_items: &[PairCalculatedDataSellBuy]) -> Vec<Row> {
+pub fn make_table_sell_buy<'a, 'b>(good_items: &'a [PairCalculatedDataSellBuy]) -> Vec<Row<'b>> {
     let rows = std::iter::once(Row::new(vec![
         TableCell::new("id"),
         TableCell::new("item name"),
@@ -254,7 +249,6 @@ pub fn make_table_sell_buy(good_items: &[PairCalculatedDataSellBuy]) -> Vec<Row>
         TableCell::new("mkt dst"),
         TableCell::new("rough prft"),
         TableCell::new("rcmnd vlm"),
-        TableCell::new("fld fr dy"),
     ]))
     .chain(good_items.iter().map(|it| {
         let short_name =
@@ -273,10 +267,6 @@ pub fn make_table_sell_buy(good_items: &[PairCalculatedDataSellBuy]) -> Vec<Row>
             TableCell::new(format!("{:.2}", it.market_dest_volume)),
             TableCell::new(format!("{:.2}", it.rough_profit)),
             TableCell::new(format!("{}", it.recommend_buy)),
-            TableCell::new(
-                it.filled_for_days
-                    .map_or("N/A".to_string(), |x| format!("{:.2}", x)),
-            ),
         ])
     }))
     .collect::<Vec<_>>();
@@ -291,7 +281,6 @@ pub struct PairCalculatedDataSellBuy {
     pub recommend_buy: i32,
     pub expenses: f64,
     pub sell_price: f64,
-    pub filled_for_days: Option<f64>,
     pub src_buy_price: f64,
     pub dest_min_sell_price: f64,
     pub src_avgs: ItemTypeAveraged,
