@@ -6,13 +6,13 @@ mod cli;
 mod config;
 mod consts;
 mod error;
+mod good_items;
 mod item_type;
 mod logger;
 mod order_ext;
 mod paged_all;
 mod retry;
 mod stat;
-mod good_items;
 use std::collections::HashMap;
 
 use chrono::{Duration, NaiveDate, Utc};
@@ -48,10 +48,17 @@ use stat::{AverageStat, MedianStat};
 use term_table::{row::Row, table_cell::TableCell, TableBuilder};
 use tokio::{join, sync::Mutex};
 
-use crate::{auth::Auth, cached_data::CachedData, config::{AuthConfig, Config}, consts::{BUFFER_UNORDERED, ITEM_NAME_MAX_LENGTH}, good_items::get_good_items, item_type::{
-        ItemHistoryDay, ItemType, ItemTypeAveraged, MarketData, SystemMarketsItem,
-        SystemMarketsItemData,
-    }, order_ext::OrderIterExt, paged_all::{get_all_pages, ToResult}};
+use crate::{
+    auth::Auth,
+    cached_data::CachedData,
+    config::{AuthConfig, Config},
+    consts::{BUFFER_UNORDERED, ITEM_NAME_MAX_LENGTH},
+    good_items::get_good_items,
+    item_type::{
+        ItemHistoryDay, ItemType, ItemTypeAveraged, SystemMarketsItem, SystemMarketsItemData,
+    },
+    paged_all::{get_all_pages, ToResult},
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -662,7 +669,7 @@ async fn history(
     data
 }
 
-pub fn averages(config: &Config, history: &Vec<ItemHistoryDay>) -> ItemTypeAveraged {
+pub fn averages(config: &Config, history: &[ItemHistoryDay]) -> ItemTypeAveraged {
     let lastndays = history
         .iter()
         .rev()

@@ -1,10 +1,16 @@
 use itertools::Itertools;
 use ordered_float::NotNan;
 
-use crate::{PairCalculatedData, averages, config::Config, item_type::SystemMarketsItemData, order_ext::OrderIterExt};
+use crate::{
+    averages, config::Config, item_type::SystemMarketsItemData, order_ext::OrderIterExt,
+    PairCalculatedData,
+};
 
-pub fn get_good_items(pairs: Vec<SystemMarketsItemData>, config: &Config) -> Vec<PairCalculatedData> {
-    let good_items = pairs
+pub fn get_good_items(
+    pairs: Vec<SystemMarketsItemData>,
+    config: &Config,
+) -> Vec<PairCalculatedData> {
+    pairs
         .into_iter()
         .map(|x| {
             let src_mkt_orders = x.source.orders.iter().only_substantial_orders();
@@ -13,8 +19,8 @@ pub fn get_good_items(pairs: Vec<SystemMarketsItemData>, config: &Config) -> Vec
             let dst_mkt_orders = x.destination.orders.iter().only_substantial_orders();
             let dst_mkt_volume: i32 = dst_mkt_orders.iter().copied().sell_order_volume();
 
-            let src_avgs = averages(&config, &x.source.history);
-            let dst_avgs = averages(&config, &x.destination.history);
+            let src_avgs = averages(config, &x.source.history);
+            let dst_avgs = averages(config, &x.destination.history);
 
             let recommend_buy_vol = (dst_avgs.volume * config.rcmnd_fill_days)
                 .max(1.)
@@ -87,6 +93,5 @@ pub fn get_good_items(pairs: Vec<SystemMarketsItemData>, config: &Config) -> Vec
         })
         .sorted_unstable_by_key(|x| NotNan::new(-x.rough_profit).unwrap())
         .take(config.items_take)
-        .collect::<Vec<_>>();
-    good_items
+        .collect::<Vec<_>>()
 }

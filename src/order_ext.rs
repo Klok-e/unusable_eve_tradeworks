@@ -20,23 +20,25 @@ where
     fn only_substantial_orders(self) -> Vec<It> {
         let orders = self.collect::<Vec<_>>();
         let src_market_volume = orders.iter().copied().sell_order_volume();
-        let src_perc_sell_orders = orders
+
+        orders
             .into_iter()
             .group_by(|x| {
                 let mut num = (x.price * 100.).round() as i64;
                 // get first 2 figits
                 while num > 99 {
-                    num = num / 10;
+                    num /= 10;
                 }
                 num
             })
             .into_iter()
             .map(|(k, v)| (k, v.collect::<Vec<It>>()))
-            .filter(|(_, v)| v.iter().copied().sell_order_volume() as f64 / src_market_volume as f64 > 0.05)
+            .filter(|(_, v)| {
+                v.iter().copied().sell_order_volume() as f64 / src_market_volume as f64 > 0.05
+            })
             .map(|(_, v)| v.into_iter())
             .flatten()
-            .collect_vec();
-        src_perc_sell_orders
+            .collect_vec()
     }
 
     fn sell_order_volume(self) -> i32 {

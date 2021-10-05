@@ -1,8 +1,7 @@
-use chrono::DateTime;
 use rust_eveonline_esi::models::{GetMarketsRegionIdHistory200Ok, GetUniverseTypesTypeIdOk};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize,Default)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct ItemType {
     pub id: i32,
     pub history: Vec<GetMarketsRegionIdHistory200Ok>,
