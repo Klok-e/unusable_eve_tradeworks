@@ -34,7 +34,7 @@ pub fn get_good_items_sell_sell(
             let src_sell_order_price = (!x.source.orders.iter().any(|x| !x.is_buy_order))
                 .then_some(src_avgs.highest)
                 .unwrap_or_else(|| {
-                    total_buy_from_sell_order_price(&x.source.orders.as_slice(), recommend_buy_vol)
+                    total_buy_from_sell_order_price(x.source.orders.as_slice(), recommend_buy_vol)
                         / recommend_buy_vol as f64
                 });
 

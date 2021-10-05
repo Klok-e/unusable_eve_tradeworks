@@ -16,38 +16,17 @@ pub mod retry;
 pub mod stat;
 use std::collections::HashMap;
 
-use chrono::{Duration, NaiveDate, Utc};
-use consts::DATE_FMT;
 use error::Result;
 
 use futures::{stream, StreamExt};
-use item_type::Order;
-use itertools::Itertools;
-use ordered_float::NotNan;
-use rust_eveonline_esi::{
-    apis::{
-        configuration::Configuration,
-        market_api::{
-            self, GetMarketsRegionIdHistoryError, GetMarketsRegionIdHistoryParams,
-            GetMarketsRegionIdOrdersError, GetMarketsRegionIdOrdersParams,
-            GetMarketsRegionIdTypesParams, GetMarketsStructuresStructureIdParams,
-        },
-        search_api::{self, get_search, GetCharactersCharacterIdSearchParams, GetSearchParams},
-        universe_api::{
-            self, GetUniverseConstellationsConstellationIdParams,
-            GetUniverseConstellationsConstellationIdSuccess, GetUniverseStationsStationIdParams,
-            GetUniverseStructuresStructureIdParams, GetUniverseSystemsSystemIdParams,
-            GetUniverseSystemsSystemIdSuccess, GetUniverseTypesTypeIdParams,
-        },
-        Error,
-    },
-    models::{
-        GetMarketsRegionIdHistory200Ok, GetMarketsRegionIdOrders200Ok, GetUniverseTypesTypeIdOk,
-    },
+
+use rust_eveonline_esi::apis::{
+    configuration::Configuration,
+    market_api::{self, GetMarketsRegionIdTypesParams},
 };
-use stat::{AverageStat, MedianStat};
+
 use term_table::{row::Row, table_cell::TableCell, TableBuilder};
-use tokio::{join, sync::Mutex};
+use tokio::join;
 
 use crate::{
     auth::Auth,
@@ -55,10 +34,8 @@ use crate::{
     config::{AuthConfig, Config},
     consts::{BUFFER_UNORDERED, ITEM_NAME_MAX_LENGTH},
     good_items::get_good_items_sell_sell,
-    item_type::{
-        ItemHistoryDay, ItemType, ItemTypeAveraged, SystemMarketsItem, SystemMarketsItemData,
-    },
-    paged_all::{get_all_pages, ToResult},
+    item_type::{ItemTypeAveraged, SystemMarketsItem, SystemMarketsItemData},
+    paged_all::get_all_pages,
     requests::{find_region_id_station, get_item_stuff, history},
 };
 use serde::{Deserialize, Serialize};

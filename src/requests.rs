@@ -11,7 +11,7 @@ use crate::{consts::DATE_FMT, Station, StationIdData};
 use chrono::{Duration, NaiveDate, Utc};
 
 use crate::item_type::Order;
-use crate::stat::{AverageStat, MedianStat};
+use crate::stat::MedianStat;
 use futures::{stream, StreamExt};
 use itertools::Itertools;
 use ordered_float::NotNan;
@@ -21,7 +21,7 @@ use rust_eveonline_esi::{
         market_api::{
             self, GetMarketsRegionIdHistoryError, GetMarketsRegionIdHistoryParams,
             GetMarketsRegionIdOrdersError, GetMarketsRegionIdOrdersParams,
-            GetMarketsRegionIdTypesParams, GetMarketsStructuresStructureIdParams,
+            GetMarketsStructuresStructureIdParams,
         },
         search_api::{self, get_search, GetCharactersCharacterIdSearchParams, GetSearchParams},
         universe_api::{
@@ -36,8 +36,8 @@ use rust_eveonline_esi::{
         GetMarketsRegionIdHistory200Ok, GetMarketsRegionIdOrders200Ok, GetUniverseTypesTypeIdOk,
     },
 };
-use term_table::{row::Row, table_cell::TableCell, TableBuilder};
-use tokio::{join, sync::Mutex};
+
+use tokio::sync::Mutex;
 
 pub async fn find_region_id_station(
     config: &Configuration,
