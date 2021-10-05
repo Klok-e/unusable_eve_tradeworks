@@ -1,7 +1,8 @@
+use chrono::DateTime;
 use rust_eveonline_esi::models::{GetMarketsRegionIdHistory200Ok, GetUniverseTypesTypeIdOk};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize,Default)]
 pub struct ItemType {
     pub id: i32,
     pub history: Vec<GetMarketsRegionIdHistory200Ok>,
@@ -24,19 +25,47 @@ pub struct Order {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ItemTypeAveraged {
-    pub id: i32,
-    pub market_data: MarketData,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MarketData {
     pub average: f64,
     pub highest: f64,
     pub lowest: f64,
     pub order_count: f64,
     pub volume: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ItemHistoryDay {
+    pub average: f64,
+    pub highest: f64,
+    pub lowest: f64,
+    pub order_count: i64,
+    pub volume: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarketData {
+    pub history: Vec<ItemHistoryDay>,
     pub orders: Vec<Order>,
 }
+
+impl From<ItemType> for MarketData {
+    fn from(x: ItemType) -> Self {
+        MarketData {
+            history: x
+                .history
+                .iter()
+                .map(|x| ItemHistoryDay {
+                    average: x.average,
+                    highest: x.highest,
+                    lowest: x.lowest,
+                    order_count: x.order_count,
+                    volume: x.volume,
+                })
+                .collect(),
+            orders: x.orders,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SystemMarketsItem {
     pub id: i32,

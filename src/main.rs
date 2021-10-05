@@ -52,7 +52,10 @@ use crate::{
     cached_data::CachedData,
     config::{AuthConfig, Config},
     consts::{BUFFER_UNORDERED, ITEM_NAME_MAX_LENGTH},
-    item_type::{ItemType, ItemTypeAveraged, MarketData, SystemMarketsItem, SystemMarketsItemData},
+    item_type::{
+        ItemHistoryDay, ItemType, ItemTypeAveraged, MarketData, SystemMarketsItem,
+        SystemMarketsItemData,
+    },
     order_ext::OrderIterExt,
     paged_all::{get_all_pages, ToResult},
 };
@@ -141,34 +144,29 @@ async fn run() -> Result<()> {
                         .await
                         .unwrap();
 
-                // all jita history
                 let source_history = history(esi_config, &all_types, source_region);
-
-                // all t0dt history
                 let dest_history = history(esi_config, &all_types, dest_region);
 
                 let (source_history, dest_history) = join!(source_history, dest_history);
 
-                // t0dt_history.iter().find(|x| x.id == 58848).map(|x| dbg!(x));
-
                 // turn history into n day average
-                let source_types_average = averages(config, source_history)
+                let source_types_average = source_history
                     .into_iter()
-                    .map(|x| (x.id, x.market_data))
+                    .map(|x| (x.id, x))
                     .collect::<HashMap<_, _>>();
 
-                let dest_types_average = averages(config, dest_history)
+                let mut dest_types_average = dest_history
                     .into_iter()
-                    .map(|x| (x.id, x.market_data))
+                    .map(|x| (x.id, x))
                     .collect::<HashMap<_, _>>();
 
                 // pair
                 let pairs = source_types_average.into_iter().flat_map(|(k, v)| {
                     Some(SystemMarketsItem {
                         id: k,
-                        source: v,
-                        destination: match dest_types_average.get(&k) {
-                            Some(x) => x.clone(),
+                        source: v.into(),
+                        destination: match dest_types_average.insert(k, Default::default()) {
+                            Some(x) => x.into(),
                             None => {
                                 log::warn!(
                                     "Destination history didn't have history for item: {}",
@@ -215,23 +213,28 @@ async fn run() -> Result<()> {
             let dst_mkt_orders = x.destination.orders.iter().only_substantial_orders();
             let dst_mkt_volume: i32 = dst_mkt_orders.iter().copied().volume();
 
+            let src_avgs = averages(&config, &x.source.history);
+            let dst_avgs = averages(&config, &x.destination.history);
+
             let dest_sell_price = dst_mkt_orders
                 .iter()
                 .filter(|x| !x.is_buy_order)
                 .min_by_key(|x| NotNan::new(x.price).unwrap())
-                .map_or(x.destination.average, |x| x.price);
+                .map_or(dst_avgs.average, |x| x.price);
 
-            let recommend_buy_vol = (x.destination.volume * config.rcmnd_fill_days)
+            let recommend_buy_vol = (dst_avgs.volume * config.rcmnd_fill_days)
                 .max(1.)
                 .min(src_mkt_volume as f64)
                 .floor() as i32;
 
-            let src_sell_order_price = (!src_mkt_orders.iter().any(|x| !x.is_buy_order))
-                .then_some(x.source.highest)
+            let src_sell_order_price = (!x.source.orders.iter().any(|x| !x.is_buy_order))
+                .then_some(src_avgs.highest)
                 .unwrap_or_else(|| {
                     let mut recommend_bought_volume = 0;
                     let mut max_price = 0.;
-                    for order in src_mkt_orders
+                    for order in x
+                        .source
+                        .orders
                         .iter()
                         .filter(|x| !x.is_buy_order)
                         .sorted_by_key(|x| NotNan::new(x.price).unwrap())
@@ -256,8 +259,8 @@ async fn run() -> Result<()> {
 
             let rough_profit = (sell_price - expenses) * recommend_buy_vol as f64;
 
-            let filled_for_days = (x.destination.volume > 0.)
-                .then(|| 1. / x.destination.volume * dst_mkt_volume as f64);
+            let filled_for_days =
+                (dst_avgs.volume > 0.).then(|| 1. / dst_avgs.volume * dst_mkt_volume as f64);
 
             PairCalculatedData {
                 market: x,
@@ -271,12 +274,13 @@ async fn run() -> Result<()> {
                 src_buy_price: src_sell_order_price,
                 dest_min_sell_price: dest_sell_price,
                 market_src_volume: src_mkt_volume,
+                src_avgs,
+                dst_avgs,
             }
         })
         .filter(|x| x.margin > config.margin_cutoff)
         .filter(|x| {
-            x.market.source.volume > config.min_src_volume
-                && x.market.destination.volume > config.min_dst_volume
+            x.src_avgs.volume > config.min_src_volume && x.dst_avgs.volume > config.min_dst_volume
         })
         .filter(|x| {
             if let Some(filled_for_days) = x.filled_for_days {
@@ -316,8 +320,8 @@ async fn run() -> Result<()> {
             TableCell::new(format!("{:.2}", it.expenses)),
             TableCell::new(format!("{:.2}", it.sell_price)),
             TableCell::new(format!("{:.2}", it.margin)),
-            TableCell::new(format!("{:.2}", it.market.source.volume)),
-            TableCell::new(format!("{:.2}", it.market.destination.volume)),
+            TableCell::new(format!("{:.2}", it.src_avgs.volume)),
+            TableCell::new(format!("{:.2}", it.dst_avgs.volume)),
             TableCell::new(format!("{:.2}", it.market_src_volume)),
             TableCell::new(format!("{:.2}", it.market_dest_volume)),
             TableCell::new(format!("{:.2}", it.rough_profit)),
@@ -354,6 +358,8 @@ pub struct PairCalculatedData {
     pub src_buy_price: f64,
     pub dest_min_sell_price: f64,
     market_src_volume: i32,
+    src_avgs: ItemTypeAveraged,
+    dst_avgs: ItemTypeAveraged,
 }
 
 #[derive(Clone, Copy)]
@@ -751,54 +757,44 @@ async fn history(
     data
 }
 
-fn averages(config: &Config, history: Vec<ItemType>) -> Vec<ItemTypeAveraged> {
-    history
-        .into_iter()
-        .map(|tp| {
-            let lastndays = tp
-                .history
-                .into_iter()
-                .rev()
-                .take(config.days_average)
-                .collect::<Vec<_>>();
-            ItemTypeAveraged {
-                id: tp.id,
-                market_data: MarketData {
-                    average: *lastndays
-                        .iter()
-                        .map(|x| x.average)
-                        .map(to_not_nan)
-                        .average()
-                        .unwrap(),
-                    highest: *lastndays
-                        .iter()
-                        .map(|x| x.highest)
-                        .map(to_not_nan)
-                        .average()
-                        .unwrap(),
-                    lowest: *lastndays
-                        .iter()
-                        .map(|x| x.lowest)
-                        .map(to_not_nan)
-                        .average()
-                        .unwrap(),
-                    order_count: *lastndays
-                        .iter()
-                        .map(|x| x.order_count as f64)
-                        .map(to_not_nan)
-                        .average()
-                        .unwrap(),
-                    volume: *lastndays
-                        .iter()
-                        .map(|x| x.volume as f64)
-                        .map(to_not_nan)
-                        .average()
-                        .unwrap(),
-                    orders: tp.orders,
-                },
-            }
-        })
-        .collect::<Vec<_>>()
+fn averages(config: &Config, history: &Vec<ItemHistoryDay>) -> ItemTypeAveraged {
+    let lastndays = history
+        .iter()
+        .rev()
+        .take(config.days_average)
+        .collect::<Vec<_>>();
+    ItemTypeAveraged {
+        average: *lastndays
+            .iter()
+            .map(|x| x.average)
+            .map(to_not_nan)
+            .average()
+            .unwrap(),
+        highest: *lastndays
+            .iter()
+            .map(|x| x.highest)
+            .map(to_not_nan)
+            .average()
+            .unwrap(),
+        lowest: *lastndays
+            .iter()
+            .map(|x| x.lowest)
+            .map(to_not_nan)
+            .average()
+            .unwrap(),
+        order_count: *lastndays
+            .iter()
+            .map(|x| x.order_count as f64)
+            .map(to_not_nan)
+            .average()
+            .unwrap(),
+        volume: *lastndays
+            .iter()
+            .map(|x| x.volume as f64)
+            .map(to_not_nan)
+            .average()
+            .unwrap(),
+    }
 }
 
 fn to_not_nan(x: f64) -> NotNan<f64> {
