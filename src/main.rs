@@ -8,6 +8,7 @@ mod consts;
 mod error;
 mod item_type;
 mod logger;
+mod order_ext;
 mod paged_all;
 mod retry;
 mod stat;
@@ -52,6 +53,7 @@ use crate::{
     config::{AuthConfig, Config},
     consts::{BUFFER_UNORDERED, ITEM_NAME_MAX_LENGTH},
     item_type::{ItemType, ItemTypeAveraged, MarketData, SystemMarketsItem, SystemMarketsItemData},
+    order_ext::OrderIterExt,
     paged_all::{get_all_pages, ToResult},
 };
 use serde::{Deserialize, Serialize};
@@ -207,51 +209,13 @@ async fn run() -> Result<()> {
     let good_items = pairs
         .into_iter()
         .map(|x| {
-            let src_market_volume: i32 = x
-                .source
-                .orders
-                .iter()
-                .filter(|x| !x.is_buy_order)
-                .map(|x| x.volume_remain)
-                .sum();
+            let src_mkt_orders = x.source.orders.iter().only_substantial_orders();
+            let src_mkt_volume = src_mkt_orders.iter().copied().volume();
 
-            let src_perc_sell_orders = x
-                .source
-                .orders
-                .iter()
-                .filter(|x| !x.is_buy_order)
-                .filter(|x| x.volume_remain as f64 / src_market_volume as f64 > 0.05)
-                .collect::<Vec<_>>();
-            let src_market_volume: i32 = src_perc_sell_orders
-                .iter()
-                .filter(|x| !x.is_buy_order)
-                .map(|x| x.volume_remain)
-                .sum();
+            let dst_mkt_orders = x.destination.orders.iter().only_substantial_orders();
+            let dst_mkt_volume: i32 = dst_mkt_orders.iter().copied().volume();
 
-            let dest_market_volume: i32 = x
-                .destination
-                .orders
-                .iter()
-                .filter(|x| !x.is_buy_order)
-                .map(|x| x.volume_remain)
-                .sum();
-
-            let dst_perc_sell_orders = x
-                .destination
-                .orders
-                .iter()
-                .filter(|x| !x.is_buy_order)
-                .filter(|x| x.volume_remain as f64 / dest_market_volume as f64 > 0.05)
-                .collect::<Vec<_>>();
-            let dest_market_volume: i32 = dst_perc_sell_orders
-                .iter()
-                .filter(|x| !x.is_buy_order)
-                .map(|x| x.volume_remain)
-                .sum();
-
-            let dest_sell_price = x
-                .destination
-                .orders
+            let dest_sell_price = dst_mkt_orders
                 .iter()
                 .filter(|x| !x.is_buy_order)
                 .min_by_key(|x| NotNan::new(x.price).unwrap())
@@ -259,17 +223,15 @@ async fn run() -> Result<()> {
 
             let recommend_buy_vol = (x.destination.volume * config.rcmnd_fill_days)
                 .max(1.)
-                .min(src_market_volume as f64)
+                .min(src_mkt_volume as f64)
                 .floor() as i32;
 
-            let src_sell_order_price = (!x.source.orders.iter().any(|x| !x.is_buy_order))
+            let src_sell_order_price = (!src_mkt_orders.iter().any(|x| !x.is_buy_order))
                 .then_some(x.source.highest)
                 .unwrap_or_else(|| {
                     let mut recommend_bought_volume = 0;
                     let mut max_price = 0.;
-                    for order in x
-                        .source
-                        .orders
+                    for order in src_mkt_orders
                         .iter()
                         .filter(|x| !x.is_buy_order)
                         .sorted_by_key(|x| NotNan::new(x.price).unwrap())
@@ -295,20 +257,20 @@ async fn run() -> Result<()> {
             let rough_profit = (sell_price - expenses) * recommend_buy_vol as f64;
 
             let filled_for_days = (x.destination.volume > 0.)
-                .then(|| 1. / x.destination.volume * dest_market_volume as f64);
+                .then(|| 1. / x.destination.volume * dst_mkt_volume as f64);
 
             PairCalculatedData {
                 market: x,
                 margin,
                 rough_profit,
-                market_dest_volume: dest_market_volume,
+                market_dest_volume: dst_mkt_volume,
                 recommend_buy: recommend_buy_vol,
                 expenses,
                 sell_price,
                 filled_for_days,
                 src_buy_price: src_sell_order_price,
                 dest_min_sell_price: dest_sell_price,
-                market_src_volume: src_market_volume,
+                market_src_volume: src_mkt_volume,
             }
         })
         .filter(|x| x.margin > config.margin_cutoff)
