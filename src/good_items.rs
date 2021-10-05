@@ -4,7 +4,6 @@ use term_table::{row::Row, table_cell::TableCell};
 
 use crate::{
     config::Config,
-    consts::ITEM_NAME_MAX_LENGTH,
     item_type::{ItemHistoryDay, ItemTypeAveraged, Order, SystemMarketsItemData},
     order_ext::OrderIterExt,
     requests::to_not_nan,
@@ -42,7 +41,7 @@ pub fn get_good_items_sell_sell(
             let buy_price = src_sell_order_price * (1. + config.broker_fee);
             let expenses = buy_price
                 + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
-                + src_sell_order_price * config.freight_cost_collateral_percent;
+                + buy_price * config.freight_cost_collateral_percent;
 
             let dest_sell_price = dst_avgs.average;
 
@@ -87,7 +86,10 @@ pub fn get_good_items_sell_sell(
         .collect::<Vec<_>>()
 }
 
-pub fn make_table_sell_sell<'a, 'b>(good_items: &'a [PairCalculatedDataSellSell]) -> Vec<Row<'b>> {
+pub fn make_table_sell_sell<'a, 'b>(
+    good_items: &'a [PairCalculatedDataSellSell],
+    name_length: usize,
+) -> Vec<Row<'b>> {
     let rows = std::iter::once(Row::new(vec![
         TableCell::new("id"),
         TableCell::new("item name"),
@@ -106,7 +108,7 @@ pub fn make_table_sell_sell<'a, 'b>(good_items: &'a [PairCalculatedDataSellSell]
     ]))
     .chain(good_items.iter().map(|it| {
         let short_name =
-            it.market.desc.name[..(ITEM_NAME_MAX_LENGTH.min(it.market.desc.name.len()))].to_owned();
+            it.market.desc.name[..(name_length.min(it.market.desc.name.len()))].to_owned();
         Row::new(vec![
             TableCell::new(format!("{}", it.market.desc.type_id)),
             TableCell::new(short_name),
@@ -163,68 +165,93 @@ pub fn get_good_items_sell_buy(
             let src_avgs = averages(config, &x.source.history);
             let dst_avgs = averages(config, &x.destination.history);
 
-            let (recommend_buy_vol, dest_sell_price) = {
+            let (recommend_buy_vol, dest_sell_price, expenses) = {
+                let mut source_sell_orders = x
+                    .source
+                    .orders
+                    .iter()
+                    .cloned()
+                    .filter(|x| !x.is_buy_order)
+                    .sorted_by_key(|x| NotNan::new(x.price).unwrap());
+
+                let mut curr_src_sell_order = source_sell_orders.next()?;
+
                 let mut recommend_bought_volume = 0;
                 let mut sum_sell_price = 0.;
-                for order in x
+                let mut sum_expenses = 0.;
+                'outer: for order in x
                     .destination
                     .orders
                     .iter()
                     .filter(|x| x.is_buy_order)
                     .sorted_by_key(|x| NotNan::new(-x.price).unwrap())
                 {
-                    let buy_price = src_avgs.highest * (1. + config.broker_fee);
-                    let expenses = buy_price
-                        + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
-                        + src_avgs.highest * config.freight_cost_collateral_percent;
+                    let mut buy_order_fulfilled = order.volume_remain;
+                    while buy_order_fulfilled > 0 {
+                        let bought_volume =
+                            buy_order_fulfilled.min(curr_src_sell_order.volume_remain);
+                        buy_order_fulfilled -= bought_volume;
 
-                    let profit = order.price * (1. - config.broker_fee - config.sales_tax);
+                        let expenses = (curr_src_sell_order.price * (1. + config.broker_fee)
+                            + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
+                            + curr_src_sell_order.price * config.freight_cost_collateral_percent)
+                            * bought_volume as f64;
 
-                    if expenses <= profit {
-                        break;
+                        let sell_price = bought_volume as f64
+                            * order.price
+                            * (1. - config.broker_fee - config.sales_tax);
+
+                        if expenses >= sell_price {
+                            break;
+                        }
+                        curr_src_sell_order.volume_remain -= bought_volume;
+                        sum_expenses += curr_src_sell_order.price * bought_volume as f64;
+                        sum_sell_price += order.price * bought_volume as f64;
+                        recommend_bought_volume += bought_volume;
+
+                        if curr_src_sell_order.volume_remain == 0 {
+                            curr_src_sell_order = if let Some(x) = source_sell_orders.next() {
+                                x
+                            } else {
+                                break 'outer;
+                            }
+                        }
                     }
-                    sum_sell_price += order.price;
-                    recommend_bought_volume += order.volume_remain;
                 }
+
                 (
                     recommend_bought_volume,
-                    sum_sell_price / x.destination.orders.len() as f64,
+                    sum_sell_price / recommend_bought_volume as f64,
+                    sum_expenses / recommend_bought_volume as f64,
                 )
             };
 
-            let src_sell_order_price = (!x.source.orders.iter().any(|x| !x.is_buy_order))
-                .then_some(src_avgs.highest)
-                .unwrap_or_else(|| {
-                    total_buy_from_sell_order_price(x.source.orders.as_slice(), recommend_buy_vol)
-                        / recommend_buy_vol as f64
-                });
-
-            let buy_price = src_sell_order_price * (1. + config.broker_fee);
-            let expenses = buy_price
+            let buy_with_broker_fee = expenses * (1. + config.broker_fee);
+            let fin_expenses = buy_with_broker_fee
                 + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
-                + src_sell_order_price * config.freight_cost_collateral_percent;
+                + buy_with_broker_fee * config.freight_cost_collateral_percent;
+            let fin_sell_price = dest_sell_price * (1. - config.broker_fee - config.sales_tax);
 
-            let sell_price = dest_sell_price * (1. - config.broker_fee - config.sales_tax);
+            let margin = (fin_sell_price - fin_expenses) / fin_expenses;
 
-            let margin = (sell_price - expenses) / expenses;
+            let rough_profit = (fin_sell_price - expenses) * recommend_buy_vol as f64;
 
-            let rough_profit = (sell_price - expenses) * recommend_buy_vol as f64;
-
-            PairCalculatedDataSellBuy {
+            Some(PairCalculatedDataSellBuy {
                 market: x,
                 margin,
                 rough_profit,
                 market_dest_volume: dst_mkt_volume,
                 recommend_buy: recommend_buy_vol,
-                expenses,
-                sell_price,
-                src_buy_price: src_sell_order_price,
+                expenses: fin_expenses,
+                sell_price: fin_sell_price,
+                src_buy_price: expenses,
                 dest_min_sell_price: dest_sell_price,
                 market_src_volume: src_mkt_volume,
                 src_avgs,
                 dst_avgs,
-            }
+            })
         })
+        .flatten()
         .filter(|x| x.margin > config.margin_cutoff)
         .filter(|x| {
             x.src_avgs.volume > config.min_src_volume && x.dst_avgs.volume > config.min_dst_volume
@@ -234,7 +261,10 @@ pub fn get_good_items_sell_buy(
         .collect::<Vec<_>>()
 }
 
-pub fn make_table_sell_buy<'a, 'b>(good_items: &'a [PairCalculatedDataSellBuy]) -> Vec<Row<'b>> {
+pub fn make_table_sell_buy<'a, 'b>(
+    good_items: &'a [PairCalculatedDataSellBuy],
+    name_length: usize,
+) -> Vec<Row<'b>> {
     let rows = std::iter::once(Row::new(vec![
         TableCell::new("id"),
         TableCell::new("item name"),
@@ -252,7 +282,7 @@ pub fn make_table_sell_buy<'a, 'b>(good_items: &'a [PairCalculatedDataSellBuy]) 
     ]))
     .chain(good_items.iter().map(|it| {
         let short_name =
-            it.market.desc.name[..(ITEM_NAME_MAX_LENGTH.min(it.market.desc.name.len()))].to_owned();
+            it.market.desc.name[..(name_length.min(it.market.desc.name.len()))].to_owned();
         Row::new(vec![
             TableCell::new(format!("{}", it.market.desc.type_id)),
             TableCell::new(short_name),

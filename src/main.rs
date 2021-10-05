@@ -119,7 +119,6 @@ async fn run() -> Result<()> {
                     1000,
                 )
                 .await;
-                // let all_types = vec![16278];
 
                 let dest_region =
                     find_region_id_station(esi_config, config.destination.clone(), character_id)
@@ -195,6 +194,18 @@ async fn run() -> Result<()> {
 
     let simple_list: Vec<_>;
     let rows = {
+        let cli_in = cli_args.value_of(cli::NAME_LENGTH);
+        let name_len = if let Some(v) = cli_in.map(|x| x.parse::<usize>().ok()).flatten() {
+            v
+        } else {
+            log::warn!(
+                "Value '{:?}' can't be parsed as an int. Using '{}'",
+                cli_in,
+                consts::ITEM_NAME_LEN
+            );
+            consts::ITEM_NAME_LEN.parse().unwrap()
+        };
+
         let sell_sell = cli_args.is_present(cli::SELL_SELL);
         let sell_buy = cli_args.is_present(cli::SELL_BUY);
         if sell_sell || !sell_buy {
@@ -207,7 +218,7 @@ async fn run() -> Result<()> {
                     recommend_buy: x.recommend_buy,
                 })
                 .collect();
-            make_table_sell_sell(&good_items)
+            make_table_sell_sell(&good_items, name_len)
         } else {
             log::trace!("Sell buy path.");
             let good_items = get_good_items_sell_buy(pairs, &config);
@@ -218,7 +229,7 @@ async fn run() -> Result<()> {
                     recommend_buy: x.recommend_buy,
                 })
                 .collect();
-            make_table_sell_buy(&good_items)
+            make_table_sell_buy(&good_items, name_len)
         }
     };
 
