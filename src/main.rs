@@ -98,8 +98,12 @@ async fn run() -> Result<()> {
         .parse()
         .unwrap();
 
-    let mut pairs: Vec<SystemMarketsItemData> =
-        CachedData::load_or_create_async(format!("cache/{}-path_data", config_file_name), || {
+    let force_refresh = cli_args.is_present(cli::FORCE_REFRESH);
+
+    let mut pairs: Vec<SystemMarketsItemData> = CachedData::load_or_create_async(
+        format!("cache/{}-path_data", config_file_name),
+        force_refresh,
+        || {
             let esi_config = &esi_config;
             let config = &config;
             let esi_requests = &esi_requests;
@@ -194,9 +198,10 @@ async fn run() -> Result<()> {
                     .flatten()
                     .collect()
             }
-        })
-        .await
-        .data;
+        },
+    )
+    .await
+    .data;
 
     if let Some(v) = cli_args
         .value_of(cli::DEBUG_ITEM_ID)
@@ -247,7 +252,7 @@ async fn run() -> Result<()> {
             make_table_sell_buy(&good_items, name_len)
         } else {
             log::trace!("Sell sell zkb path.");
-            let kms = CachedData::load_or_create_async("cache/zkb_losses", || {
+            let kms = CachedData::load_or_create_async("cache/zkb_losses", force_refresh, || {
                 let esi_requests = &esi_requests;
                 let client = &esi_config.client;
                 let config = &config;

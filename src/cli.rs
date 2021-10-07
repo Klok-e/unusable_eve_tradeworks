@@ -8,6 +8,7 @@ pub const SELL_SELL_ZKB: &str = "sell-sell-zkb";
 pub const SELL_BUY: &str = "sell-buy";
 pub const DISPLAY_SIMPLE_LIST: &str = "simple-list";
 pub const DEBUG_ITEM_ID: &str = "debug-item";
+pub const FORCE_REFRESH: &str = "force-refresh";
 pub const NAME_LENGTH: &str = "name-length";
 
 pub fn matches() -> ArgMatches<'static> {
@@ -55,6 +56,12 @@ pub fn matches() -> ArgMatches<'static> {
             Arg::with_name(DEBUG_ITEM_ID)
                 .long("debug-item")
                 .takes_value(true),
+        )
+        .arg(
+            Arg::with_name(FORCE_REFRESH)
+                .short("r")
+                .long("force-refresh")
+                .takes_value(false),
         )
         .get_matches();
     matches

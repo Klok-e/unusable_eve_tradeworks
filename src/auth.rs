@@ -13,7 +13,7 @@ pub struct Auth {
 impl Auth {
     pub async fn load_or_request_token(config: &AuthConfig) -> Self {
         let path = "cache/auth";
-        let mut data = CachedData::load_or_create_json_async(path, || Self::request_new(config))
+        let mut data = CachedData::load_or_create_json_async(path, false,|| Self::request_new(config))
             .await
             .data;
 
