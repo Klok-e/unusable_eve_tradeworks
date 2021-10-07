@@ -283,8 +283,6 @@ async fn run() -> Result<()> {
     println!("Maybe good items:\n{}", table.render());
 
     if cli_args.is_present(cli::DISPLAY_SIMPLE_LIST) {
-        println!();
-
         let format = simple_list
             .iter()
             .map(|it| format!("{} {}", it.name, it.recommend_buy))
