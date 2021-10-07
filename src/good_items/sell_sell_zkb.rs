@@ -49,18 +49,7 @@ pub fn get_good_items_sell_sell_zkb(
                 + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
                 + buy_price * config.freight_cost_collateral_percent;
 
-            let dest_sell_price = if x
-                .destination
-                .orders
-                .iter()
-                .filter(|x| !x.is_buy_order)
-                .count()
-                == 0
-            {
-                src_sell_order_price * 1.2
-            } else {
-                dst_avgs.average
-            };
+            let dest_sell_price = dst_avgs.average;
 
             let sell_price = dest_sell_price * (1. - config.broker_fee - config.sales_tax);
 

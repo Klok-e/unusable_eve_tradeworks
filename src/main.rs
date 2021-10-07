@@ -250,10 +250,13 @@ async fn run() -> Result<()> {
             let kms = CachedData::load_or_create_async("cache/zkb_losses", || {
                 let esi_requests = &esi_requests;
                 let client = &esi_config.client;
+                let config = &config;
                 async move {
                     let zkb = ZkbRequestsService::new(client);
                     let km_service = KillmailService::new(&zkb, esi_requests);
-                    km_service.get_kill_item_frequencies(10).await
+                    km_service
+                        .get_kill_item_frequencies(config.zkb_download_pages)
+                        .await
                 }
             })
             .await

@@ -32,6 +32,7 @@ pub struct Config {
     pub min_src_volume: f64,
     pub min_dst_volume: f64,
     pub min_dst_zkb_lost_volume: f64,
+    pub zkb_download_pages: u32,
     pub source: Station,
     pub destination: Station,
 }
