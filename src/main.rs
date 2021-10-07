@@ -14,6 +14,7 @@ pub mod paged_all;
 pub mod requests;
 pub mod retry;
 pub mod stat;
+pub mod zkb;
 use std::collections::HashMap;
 
 use error::Result;
@@ -39,7 +40,7 @@ use crate::{
     },
     item_type::{SystemMarketsItem, SystemMarketsItemData},
     paged_all::get_all_pages,
-    requests::{find_region_id_station, get_item_stuff, history},
+    requests::EsiRequestsService,
 };
 use serde::{Deserialize, Serialize};
 
@@ -73,6 +74,8 @@ async fn run() -> Result<()> {
     let mut esi_config = Configuration::new();
     esi_config.oauth_access_token = Some(auth.access_token.clone());
 
+    let esi_requests = EsiRequestsService::new(&esi_config);
+
     // TODO: dangerous plese don't use in production
     let character_info =
         jsonwebtoken::dangerous_insecure_decode::<CharacterInfo>(auth.access_token.as_str())
@@ -91,10 +94,10 @@ async fn run() -> Result<()> {
             let esi_config = &esi_config;
             let config = &config;
             async move {
-                let source_region =
-                    find_region_id_station(esi_config, config.source.clone(), character_id)
-                        .await
-                        .unwrap();
+                let source_region = esi_requests
+                    .find_region_id_station(config.source.clone(), character_id)
+                    .await
+                    .unwrap();
 
                 // all item type ids
                 let all_types = get_all_pages(
@@ -120,13 +123,13 @@ async fn run() -> Result<()> {
                 )
                 .await;
 
-                let dest_region =
-                    find_region_id_station(esi_config, config.destination.clone(), character_id)
-                        .await
-                        .unwrap();
+                let dest_region = esi_requests
+                    .find_region_id_station(config.destination.clone(), character_id)
+                    .await
+                    .unwrap();
 
-                let source_history = history(esi_config, &all_types, source_region);
-                let dest_history = history(esi_config, &all_types, dest_region);
+                let source_history = esi_requests.history(&all_types, source_region);
+                let dest_history = esi_requests.history(&all_types, dest_region);
 
                 let (source_history, dest_history) = join!(source_history, dest_history);
 
@@ -162,9 +165,10 @@ async fn run() -> Result<()> {
                 stream::iter(pairs)
                     .map(|it| {
                         let it = it;
+                        let esi_requests = &esi_requests;
                         async move {
                             Some(SystemMarketsItemData {
-                                desc: match get_item_stuff(esi_config, it.id).await {
+                                desc: match esi_requests.get_item_stuff(it.id).await {
                                     Some(x) => x.into(),
                                     None => return None,
                                 },
