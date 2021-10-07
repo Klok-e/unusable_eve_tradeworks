@@ -11,26 +11,30 @@ impl<T> CachedData<T>
 where
     T: Serialize + DeserializeOwned,
 {
-    pub async fn load_or_create_async<F, FO>(path: impl AsRef<Path>,refresh:bool, gen: F) -> Self
+    pub async fn load_or_create_async<F, FO>(path: impl AsRef<Path>, refresh: bool, gen: F) -> Self
     where
         F: FnOnce() -> FO,
         FO: Future<Output = T>,
     {
-        Self::load_data_or_create_async(path, DataFormat::Bin,refresh, gen).await
+        Self::load_data_or_create_async(path, DataFormat::Bin, refresh, gen).await
     }
 
-    pub async fn load_or_create_json_async<F, FO>(path: impl AsRef<Path>,refresh:bool, gen: F) -> Self
+    pub async fn load_or_create_json_async<F, FO>(
+        path: impl AsRef<Path>,
+        refresh: bool,
+        gen: F,
+    ) -> Self
     where
         F: FnOnce() -> FO,
         FO: Future<Output = T>,
     {
-        Self::load_data_or_create_async(path, DataFormat::Json, refresh,gen).await
+        Self::load_data_or_create_async(path, DataFormat::Json, refresh, gen).await
     }
 
     async fn load_data_or_create_async<F, FO>(
         path: impl AsRef<Path>,
         format: DataFormat,
-        refresh:bool,
+        refresh: bool,
         gen: F,
     ) -> Self
     where
