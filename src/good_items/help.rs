@@ -1,7 +1,12 @@
 use itertools::Itertools;
 use ordered_float::NotNan;
 
-use crate::{config::Config, item_type::{ItemHistoryDay, ItemTypeAveraged, Order}, requests::to_not_nan, stat::AverageStat};
+use crate::{
+    config::Config,
+    item_type::{ItemHistoryDay, ItemTypeAveraged, Order},
+    requests::to_not_nan,
+    stat::AverageStat,
+};
 
 pub fn total_buy_from_sell_order_price(x: &[Order], recommend_buy_vol: i32) -> f64 {
     let mut recommend_bought_volume = 0;

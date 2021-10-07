@@ -1,15 +1,11 @@
-use std::collections::HashMap;
-
 use itertools::Itertools;
 use ordered_float::NotNan;
 use term_table::{row::Row, table_cell::TableCell};
 
 use crate::{
     config::Config,
-    item_type::{ItemHistoryDay, ItemTypeAveraged, Order, SystemMarketsItemData},
+    item_type::{ItemTypeAveraged, SystemMarketsItemData},
     order_ext::OrderIterExt,
-    requests::to_not_nan,
-    stat::AverageStat,
     zkb::killmails::ItemFrequencies,
 };
 

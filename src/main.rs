@@ -252,7 +252,7 @@ async fn run() -> Result<()> {
                 let client = &esi_config.client;
                 async move {
                     let zkb = ZkbRequestsService::new(client);
-                    let km_service = KillmailService::new(&zkb, &esi_requests);
+                    let km_service = KillmailService::new(&zkb, esi_requests);
                     km_service.get_kill_item_frequencies(10).await
                 }
             })

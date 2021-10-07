@@ -23,11 +23,11 @@ impl<'a> ZkbRequestsService<'a> {
 
             // zkillboard allows only one request a per second
             tokio::time::sleep(std::time::Duration::from_secs_f32(1.01)).await;
-            
+
             let mut kills_page = serde_json::from_str(str.as_str()).unwrap(); //response.json::<KillList>().await.unwrap();
             kills.append(&mut kills_page);
         }
-        log::info!("{} page of killmails downloaded",pages);
+        log::info!("{} page of killmails downloaded", pages);
         Ok(kills)
     }
 }

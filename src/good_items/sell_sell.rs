@@ -4,10 +4,8 @@ use term_table::{row::Row, table_cell::TableCell};
 
 use crate::{
     config::Config,
-    item_type::{ItemHistoryDay, ItemTypeAveraged, Order, SystemMarketsItemData},
+    item_type::{ItemTypeAveraged, SystemMarketsItemData},
     order_ext::OrderIterExt,
-    requests::to_not_nan,
-    stat::AverageStat,
 };
 
 use super::help::{averages, total_buy_from_sell_order_price};

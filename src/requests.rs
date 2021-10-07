@@ -8,7 +8,7 @@ use crate::{
     paged_all::{get_all_pages, ToResult},
     retry, StationId,
 };
-use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, Utc};
+use chrono::{Duration, NaiveDate, NaiveDateTime, Utc};
 
 use crate::item_type::Order;
 use crate::stat::MedianStat;
@@ -33,7 +33,7 @@ use rust_eveonline_esi::{
             GetUniverseStructuresStructureIdParams, GetUniverseSystemsSystemIdParams,
             GetUniverseSystemsSystemIdSuccess, GetUniverseTypesTypeIdParams,
         },
-        Error, ResponseContent,
+        Error,
     },
     models::{
         GetMarketsRegionIdHistory200Ok, GetMarketsRegionIdOrders200Ok, GetUniverseTypesTypeIdOk,
@@ -440,7 +440,7 @@ impl<'a> EsiRequestsService<'a> {
                     self.config,
                     GetKillmailsKillmailIdKillmailHashParams {
                         killmail_hash: hash.clone(),
-                        killmail_id: killmail_id,
+                        killmail_id,
                         datasource: None,
                         if_none_match: None,
                     },
@@ -457,7 +457,7 @@ impl<'a> EsiRequestsService<'a> {
         let km_items = km
             .victim
             .items
-            .unwrap_or(Vec::new())
+            .unwrap_or_default()
             .into_iter()
             .map(|item| {
                 let qty = item.quantity_destroyed.unwrap_or(0) + item.quantity_dropped.unwrap_or(0);
