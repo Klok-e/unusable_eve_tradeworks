@@ -35,12 +35,14 @@ use crate::{
     config::{AuthConfig, Config},
     consts::BUFFER_UNORDERED,
     good_items::{
-        get_good_items_sell_buy, get_good_items_sell_sell, make_table_sell_buy,
-        make_table_sell_sell,
+        sell_buy::{get_good_items_sell_buy, make_table_sell_buy},
+        sell_sell::{get_good_items_sell_sell, make_table_sell_sell},
+        sell_sell_zkb::{get_good_items_sell_sell_zkb, make_table_sell_sell_zkb},
     },
     item_type::{SystemMarketsItem, SystemMarketsItemData},
     paged_all::get_all_pages,
     requests::EsiRequestsService,
+    zkb::{killmails::KillmailService, zkb_requests::ZkbRequestsService},
 };
 use serde::{Deserialize, Serialize};
 
@@ -71,7 +73,14 @@ async fn run() -> Result<()> {
     let program_config = AuthConfig::from_file("auth.json");
     let auth = Auth::load_or_request_token(&program_config).await;
 
-    let mut esi_config = Configuration::new();
+    let mut esi_config = Configuration {
+        client: reqwest::ClientBuilder::new()
+            .gzip(true)
+            .user_agent("Your Ozuwara (evemail)")
+            .build()
+            .unwrap(),
+        ..Default::default()
+    };
     esi_config.oauth_access_token = Some(auth.access_token.clone());
 
     let esi_requests = EsiRequestsService::new(&esi_config);
@@ -93,6 +102,7 @@ async fn run() -> Result<()> {
         CachedData::load_or_create_async(format!("cache/{}-path_data", config_file_name), || {
             let esi_config = &esi_config;
             let config = &config;
+            let esi_requests = &esi_requests;
             async move {
                 let source_region = esi_requests
                     .find_region_id_station(config.source.clone(), character_id)
@@ -211,8 +221,9 @@ async fn run() -> Result<()> {
         };
 
         let sell_sell = cli_args.is_present(cli::SELL_SELL);
+        let sell_sell_zkb = cli_args.is_present(cli::SELL_SELL_ZKB);
         let sell_buy = cli_args.is_present(cli::SELL_BUY);
-        if sell_sell || !sell_buy {
+        if sell_sell || (!sell_buy && !sell_sell_zkb) {
             log::trace!("Sell sell path.");
             let good_items = get_good_items_sell_sell(pairs, &config);
             simple_list = good_items
@@ -223,7 +234,7 @@ async fn run() -> Result<()> {
                 })
                 .collect();
             make_table_sell_sell(&good_items, name_len)
-        } else {
+        } else if sell_buy {
             log::trace!("Sell buy path.");
             let good_items = get_good_items_sell_buy(pairs, &config);
             simple_list = good_items
@@ -234,6 +245,29 @@ async fn run() -> Result<()> {
                 })
                 .collect();
             make_table_sell_buy(&good_items, name_len)
+        } else {
+            log::trace!("Sell sell zkb path.");
+            let kms = CachedData::load_or_create_async("cache/zkb_losses", || {
+                let esi_requests = &esi_requests;
+                let client = &esi_config.client;
+                async move {
+                    let zkb = ZkbRequestsService::new(client);
+                    let km_service = KillmailService::new(&zkb, &esi_requests);
+                    km_service.get_kill_item_frequencies(10).await
+                }
+            })
+            .await
+            .data;
+
+            let good_items = get_good_items_sell_sell_zkb(pairs, kms, &config);
+            simple_list = good_items
+                .iter()
+                .map(|x| SimpleDisplay {
+                    name: x.market.desc.name.clone(),
+                    recommend_buy: x.recommend_buy,
+                })
+                .collect();
+            make_table_sell_sell_zkb(&good_items, name_len)
         }
     };
 

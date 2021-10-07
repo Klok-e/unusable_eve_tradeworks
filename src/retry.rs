@@ -3,6 +3,7 @@ use std::{fmt::Display, time::Duration};
 use crate::consts::RETRIES;
 use futures::Future;
 use rust_eveonline_esi::apis::{
+    killmails_api::GetKillmailsKillmailIdKillmailHashError,
     market_api::{GetMarketsRegionIdHistoryError, GetMarketsRegionIdOrdersError},
     universe_api::GetUniverseTypesTypeIdError,
     ResponseContent,
@@ -20,7 +21,7 @@ where
     async move {
         let mut retries = 0;
         loop {
-            break match func().await {
+            let res = match func().await {
                 Ok(ok) => Some(ok),
                 Err(e) => {
                     let err = e.as_ccp_error();
@@ -32,6 +33,8 @@ where
                     }
                     retries += 1;
                     if retries <= RETRIES {
+                        // don't make too many retries sequentially
+                        tokio::time::sleep(Duration::from_secs_f32(1.)).await;
                         continue;
                     }
                     log::warn!(
@@ -43,6 +46,7 @@ where
                     None
                 }
             };
+            break res;
         }
     }
 }
@@ -88,6 +92,20 @@ impl IntoCcpError for rust_eveonline_esi::apis::Error<GetMarketsRegionIdHistoryE
     }
 }
 impl IntoCcpError for rust_eveonline_esi::apis::Error<GetMarketsRegionIdOrdersError> {
+    fn as_ccp_error(&self) -> CcpError {
+        match self {
+            rust_eveonline_esi::apis::Error::ResponseError(ResponseContent { status, .. }) => {
+                if status.as_u16() == 420 {
+                    CcpError::ErrorLimited
+                } else {
+                    CcpError::Other
+                }
+            }
+            _ => CcpError::Other,
+        }
+    }
+}
+impl IntoCcpError for rust_eveonline_esi::apis::Error<GetKillmailsKillmailIdKillmailHashError> {
     fn as_ccp_error(&self) -> CcpError {
         match self {
             rust_eveonline_esi::apis::Error::ResponseError(ResponseContent { status, .. }) => {

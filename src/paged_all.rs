@@ -2,6 +2,7 @@ use std::{fmt::Debug, future::Future};
 
 use rust_eveonline_esi::{
     apis::{
+        killmails_api::GetKillmailsKillmailIdKillmailHashSuccess,
         market_api::{
             GetMarketsRegionIdHistorySuccess, GetMarketsRegionIdOrdersSuccess,
             GetMarketsRegionIdTypesSuccess, GetMarketsStructuresStructureIdSuccess,
@@ -13,10 +14,10 @@ use rust_eveonline_esi::{
         },
     },
     models::{
-        GetCharactersCharacterIdSearchOk, GetMarketsRegionIdHistory200Ok,
-        GetMarketsRegionIdOrders200Ok, GetMarketsStructuresStructureId200Ok, GetSearchOk,
-        GetUniverseStationsStationIdOk, GetUniverseStructuresStructureIdOk,
-        GetUniverseTypesTypeIdOk,
+        GetCharactersCharacterIdSearchOk, GetKillmailsKillmailIdKillmailHashOk,
+        GetMarketsRegionIdHistory200Ok, GetMarketsRegionIdOrders200Ok,
+        GetMarketsStructuresStructureId200Ok, GetSearchOk, GetUniverseStationsStationIdOk,
+        GetUniverseStructuresStructureIdOk, GetUniverseTypesTypeIdOk,
     },
 };
 
@@ -153,6 +154,20 @@ impl ToResult<Vec<GetMarketsRegionIdOrders200Ok>, Option<GetMarketsRegionIdOrder
             Some(GetMarketsRegionIdOrdersSuccess::Status200(ok)) => Ok(ok),
             Some(_) => Err(self),
             None => Ok(Vec::new()),
+        }
+    }
+}
+impl ToResult<GetKillmailsKillmailIdKillmailHashOk, GetKillmailsKillmailIdKillmailHashSuccess>
+    for GetKillmailsKillmailIdKillmailHashSuccess
+{
+    fn into_result(
+        self,
+    ) -> Result<GetKillmailsKillmailIdKillmailHashOk, GetKillmailsKillmailIdKillmailHashSuccess>
+    {
+        if let GetKillmailsKillmailIdKillmailHashSuccess::Status200(ok) = self {
+            Ok(ok)
+        } else {
+            Err(self)
         }
     }
 }

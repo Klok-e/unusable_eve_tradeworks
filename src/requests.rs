@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
+use crate::{consts::DATE_FMT, Station, StationIdData};
 use crate::{
-    consts::BUFFER_UNORDERED,
+    consts::{self, BUFFER_UNORDERED},
     error::Result,
     item_type::ItemType,
     paged_all::{get_all_pages, ToResult},
     retry, StationId,
 };
-use crate::{consts::DATE_FMT, Station, StationIdData};
-use chrono::{Duration, NaiveDate, Utc};
+use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, Utc};
 
 use crate::item_type::Order;
 use crate::stat::MedianStat;
@@ -18,6 +18,9 @@ use ordered_float::NotNan;
 use rust_eveonline_esi::{
     apis::{
         configuration::Configuration,
+        killmails_api::{
+            self, GetKillmailsKillmailIdKillmailHashError, GetKillmailsKillmailIdKillmailHashParams,
+        },
         market_api::{
             self, GetMarketsRegionIdHistoryError, GetMarketsRegionIdHistoryParams,
             GetMarketsRegionIdOrdersError, GetMarketsRegionIdOrdersParams,
@@ -30,7 +33,7 @@ use rust_eveonline_esi::{
             GetUniverseStructuresStructureIdParams, GetUniverseSystemsSystemIdParams,
             GetUniverseSystemsSystemIdSuccess, GetUniverseTypesTypeIdParams,
         },
-        Error,
+        Error, ResponseContent,
     },
     models::{
         GetMarketsRegionIdHistory200Ok, GetMarketsRegionIdOrders200Ok, GetUniverseTypesTypeIdOk,
@@ -360,19 +363,30 @@ impl<'a> EsiRequestsService<'a> {
     ) -> Option<ItemType> {
         let res: Option<ItemType> =
             retry::retry::<_, _, _, Error<GetMarketsRegionIdHistoryError>>(|| async {
-                let hist_for_type = market_api::get_markets_region_id_history(
-                    self.config,
-                    GetMarketsRegionIdHistoryParams {
-                        region_id: station.region_id,
-                        type_id: item_type,
-                        datasource: None,
-                        if_none_match: None,
-                    },
-                )
-                .await?
-                .entity
-                .unwrap();
-                let hist_for_type = hist_for_type.into_result().unwrap();
+                let hist_for_type = (|| async {
+                    Ok(market_api::get_markets_region_id_history(
+                        self.config,
+                        GetMarketsRegionIdHistoryParams {
+                            region_id: station.region_id,
+                            type_id: item_type,
+                            datasource: None,
+                            if_none_match: None,
+                        },
+                    )
+                    .await?
+                    .entity
+                    .unwrap()
+                    .into_result()
+                    .unwrap())
+                })()
+                .await;
+
+                // turn all 404 errors into empty vecs
+                let hist_for_type = match hist_for_type {
+                    Err(Error::ResponseError(e)) if e.status.as_u16() == 404 => Ok(Vec::new()),
+                    e => e,
+                }?;
+
                 let mut dummy_empty_vec = Vec::new();
                 Ok(ItemType {
                     id: item_type,
@@ -414,6 +428,60 @@ impl<'a> EsiRequestsService<'a> {
             .flatten()
             .collect::<Vec<_>>()
     }
+
+    pub async fn get_killmail_items_frequency(
+        &self,
+        killmail_id: i32,
+        hash: String,
+    ) -> Option<Killmail> {
+        let km =
+            retry::retry::<_, _, _, Error<GetKillmailsKillmailIdKillmailHashError>>(|| async {
+                let res = killmails_api::get_killmails_killmail_id_killmail_hash(
+                    self.config,
+                    GetKillmailsKillmailIdKillmailHashParams {
+                        killmail_hash: hash.clone(),
+                        killmail_id: killmail_id,
+                        datasource: None,
+                        if_none_match: None,
+                    },
+                )
+                .await?
+                .entity
+                .unwrap()
+                .into_result()
+                .unwrap();
+                Ok(res)
+            })
+            .await?;
+
+        let km_items = km
+            .victim
+            .items
+            .unwrap_or(Vec::new())
+            .into_iter()
+            .map(|item| {
+                let qty = item.quantity_destroyed.unwrap_or(0) + item.quantity_dropped.unwrap_or(0);
+                if qty < 1 {
+                    log::warn!("Quantity is somehow less than one");
+                }
+                (item.item_type_id, qty)
+            })
+            .chain(std::iter::once((km.victim.ship_type_id, 1)));
+        Some(Killmail {
+            items: km_items
+                .group_by(|x| x.0)
+                .into_iter()
+                .map(|(k, g)| (k, g.map(|x| x.1).sum()))
+                .collect(),
+            time: NaiveDateTime::parse_from_str(km.killmail_time.as_str(), consts::DATE_TIME_FMT)
+                .unwrap(),
+        })
+    }
+}
+
+pub struct Killmail {
+    pub items: HashMap<i32, i64>,
+    pub time: NaiveDateTime,
 }
 
 pub fn to_not_nan(x: f64) -> NotNan<f64> {
