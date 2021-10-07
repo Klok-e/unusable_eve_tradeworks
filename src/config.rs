@@ -31,6 +31,7 @@ pub struct Config {
     pub items_take: usize,
     pub min_src_volume: f64,
     pub min_dst_volume: f64,
+    pub min_dst_zkb_lost_volume: f64,
     pub source: Station,
     pub destination: Station,
 }

@@ -10,6 +10,7 @@
   "items_take": 20,
   "min_src_volume": 50,
   "min_dst_volume": 0.1,
+  "min_dst_zkb_lost_volume": 0.5,
   "source": {
     "is_citadel": false,
     "name": "Jita IV - Moon 4 - Caldari Navy Assembly Plant"
