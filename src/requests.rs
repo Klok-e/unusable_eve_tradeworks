@@ -36,6 +36,7 @@ use rust_eveonline_esi::{
         Error,
     },
     models::{
+        GetKillmailsKillmailIdKillmailHashItem, GetKillmailsKillmailIdKillmailHashItemsItem,
         GetMarketsRegionIdHistory200Ok, GetMarketsRegionIdOrders200Ok, GetUniverseTypesTypeIdOk,
     },
 };
@@ -459,6 +460,14 @@ impl<'a> EsiRequestsService<'a> {
             .items
             .unwrap_or_default()
             .into_iter()
+            .map(|x| {
+                std::iter::once(KillmailItem::from(x.clone())).chain(
+                    x.items
+                        .map(|x| x.into_iter().map(KillmailItem::from))
+                        .unwrap_or(Vec::new().into_iter().map(KillmailItem::from)),
+                )
+            })
+            .flatten()
             .map(|item| {
                 let qty = item.quantity_destroyed.unwrap_or(0) + item.quantity_dropped.unwrap_or(0);
                 if qty < 1 {
@@ -486,4 +495,42 @@ pub struct Killmail {
 
 pub fn to_not_nan(x: f64) -> NotNan<f64> {
     NotNan::new(x).unwrap()
+}
+
+#[derive(Debug)]
+pub struct KillmailItem {
+    /// Flag for the location of the item
+    pub flag: i32,
+    /// item_type_id integer
+    pub item_type_id: i32,
+    /// How many of the item were destroyed if any
+    pub quantity_destroyed: Option<i64>,
+    /// How many of the item were dropped if any
+    pub quantity_dropped: Option<i64>,
+    /// singleton integer
+    pub singleton: i32,
+}
+
+impl From<GetKillmailsKillmailIdKillmailHashItem> for KillmailItem {
+    fn from(x: GetKillmailsKillmailIdKillmailHashItem) -> Self {
+        Self {
+            flag: x.flag,
+            item_type_id: x.item_type_id,
+            quantity_destroyed: x.quantity_destroyed,
+            quantity_dropped: x.quantity_dropped,
+            singleton: x.singleton,
+        }
+    }
+}
+
+impl From<GetKillmailsKillmailIdKillmailHashItemsItem> for KillmailItem {
+    fn from(x: GetKillmailsKillmailIdKillmailHashItemsItem) -> Self {
+        Self {
+            flag: x.flag,
+            item_type_id: x.item_type_id,
+            quantity_destroyed: x.quantity_destroyed,
+            quantity_dropped: x.quantity_dropped,
+            singleton: x.singleton,
+        }
+    }
 }
