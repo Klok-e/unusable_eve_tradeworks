@@ -32,7 +32,7 @@ pub fn get_good_items_sell_sell(
                 .floor() as i32;
 
             let src_sell_order_price = (!x.source.orders.iter().any(|x| !x.is_buy_order))
-                .then_some(src_avgs.highest.unwrap())
+                .then_some(src_avgs.highest?)
                 .unwrap_or_else(|| {
                     total_buy_from_sell_order_price(x.source.orders.as_slice(), recommend_buy_vol)
                         / recommend_buy_vol as f64
@@ -56,7 +56,7 @@ pub fn get_good_items_sell_sell(
             let filled_for_days =
                 (dst_avgs.volume > 0.).then(|| 1. / dst_avgs.volume * dst_mkt_volume as f64);
 
-            PairCalculatedDataSellSell {
+            Some(PairCalculatedDataSellSell {
                 market: x,
                 margin,
                 rough_profit,
@@ -70,8 +70,9 @@ pub fn get_good_items_sell_sell(
                 market_src_volume: src_mkt_volume,
                 src_avgs,
                 dst_avgs,
-            }
+            })
         })
+        .flatten()
         .filter(|x| x.margin > config.margin_cutoff)
         .filter(|x| {
             x.src_avgs.volume > config.min_src_volume && x.dst_avgs.volume > config.min_dst_volume

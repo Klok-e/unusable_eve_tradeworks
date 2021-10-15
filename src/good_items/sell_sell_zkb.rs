@@ -38,7 +38,7 @@ pub fn get_good_items_sell_sell_zkb(
                 .floor() as i32;
 
             let src_sell_order_price = (!x.source.orders.iter().any(|x| !x.is_buy_order))
-                .then_some(src_avgs.highest.unwrap())
+                .then_some(src_avgs.highest?)
                 .unwrap_or_else(|| {
                     total_buy_from_sell_order_price(x.source.orders.as_slice(), recommend_buy_vol)
                         / recommend_buy_vol as f64
@@ -62,7 +62,7 @@ pub fn get_good_items_sell_sell_zkb(
             let filled_for_days =
                 (lost_per_day > 0.).then(|| 1. / lost_per_day * dst_mkt_volume as f64);
 
-            PairCalculatedDataSellSellZkb {
+            Some(PairCalculatedDataSellSellZkb {
                 market: x,
                 margin,
                 rough_profit,
@@ -77,8 +77,9 @@ pub fn get_good_items_sell_sell_zkb(
                 src_avgs,
                 dst_avgs,
                 lost_per_day,
-            }
+            })
         })
+        .flatten()
         .filter(|x| x.margin > config.margin_cutoff)
         .filter(|x| {
             x.src_avgs.volume > config.min_src_volume
