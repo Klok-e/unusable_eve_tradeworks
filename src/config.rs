@@ -2,7 +2,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::Station;
+use crate::{zkb::zkb_requests::ZkillEntity, Station};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AuthConfig {
@@ -35,6 +35,7 @@ pub struct Config {
     pub zkb_download_pages: u32,
     pub source: Station,
     pub destination: Station,
+    pub zkill_entity: ZkillEntity,
 }
 
 impl Config {

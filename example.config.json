@@ -1,17 +1,17 @@
 {
-  "days_average": 7,
+  "days_average": 10,
   "max_filled_for_days_cutoff": 2,
-  "rcmnd_fill_days": 1,
-  "margin_cutoff": 0.15,
-  "sales_tax": 0.05,
-  "broker_fee": 0.02,
+  "rcmnd_fill_days": 3,
+  "margin_cutoff": 0.05,
+  "sales_tax": 0.025,
+  "broker_fee": 0.025,
   "freight_cost_iskm3": 1500,
   "freight_cost_collateral_percent": 0.01,
-  "items_take": 20,
-  "min_src_volume": 50,
+  "items_take": 10,
+  "min_src_volume": 2,
   "min_dst_volume": 0.1,
-  "min_dst_zkb_lost_volume": 0.5,
-  "zkb_download_pages": 5,
+  "min_dst_zkb_lost_volume": 1,
+  "zkb_download_pages": 20,
   "source": {
     "is_citadel": false,
     "name": "Jita IV - Moon 4 - Caldari Navy Assembly Plant"
@@ -19,5 +19,9 @@
   "destination": {
     "is_citadel": true,
     "name": "T0DT-T - Couch of Legends"
+  },
+  "zkill_entity": {
+    "id": 498125261,
+    "tp": "Alliance"
   }
 }

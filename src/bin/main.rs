@@ -1,23 +1,4 @@
-#![feature(bool_to_option)]
-
-pub mod auth;
-pub mod cached_data;
-pub mod cli;
-pub mod config;
-pub mod consts;
-pub mod error;
-pub mod good_items;
-pub mod item_type;
-pub mod logger;
-pub mod order_ext;
-pub mod paged_all;
-pub mod requests;
-pub mod retry;
-pub mod stat;
-pub mod zkb;
 use std::collections::HashMap;
-
-use error::Result;
 
 use futures::{stream, StreamExt};
 
@@ -29,22 +10,25 @@ use rust_eveonline_esi::apis::{
 use term_table::TableBuilder;
 use tokio::join;
 
-use crate::{
+use serde::{Deserialize, Serialize};
+use unusable_eve_tradeworks_lib::{
     auth::Auth,
     cached_data::CachedData,
+    cli,
     config::{AuthConfig, Config},
-    consts::BUFFER_UNORDERED,
+    consts::{self, BUFFER_UNORDERED},
+    error::Result,
     good_items::{
         sell_buy::{get_good_items_sell_buy, make_table_sell_buy},
         sell_sell::{get_good_items_sell_sell, make_table_sell_sell},
         sell_sell_zkb::{get_good_items_sell_sell_zkb, make_table_sell_sell_zkb},
     },
     item_type::{SystemMarketsItem, SystemMarketsItemData},
+    logger,
     paged_all::get_all_pages,
     requests::EsiRequestsService,
     zkb::{killmails::KillmailService, zkb_requests::ZkbRequestsService},
 };
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CharacterInfo {
@@ -260,7 +244,7 @@ async fn run() -> Result<()> {
                     let zkb = ZkbRequestsService::new(client);
                     let km_service = KillmailService::new(&zkb, esi_requests);
                     km_service
-                        .get_kill_item_frequencies(config.zkb_download_pages)
+                        .get_kill_item_frequencies(&config.zkill_entity, config.zkb_download_pages)
                         .await
                 }
             })
@@ -292,25 +276,7 @@ async fn run() -> Result<()> {
     Ok(())
 }
 
-struct SimpleDisplay {
+pub struct SimpleDisplay {
     pub name: String,
     pub recommend_buy: i32,
-}
-
-#[derive(Clone, Copy)]
-pub struct StationIdData {
-    pub station_id: StationId,
-    pub system_id: i32,
-    pub region_id: i32,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Station {
-    pub is_citadel: bool,
-    pub name: String,
-}
-#[derive(Clone, Copy)]
-pub struct StationId {
-    pub is_citadel: bool,
-    pub id: i64,
 }

@@ -27,3 +27,11 @@ clap = "2.33"
 [dependencies.reqwest]
 version = "0.11.4"
 features = ["json", "multipart", "default-tls", "gzip"]
+
+[lib]
+name = "unusable_eve_tradeworks_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "unusable_eve_tradeworks"
+path = "src/bin/main.rs"

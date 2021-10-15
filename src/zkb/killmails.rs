@@ -8,7 +8,7 @@ use crate::{
     requests::{EsiRequestsService, Killmail},
 };
 
-use super::zkb_requests::ZkbRequestsService;
+use super::zkb_requests::{ZkbRequestsService, ZkillEntity};
 
 pub struct KillmailService<'a> {
     zkb: &'a ZkbRequestsService<'a>,
@@ -20,8 +20,12 @@ impl<'a> KillmailService<'a> {
         Self { zkb, esi }
     }
 
-    pub async fn get_kill_item_frequencies(&self, pages: u32) -> ItemFrequencies {
-        let kms = self.zkb.get_killmails(pages).await.unwrap();
+    pub async fn get_kill_item_frequencies(
+        &self,
+        entity: &ZkillEntity,
+        pages: u32,
+    ) -> ItemFrequencies {
+        let kms = self.zkb.get_killmails(entity, pages).await.unwrap();
         let frequencies = kms.into_iter().map(|km| {
             self.esi
                 .get_killmail_items_frequency(km.killmail_id, km.zkb.hash)
