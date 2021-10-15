@@ -2,7 +2,7 @@
 name = "unusable_eve_tradeworks"
 version = "0.1.0"
 edition = "2018"
-
+default-run = "unusable_eve_tradeworks"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -35,3 +35,7 @@ path = "src/lib.rs"
 [[bin]]
 name = "unusable_eve_tradeworks"
 path = "src/bin/main.rs"
+
+[[bin]]
+name = "dabble"
+path = "src/bin/dabble.rs"

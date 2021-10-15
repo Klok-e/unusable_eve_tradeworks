@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::retry::{retry_simple, Retry};
+
 pub struct ZkbRequestsService<'a> {
     client: &'a reqwest::Client,
 }
@@ -41,27 +43,44 @@ impl<'a> ZkbRequestsService<'a> {
         let mut kills = KillList::new();
         log::info!("Getting killmails...");
         for pg in 1..=pages {
-            let url = format!(
-                "https://zkillboard.com/api/losses/{}/{}/page/{}/",
-                entity_type.zkill_filter_string(),
-                entity_id,
-                pg
-            );
-            let response = self.client.get(url.clone()).send().await?;
+            let mut kills_page = retry_simple(|| async {
+                let url = format!(
+                    "https://zkillboard.com/api/losses/{}/{}/page/{}/",
+                    entity_type.zkill_filter_string(),
+                    entity_id,
+                    pg
+                );
+                let response = self.client.get(url.clone()).send().await?;
+                if response.status() == 429 {
+                    log::warn!("Zkill returned status 429. Retrying in 1 second...");
+                    tokio::time::sleep(std::time::Duration::from_secs_f32(1.)).await;
+                    return Ok(Retry::Retry);
+                }
+                
+                let full = response.bytes().await?;
+                let ser_res = serde_json::from_slice(&full);
 
-            // TODO: investigate why `response.json::<KillList>()` doesn't work
-            let str = response.json::<KillList>().await;
+                let kills_page = ser_res
+                    .map_err(|e| {
+                        let save_path = "cache/tmp-tst";
+                        log::error!(
+                            "Errorneous url: {}. Zkill server response saved to: {}",
+                            url,
+                            save_path
+                        );
+                        std::fs::write(save_path, &full).unwrap();
+                        e
+                    })
+                    .unwrap();
 
-            let mut kills_page = str
-                .map_err(|e| {
-                    log::error!("Errorneous url: {}", url);
-                    e
-                })
-                .unwrap(); //response.json::<KillList>().await.unwrap();
+                // zkillboard allows only one request per second
+                tokio::time::sleep(std::time::Duration::from_secs_f32(1.)).await;
+
+                Ok(Retry::Success(kills_page))
+            })
+            .await?
+            .unwrap();
             kills.append(&mut kills_page);
-
-            // zkillboard allows only one request a per second
-            tokio::time::sleep(std::time::Duration::from_secs_f32(1.01)).await;
         }
         log::info!("{} page of killmails downloaded", pages);
         Ok(kills)

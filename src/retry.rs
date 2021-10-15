@@ -50,6 +50,32 @@ where
         }
     }
 }
+pub async fn retry_simple<T, Fut, F, E>(func: F) -> Result<Option<T>, E>
+where
+    Fut: Future<Output = Result<Retry<T>, E>>,
+    F: Fn() -> Fut,
+{
+    let mut retries = 0;
+    loop {
+        let out = func().await?;
+        break Ok(match out {
+            Retry::Retry => {
+                if retries > RETRIES {
+                    None
+                } else {
+                    retries += 1;
+                    continue;
+                }
+            }
+            Retry::Success(v) => Some(v),
+        });
+    }
+}
+
+pub enum Retry<T> {
+    Retry,
+    Success(T),
+}
 
 #[derive(Debug, Error)]
 pub enum CcpError {
