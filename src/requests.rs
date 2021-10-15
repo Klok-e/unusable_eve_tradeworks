@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{consts::DATE_FMT, Station, StationIdData};
+use crate::{consts::DATE_FMT, item_type::MarketsRegionHistory, Station, StationIdData};
 use crate::{
     consts::{self, BUFFER_UNORDERED},
     error::Result,
@@ -37,7 +37,7 @@ use rust_eveonline_esi::{
     },
     models::{
         GetKillmailsKillmailIdKillmailHashItem, GetKillmailsKillmailIdKillmailHashItemsItem,
-        GetMarketsRegionIdHistory200Ok, GetMarketsRegionIdOrders200Ok, GetUniverseTypesTypeIdOk,
+        GetMarketsRegionIdOrders200Ok, GetUniverseTypesTypeIdOk,
     },
 };
 
@@ -299,22 +299,22 @@ impl<'a> EsiRequestsService<'a> {
             let history = std::mem::take(&mut item.history);
             let avg = history
                 .iter()
-                .map(|x| x.average)
+                .map(|x| x.average.unwrap())
                 .map(to_not_nan)
                 .median()
-                .unwrap_or_else(|| to_not_nan(1.));
+                .map(|x| *x);
             let high = history
                 .iter()
-                .map(|x| x.highest)
+                .map(|x| x.highest.unwrap())
                 .map(to_not_nan)
                 .median()
-                .unwrap_or_else(|| to_not_nan(1.));
+                .map(|x| *x);
             let low = history
                 .iter()
-                .map(|x| x.lowest)
+                .map(|x| x.lowest.unwrap())
                 .map(to_not_nan)
                 .median()
-                .unwrap_or_else(|| to_not_nan(1.));
+                .map(|x| *x);
 
             // take earliest date
             let mut dates = history
@@ -334,11 +334,11 @@ impl<'a> EsiRequestsService<'a> {
 
                 dates.insert(
                     date,
-                    GetMarketsRegionIdHistory200Ok {
-                        average: *avg,
+                    MarketsRegionHistory {
+                        average: avg,
                         date: date.format(DATE_FMT).to_string(),
-                        highest: *high,
-                        lowest: *low,
+                        highest: high,
+                        lowest: low,
                         order_count: 0,
                         volume: 0,
                     },
@@ -391,7 +391,17 @@ impl<'a> EsiRequestsService<'a> {
                 let mut dummy_empty_vec = Vec::new();
                 Ok(ItemType {
                     id: item_type,
-                    history: hist_for_type,
+                    history: hist_for_type
+                        .into_iter()
+                        .map(|x| MarketsRegionHistory {
+                            average: Some(x.average),
+                            date: x.date,
+                            highest: Some(x.highest),
+                            lowest: Some(x.lowest),
+                            order_count: x.order_count,
+                            volume: x.volume,
+                        })
+                        .collect(),
                     orders: std::mem::take(
                         station_orders
                             .lock()

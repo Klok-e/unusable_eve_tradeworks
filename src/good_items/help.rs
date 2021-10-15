@@ -33,24 +33,27 @@ pub fn averages(config: &Config, history: &[ItemHistoryDay]) -> ItemTypeAveraged
         .take(config.days_average)
         .collect::<Vec<_>>();
     ItemTypeAveraged {
-        average: *lastndays
+        average: lastndays
             .iter()
             .map(|x| x.average)
+            .flatten()
             .map(to_not_nan)
             .average()
-            .unwrap(),
-        highest: *lastndays
+            .map(|x| *x),
+        highest: lastndays
             .iter()
             .map(|x| x.highest)
+            .flatten()
             .map(to_not_nan)
             .average()
-            .unwrap(),
-        lowest: *lastndays
+            .map(|x| *x),
+        lowest: lastndays
             .iter()
             .map(|x| x.lowest)
+            .flatten()
             .map(to_not_nan)
             .average()
-            .unwrap(),
+            .map(|x| *x),
         order_count: *lastndays
             .iter()
             .map(|x| x.order_count as f64)

@@ -56,7 +56,7 @@ impl<'a> ZkbRequestsService<'a> {
                     tokio::time::sleep(std::time::Duration::from_secs_f32(1.)).await;
                     return Ok(Retry::Retry);
                 }
-                
+
                 let full = response.bytes().await?;
                 let ser_res = serde_json::from_slice(&full);
 

@@ -1,10 +1,20 @@
-use rust_eveonline_esi::models::{GetMarketsRegionIdHistory200Ok, GetUniverseTypesTypeIdOk};
+use rust_eveonline_esi::models::GetUniverseTypesTypeIdOk;
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MarketsRegionHistory {
+    pub average: Option<f64>,
+    pub date: String,
+    pub highest: Option<f64>,
+    pub lowest: Option<f64>,
+    pub order_count: i64,
+    pub volume: i64,
+}
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct ItemType {
     pub id: i32,
-    pub history: Vec<GetMarketsRegionIdHistory200Ok>,
+    pub history: Vec<MarketsRegionHistory>,
     pub orders: Vec<Order>,
 }
 
@@ -24,18 +34,18 @@ pub struct Order {
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct ItemTypeAveraged {
-    pub average: f64,
-    pub highest: f64,
-    pub lowest: f64,
+    pub average: Option<f64>,
+    pub highest: Option<f64>,
+    pub lowest: Option<f64>,
     pub order_count: f64,
     pub volume: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ItemHistoryDay {
-    pub average: f64,
-    pub highest: f64,
-    pub lowest: f64,
+    pub average: Option<f64>,
+    pub highest: Option<f64>,
+    pub lowest: Option<f64>,
     pub order_count: i64,
     pub volume: i64,
 }

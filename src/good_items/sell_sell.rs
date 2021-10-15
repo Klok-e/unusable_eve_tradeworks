@@ -32,7 +32,7 @@ pub fn get_good_items_sell_sell(
                 .floor() as i32;
 
             let src_sell_order_price = (!x.source.orders.iter().any(|x| !x.is_buy_order))
-                .then_some(src_avgs.highest)
+                .then_some(src_avgs.highest.unwrap())
                 .unwrap_or_else(|| {
                     total_buy_from_sell_order_price(x.source.orders.as_slice(), recommend_buy_vol)
                         / recommend_buy_vol as f64
@@ -43,7 +43,9 @@ pub fn get_good_items_sell_sell(
                 + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
                 + buy_price * config.freight_cost_collateral_percent;
 
-            let dest_sell_price = dst_avgs.average;
+            // average can be none only if there's no history in dest
+            // in this case we make history
+            let dest_sell_price = dst_avgs.average.unwrap_or(expenses * 1.2);
 
             let sell_price = dest_sell_price * (1. - config.broker_fee - config.sales_tax);
 
