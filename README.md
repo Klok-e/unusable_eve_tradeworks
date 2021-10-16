@@ -9,6 +9,12 @@ Set nightly as the default toolchain:
 rustup default nightly
 ```
 
+Clone the repository:
+```bash
+git clone git@github.com:LokiVKlokeNaAndoke/unusable_eve_tradeworks.git
+cd unusable_eve_tradeworks/
+```
+
 Use `cargo run --release` to compile and run. Also everything after `--` is passed to the executable.
 
 Example:
