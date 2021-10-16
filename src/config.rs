@@ -7,8 +7,6 @@ use crate::{zkb::zkb_requests::ZkillEntity, Station};
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AuthConfig {
     pub client_id: String,
-    pub secret: String,
-    pub state: String,
 }
 
 impl AuthConfig {

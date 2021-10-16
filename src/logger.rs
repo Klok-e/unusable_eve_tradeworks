@@ -9,9 +9,12 @@ pub fn setup_logger() -> Result<(), fern::InitError> {
                 message
             ))
         })
-        .level_for("reqwest", log::LevelFilter::Warn)
         .level(log::LevelFilter::Debug)
-        .chain(std::io::stdout())
+        .chain(
+            fern::Dispatch::new()
+                .level(log::LevelFilter::Warn)
+                .chain(std::io::stdout()),
+        )
         .chain(
             std::fs::OpenOptions::new()
                 .write(true)

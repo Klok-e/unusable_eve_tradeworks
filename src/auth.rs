@@ -1,13 +1,17 @@
 use crate::{cached_data::CachedData, config::AuthConfig};
 use chrono::{DateTime, Duration, Utc};
+use oauth2::{
+    basic::{BasicClient, BasicTokenType},
+    reqwest::async_http_client,
+    AuthUrl, AuthorizationCode, ClientId, CsrfToken, EmptyExtraTokenFields, HttpResponse,
+    PkceCodeChallenge, RedirectUrl, Scope, StandardTokenResponse, TokenResponse, TokenUrl,
+};
 use reqwest::{self, Url};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct Auth {
-    pub access_token: String,
-    pub refresh_token: String,
-    pub expiration_date: DateTime<Utc>,
+    pub token: StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>,
 }
 
 impl Auth {
@@ -19,83 +23,81 @@ impl Auth {
                 .data;
 
         // if expired use refresh token
-        if data.expiration_date < Utc::now() {
-            let client = reqwest::Client::new();
-            let response = client
-                .post("https://login.eveonline.com/v2/oauth/token")
-                .form(&AuthRefreshTokenParams {
-                    grant_type: "refresh_token".into(),
-                    refresh_token: data.refresh_token,
-                    client_id: config.client_id.clone(),
-                })
-                .send()
-                .await
-                .unwrap()
-                .json::<EveAuthResponse>()
+        if data.expires_in().unwrap() < std::time::Duration::ZERO {
+            let client = BasicClient::new(
+                ClientId::new(config.client_id.clone()),
+                None,
+                AuthUrl::new("https://login.eveonline.com/v2/oauth/authorize".to_string()).unwrap(),
+                Some(
+                    TokenUrl::new("https://login.eveonline.com/v2/oauth/token".to_string())
+                        .unwrap(),
+                ),
+            );
+            data = client
+                .exchange_refresh_token(data.refresh_token().unwrap())
+                .request_async(async_http_client)
                 .await
                 .unwrap();
 
-            data = Auth {
-                access_token: response.access_token,
-                refresh_token: response.refresh_token,
-                expiration_date: expiration_date(response.expires_in),
-            };
             let vec = serde_json::to_vec_pretty(&data).unwrap();
             std::fs::write(path, vec).unwrap();
         }
 
-        data
+        Self { token: data }
     }
 
-    async fn request_new(config: &AuthConfig) -> Self {
+    async fn request_new(
+        config: &AuthConfig,
+    ) -> StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType> {
         let scopes = vec![
             "esi-markets.structure_markets.v1",
             "esi-search.search_structures.v1",
             "esi-universe.read_structures.v1",
         ];
-        let url: String = Url::parse_with_params(
-            "https:/login.eveonline.com/v2/oauth/authorize",
-            &[
-                ("response_type", "code"),
-                ("redirect_uri", "https://localhost/oauth-callback"),
-                ("client_id", config.client_id.to_string().as_str()),
-                ("scope", scopes.join(" ").as_str()),
-                ("state", config.state.as_str()),
-            ],
+
+        let client = BasicClient::new(
+            ClientId::new(config.client_id.clone()),
+            None,
+            AuthUrl::new("https://login.eveonline.com/v2/oauth/authorize".to_string()).unwrap(),
+            Some(TokenUrl::new("https://login.eveonline.com/v2/oauth/token".to_string()).unwrap()),
         )
-        .unwrap()
-        .into();
+        .set_redirect_uri(
+            RedirectUrl::new("https://localhost/oauth-callback".to_string()).unwrap(),
+        );
+
+        let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
+
+        // Generate the full authorization URL.
+        let (auth_url, csrf_token) = client
+            .authorize_url(CsrfToken::new_random)
+            .add_scopes(scopes.into_iter().map(|s| Scope::new(s.to_string())))
+            .set_pkce_challenge(pkce_challenge)
+            .url();
 
         println!("Go to this url then copy the redirected url here:");
-        println!("{}", url);
+        println!("{}", auth_url);
 
         let mut str = String::new();
         std::io::stdin().read_line(&mut str).unwrap();
         let str = str.trim();
         let code = Url::parse(str).unwrap();
-        let mut code = code.query_pairs();
-        let code = code.find(|x| x.0 == "code").unwrap().1;
+        let mut params = code.query_pairs();
+        let code = params.find(|x| x.0 == "code").unwrap().1;
+        let state = params.find(|x| x.0 == "state").unwrap().1;
 
-        let client = reqwest::Client::new();
-        let res = client
-            .post("https://login.eveonline.com/v2/oauth/token")
-            .form(&AuthTokenParams {
-                grant_type: "authorization_code".into(),
-                code: code.into(),
-                client_id: config.client_id.clone(),
-            })
-            .send()
-            .await
-            .unwrap()
-            .json::<EveAuthResponse>()
+        if state.as_ref() != csrf_token.secret() {
+            panic!("Csrf token doesn't match!");
+        }
+
+        let token_result = client
+            .exchange_code(AuthorizationCode::new(code.to_string()))
+            // Set the PKCE code verifier.
+            .set_pkce_verifier(pkce_verifier)
+            .request_async(async_http_client)
             .await
             .unwrap();
 
-        Self {
-            access_token: res.access_token,
-            refresh_token: res.refresh_token,
-            expiration_date: expiration_date(res.expires_in),
-        }
+        token_result
     }
 }
 

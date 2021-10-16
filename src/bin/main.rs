@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use futures::{stream, StreamExt};
 
+use oauth2::TokenResponse;
 use rust_eveonline_esi::apis::{
     configuration::Configuration,
     market_api::{self, GetMarketsRegionIdTypesParams},
@@ -65,15 +66,16 @@ async fn run() -> Result<()> {
             .unwrap(),
         ..Default::default()
     };
-    esi_config.oauth_access_token = Some(auth.access_token.clone());
+    esi_config.oauth_access_token = Some(auth.token.access_token().secret().clone());
 
     let esi_requests = EsiRequestsService::new(&esi_config);
 
     // TODO: dangerous plese don't use in production
-    let character_info =
-        jsonwebtoken::dangerous_insecure_decode::<CharacterInfo>(auth.access_token.as_str())
-            .unwrap()
-            .claims;
+    let character_info = jsonwebtoken::dangerous_insecure_decode::<CharacterInfo>(
+        auth.token.access_token().secret(),
+    )
+    .unwrap()
+    .claims;
     let character_id = character_info
         .sub
         .split(':')
