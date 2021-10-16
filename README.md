@@ -26,3 +26,13 @@ Run this to get a list of all commands:
 ```bash
 cargo run --release -- -h
 ```
+
+## Configs
+There may be a config for each trade route.
+
+You specify them like this:
+```bash
+cargo run --release -- -c config.jita-t0dt.json
+```
+
+Sample config is in the file `unusable_eve_tradeworks/example.config.json`.
