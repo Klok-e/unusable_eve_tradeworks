@@ -79,7 +79,7 @@ impl Auth {
         let mut str = None;
 
         let server = tiny_http::Server::http("localhost:8022").unwrap();
-        server.incoming_requests().next().map(|request| {
+        if let Some(request) = server.incoming_requests().next() {
             log::debug!(
                 "received request. method: {:?}, url: {:?}, headers: {:?}",
                 request.method(),
@@ -90,7 +90,7 @@ impl Auth {
             str = Some(request.url().to_string());
             let response = tiny_http::Response::from_string("Successful. You can close this tab.");
             request.respond(response).unwrap();
-        });
+        }
         drop(server);
 
         let str = str.unwrap();
