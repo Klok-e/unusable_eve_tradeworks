@@ -1,5 +1,6 @@
 use crate::{cached_data::CachedData, config::AuthConfig};
 
+use chrono::{DateTime, Utc};
 use oauth2::{
     basic::{BasicClient, BasicTokenType},
     reqwest::async_http_client,
@@ -9,41 +10,48 @@ use oauth2::{
 use reqwest::{self, Url};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Auth {
     pub token: StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>,
+    pub expiration_date: DateTime<Utc>,
 }
 
 impl Auth {
     pub async fn load_or_request_token(config: &AuthConfig) -> Self {
         let path = "cache/auth";
-        let mut data =
-            CachedData::load_or_create_json_async(path, false, || Self::request_new(config))
-                .await
-                .data;
+        let mut data = CachedData::load_or_create_json_async(path, false, || async {
+            let token = Self::request_new(config).await;
+            let expiration_date =
+                Utc::now() + chrono::Duration::from_std(token.expires_in().unwrap()).unwrap();
+            Auth {
+                token,
+                expiration_date,
+            }
+        })
+        .await
+        .data;
 
         // if expired use refresh token
-        if data.expires_in().unwrap() < std::time::Duration::ZERO {
-            let client = BasicClient::new(
-                ClientId::new(config.client_id.clone()),
-                None,
-                AuthUrl::new("https://login.eveonline.com/v2/oauth/authorize".to_string()).unwrap(),
-                Some(
-                    TokenUrl::new("https://login.eveonline.com/v2/oauth/token".to_string())
-                        .unwrap(),
-                ),
-            );
-            data = client
-                .exchange_refresh_token(data.refresh_token().unwrap())
+        if data.expiration_date < Utc::now() {
+            let client = create_client(config);
+            let token = client
+                .exchange_refresh_token(data.token.refresh_token().unwrap())
                 .request_async(async_http_client)
                 .await
                 .unwrap();
+
+            let expiration_date =
+                Utc::now() + chrono::Duration::from_std(token.expires_in().unwrap()).unwrap();
+            data = Auth {
+                token,
+                expiration_date,
+            };
 
             let vec = serde_json::to_vec_pretty(&data).unwrap();
             std::fs::write(path, vec).unwrap();
         }
 
-        Self { token: data }
+        data
     }
 
     async fn request_new(
@@ -55,14 +63,7 @@ impl Auth {
             "esi-universe.read_structures.v1",
         ];
 
-        let client = BasicClient::new(
-            ClientId::new(config.client_id.clone()),
-            None,
-            AuthUrl::new("https://login.eveonline.com/v2/oauth/authorize".to_string()).unwrap(),
-            Some(TokenUrl::new("https://login.eveonline.com/v2/oauth/token".to_string()).unwrap()),
-        )
-        .set_auth_type(oauth2::AuthType::RequestBody)
-        .set_redirect_uri(RedirectUrl::new("http://localhost:8022/callback".to_string()).unwrap());
+        let client = create_client(config);
 
         let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
 
@@ -118,6 +119,25 @@ impl Auth {
     }
 }
 
+type OauthClient = oauth2::Client<
+    oauth2::StandardErrorResponse<oauth2::basic::BasicErrorResponseType>,
+    StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>,
+    BasicTokenType,
+    oauth2::StandardTokenIntrospectionResponse<EmptyExtraTokenFields, BasicTokenType>,
+    oauth2::StandardRevocableToken,
+    oauth2::StandardErrorResponse<oauth2::RevocationErrorResponseType>,
+>;
+
+fn create_client(config: &AuthConfig) -> OauthClient {
+    BasicClient::new(
+        ClientId::new(config.client_id.clone()),
+        None,
+        AuthUrl::new("https://login.eveonline.com/v2/oauth/authorize".to_string()).unwrap(),
+        Some(TokenUrl::new("https://login.eveonline.com/v2/oauth/token".to_string()).unwrap()),
+    )
+    .set_auth_type(oauth2::AuthType::RequestBody)
+    .set_redirect_uri(RedirectUrl::new("http://localhost:8022/callback".to_string()).unwrap())
+}
 #[derive(Serialize)]
 struct AuthTokenParams {
     pub grant_type: String,
