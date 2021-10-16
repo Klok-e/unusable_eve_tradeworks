@@ -474,7 +474,7 @@ impl<'a> EsiRequestsService<'a> {
                 std::iter::once(KillmailItem::from(x.clone())).chain(
                     x.items
                         .map(|x| x.into_iter().map(KillmailItem::from))
-                        .unwrap_or(Vec::new().into_iter().map(KillmailItem::from)),
+                        .unwrap_or_else(|| Vec::new().into_iter().map(KillmailItem::from)),
                 )
             })
             .flatten()

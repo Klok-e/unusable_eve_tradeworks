@@ -1,10 +1,10 @@
 use crate::{cached_data::CachedData, config::AuthConfig};
-use chrono::{DateTime, Duration, Utc};
+
 use oauth2::{
     basic::{BasicClient, BasicTokenType},
     reqwest::async_http_client,
-    AuthUrl, AuthorizationCode, ClientId, CsrfToken, EmptyExtraTokenFields, HttpResponse,
-    PkceCodeChallenge, RedirectUrl, Scope, StandardTokenResponse, TokenResponse, TokenUrl,
+    AuthUrl, AuthorizationCode, ClientId, CsrfToken, EmptyExtraTokenFields, PkceCodeChallenge,
+    RedirectUrl, Scope, StandardTokenResponse, TokenResponse, TokenUrl,
 };
 use reqwest::{self, Url};
 use serde::{Deserialize, Serialize};
@@ -61,6 +61,7 @@ impl Auth {
             AuthUrl::new("https://login.eveonline.com/v2/oauth/authorize".to_string()).unwrap(),
             Some(TokenUrl::new("https://login.eveonline.com/v2/oauth/token".to_string()).unwrap()),
         )
+        .set_auth_type(oauth2::AuthType::RequestBody)
         .set_redirect_uri(
             RedirectUrl::new("https://localhost/oauth-callback".to_string()).unwrap(),
         );
@@ -93,41 +94,12 @@ impl Auth {
             .exchange_code(AuthorizationCode::new(code.to_string()))
             // Set the PKCE code verifier.
             .set_pkce_verifier(pkce_verifier)
-            .request_async(|r| async {
-                let client = {
-                    let builder = reqwest::Client::builder();
-
-                    builder.build()?
-                };
-
-                let mut request_builder = client.request(r.method, r.url.as_str()).body(r.body);
-                for (name, value) in &r.headers {
-                    request_builder = request_builder.header(name.as_str(), value.as_bytes());
-                }
-                let request = request_builder.build()?;
-
-
-
-                let response = client.execute(request).await?;
-
-                let status_code = response.status();
-                let headers = response.headers().to_owned();
-                let chunks = response.bytes().await?;
-                Result::<HttpResponse, reqwest::Error>::Ok(HttpResponse {
-                    status_code,
-                    headers,
-                    body: chunks.to_vec(),
-                })
-            })
+            .request_async(async_http_client)
             .await
             .unwrap();
 
         token_result
     }
-}
-
-fn expiration_date(expires_in: i64) -> DateTime<Utc> {
-    Utc::now() + Duration::seconds(expires_in)
 }
 
 #[derive(Serialize)]
