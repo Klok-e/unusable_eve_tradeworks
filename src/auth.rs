@@ -62,9 +62,7 @@ impl Auth {
             Some(TokenUrl::new("https://login.eveonline.com/v2/oauth/token".to_string()).unwrap()),
         )
         .set_auth_type(oauth2::AuthType::RequestBody)
-        .set_redirect_uri(
-            RedirectUrl::new("https://localhost/oauth-callback".to_string()).unwrap(),
-        );
+        .set_redirect_uri(RedirectUrl::new("http://localhost:8022/callback".to_string()).unwrap());
 
         let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
 
@@ -75,13 +73,31 @@ impl Auth {
             .set_pkce_challenge(pkce_challenge)
             .url();
 
-        println!("Go to this url then copy the redirected url here:");
+        println!("Go to this url:");
         println!("{}", auth_url);
 
-        let mut str = String::new();
-        std::io::stdin().read_line(&mut str).unwrap();
+        let mut str = None;
+
+        let server = tiny_http::Server::http("localhost:8022").unwrap();
+        server.incoming_requests().next().map(|request| {
+            log::debug!(
+                "received request. method: {:?}, url: {:?}, headers: {:?}",
+                request.method(),
+                request.url(),
+                request.headers()
+            );
+
+            str = Some(request.url().to_string());
+            let response = tiny_http::Response::from_string("Successful. You can close this tab.");
+            request.respond(response).unwrap();
+        });
+        drop(server);
+
+        let str = str.unwrap();
+        log::debug!("Request string: {}", str);
+
         let str = str.trim();
-        let code = Url::parse(str).unwrap();
+        let code = Url::parse(format!("http://{}", str).as_str()).unwrap();
         let mut params = code.query_pairs();
         let code = params.find(|x| x.0 == "code").unwrap().1;
         let state = params.find(|x| x.0 == "state").unwrap().1;

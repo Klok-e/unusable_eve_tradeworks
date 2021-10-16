@@ -12,7 +12,7 @@ pub fn setup_logger() -> Result<(), fern::InitError> {
         .level(log::LevelFilter::Debug)
         .chain(
             fern::Dispatch::new()
-                .level(log::LevelFilter::Warn)
+                .level(log::LevelFilter::Info)
                 .chain(std::io::stdout()),
         )
         .chain(

@@ -42,7 +42,7 @@ where
         FO: Future<Output = T>,
     {
         let data = if path.as_ref().exists() && !refresh {
-            println!("loading path {:?} ...", path.as_ref());
+            log::info!("loading path {:?} ...", path.as_ref());
             let str = std::fs::read(path.as_ref()).unwrap();
             let deser = match format {
                 DataFormat::Json => serde_json::from_slice(str.as_slice()).unwrap(),
@@ -50,7 +50,7 @@ where
             };
             deser
         } else {
-            println!("gen path {:?}", path.as_ref());
+            log::info!("gen path {:?}", path.as_ref());
             let generated = gen().await;
             let s = match format {
                 DataFormat::Json => serde_json::to_vec(&generated).unwrap(),
@@ -62,7 +62,7 @@ where
             std::fs::write(path.as_ref(), s).unwrap();
             generated
         };
-        println!("finished loading or gen {:?}", path.as_ref());
+        log::info!("finished loading or gen {:?}", path.as_ref());
         Self { data }
     }
 }
