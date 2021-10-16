@@ -93,7 +93,32 @@ impl Auth {
             .exchange_code(AuthorizationCode::new(code.to_string()))
             // Set the PKCE code verifier.
             .set_pkce_verifier(pkce_verifier)
-            .request_async(async_http_client)
+            .request_async(|r| async {
+                let client = {
+                    let builder = reqwest::Client::builder();
+
+                    builder.build()?
+                };
+
+                let mut request_builder = client.request(r.method, r.url.as_str()).body(r.body);
+                for (name, value) in &r.headers {
+                    request_builder = request_builder.header(name.as_str(), value.as_bytes());
+                }
+                let request = request_builder.build()?;
+
+
+
+                let response = client.execute(request).await?;
+
+                let status_code = response.status();
+                let headers = response.headers().to_owned();
+                let chunks = response.bytes().await?;
+                Result::<HttpResponse, reqwest::Error>::Ok(HttpResponse {
+                    status_code,
+                    headers,
+                    body: chunks.to_vec(),
+                })
+            })
             .await
             .unwrap();
 
