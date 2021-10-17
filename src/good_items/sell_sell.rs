@@ -32,7 +32,14 @@ pub fn get_good_items_sell_sell(
                 .floor() as i32;
 
             let src_sell_order_price = (!x.source.orders.iter().any(|x| !x.is_buy_order))
-                .then_some(src_avgs.highest?)
+                .then_some(src_avgs.highest.or_else(|| {
+                    log::debug!(
+                        "Item {} ({}) doesn't have any history in source.",
+                        x.desc.name,
+                        x.desc.type_id
+                    );
+                    None
+                })?)
                 .unwrap_or_else(|| {
                     total_buy_from_sell_order_price(x.source.orders.as_slice(), recommend_buy_vol)
                         / recommend_buy_vol as f64
@@ -45,7 +52,14 @@ pub fn get_good_items_sell_sell(
 
             // average can be none only if there's no history in dest
             // in this case we make history
-            let dest_sell_price = dst_avgs.average.unwrap_or(expenses * 1.2);
+            let dest_sell_price = dst_avgs.average.unwrap_or_else(|| {
+                log::debug!(
+                    "Item {} ({}) doesn't have any history in destination.",
+                    x.desc.name,
+                    x.desc.type_id
+                );
+                expenses * 1.2
+            });
 
             let sell_price = dest_sell_price * (1. - config.broker_fee - config.sales_tax);
 
