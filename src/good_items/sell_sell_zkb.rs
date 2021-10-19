@@ -51,7 +51,7 @@ pub fn get_good_items_sell_sell_zkb(
                         / recommend_buy_vol as f64
                 });
 
-            let buy_price = src_sell_order_price * (1. + config.broker_fee);
+            let buy_price = src_sell_order_price * (1. + config.broker_fee_source);
             let expenses = buy_price
                 + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
                 + buy_price * config.freight_cost_collateral_percent;
@@ -67,7 +67,8 @@ pub fn get_good_items_sell_sell_zkb(
                 expenses * 1.2
             });
 
-            let sell_price = dest_sell_price * (1. - config.broker_fee - config.sales_tax);
+            let sell_price =
+                dest_sell_price * (1. - config.broker_fee_destination - config.sales_tax);
 
             let margin = (sell_price - expenses) / expenses;
 

@@ -52,14 +52,15 @@ pub fn get_good_items_sell_buy(
                             buy_order_fulfilled.min(curr_src_sell_order.volume_remain);
                         buy_order_fulfilled -= bought_volume;
 
-                        let expenses = (curr_src_sell_order.price * (1. + config.broker_fee)
+                        let expenses = (curr_src_sell_order.price
+                            * (1. + config.broker_fee_source)
                             + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
                             + curr_src_sell_order.price * config.freight_cost_collateral_percent)
                             * bought_volume as f64;
 
                         let sell_price = bought_volume as f64
                             * order.price
-                            * (1. - config.broker_fee - config.sales_tax);
+                            * (1. - config.broker_fee_destination - config.sales_tax);
 
                         if expenses >= sell_price {
                             break;
@@ -86,11 +87,12 @@ pub fn get_good_items_sell_buy(
                 )
             };
 
-            let buy_with_broker_fee = expenses * (1. + config.broker_fee);
+            let buy_with_broker_fee = expenses * (1. + config.broker_fee_source);
             let fin_expenses = buy_with_broker_fee
                 + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
                 + buy_with_broker_fee * config.freight_cost_collateral_percent;
-            let fin_sell_price = dest_sell_price * (1. - config.broker_fee - config.sales_tax);
+            let fin_sell_price =
+                dest_sell_price * (1. - config.broker_fee_destination - config.sales_tax);
 
             let margin = (fin_sell_price - fin_expenses) / fin_expenses;
 
