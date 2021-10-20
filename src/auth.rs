@@ -10,7 +10,7 @@ use oauth2::{
 use reqwest::{self, Url};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Auth {
     pub token: StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>,
     pub expiration_date: DateTime<Utc>,
@@ -47,8 +47,11 @@ impl Auth {
                 expiration_date,
             };
 
-            let vec = serde_json::to_vec_pretty(&data).unwrap();
-            std::fs::write(path, vec).unwrap();
+            CachedData::load_or_create_json_async(path, true, None, || {
+                let data = data.clone();
+                async { data }
+            })
+            .await;
         }
 
         data
