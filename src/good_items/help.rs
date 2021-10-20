@@ -9,6 +9,7 @@ use crate::{
 };
 
 pub fn total_buy_from_sell_order_price(x: &[Order], recommend_buy_vol: i32) -> f64 {
+    dbg!(recommend_buy_vol);
     let mut recommend_bought_volume = 0;
     let mut total_price = 0.;
     for order in x
@@ -16,7 +17,9 @@ pub fn total_buy_from_sell_order_price(x: &[Order], recommend_buy_vol: i32) -> f
         .filter(|x| !x.is_buy_order)
         .sorted_by_key(|x| NotNan::new(x.price).unwrap())
     {
-        let current_buy = order.volume_remain.min(recommend_buy_vol);
+        let current_buy = order
+            .volume_remain
+            .min(recommend_buy_vol - recommend_bought_volume);
         recommend_bought_volume += current_buy;
         total_price += order.price * current_buy as f64;
         if recommend_buy_vol <= recommend_bought_volume {
