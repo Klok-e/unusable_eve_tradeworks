@@ -9,7 +9,6 @@ use crate::{
 };
 
 pub fn total_buy_from_sell_order_price(x: &[Order], recommend_buy_vol: i32) -> f64 {
-    dbg!(recommend_buy_vol);
     let mut recommend_bought_volume = 0;
     let mut total_price = 0.;
     for order in x
