@@ -19,7 +19,7 @@ pub struct Auth {
 impl Auth {
     pub async fn load_or_request_token(config: &AuthConfig) -> Self {
         let path = "cache/auth";
-        let mut data = CachedData::load_or_create_json_async(path, false, || async {
+        let mut data = CachedData::load_or_create_json_async(path, false, None, || async {
             let token = Self::request_new(config).await;
             let expiration_date =
                 Utc::now() + chrono::Duration::from_std(token.expires_in().unwrap()).unwrap();

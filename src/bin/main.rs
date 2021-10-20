@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use chrono::Duration;
 use futures::{stream, StreamExt};
 
 use oauth2::TokenResponse;
@@ -89,6 +90,7 @@ async fn run() -> Result<()> {
     let mut pairs: Vec<SystemMarketsItemData> = CachedData::load_or_create_async(
         format!("cache/{}-path_data", config_file_name),
         force_refresh,
+        Some(Duration::hours(consts::TIMEOUT_HOURS)),
         || {
             let esi_config = &esi_config;
             let config = &config;
@@ -238,18 +240,26 @@ async fn run() -> Result<()> {
             make_table_sell_buy(&good_items, name_len)
         } else {
             log::trace!("Sell sell zkb path.");
-            let kms = CachedData::load_or_create_async("cache/zkb_losses", force_refresh, || {
-                let esi_requests = &esi_requests;
-                let client = &esi_config.client;
-                let config = &config;
-                async move {
-                    let zkb = ZkbRequestsService::new(client);
-                    let km_service = KillmailService::new(&zkb, esi_requests);
-                    km_service
-                        .get_kill_item_frequencies(&config.zkill_entity, config.zkb_download_pages)
-                        .await
-                }
-            })
+            let kms = CachedData::load_or_create_async(
+                "cache/zkb_losses",
+                force_refresh,
+                Some(Duration::hours(consts::TIMEOUT_HOURS)),
+                || {
+                    let esi_requests = &esi_requests;
+                    let client = &esi_config.client;
+                    let config = &config;
+                    async move {
+                        let zkb = ZkbRequestsService::new(client);
+                        let km_service = KillmailService::new(&zkb, esi_requests);
+                        km_service
+                            .get_kill_item_frequencies(
+                                &config.zkill_entity,
+                                config.zkb_download_pages,
+                            )
+                            .await
+                    }
+                },
+            )
             .await
             .data;
 
