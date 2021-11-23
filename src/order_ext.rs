@@ -19,7 +19,7 @@ where
 {
     fn only_substantial_orders(self) -> Vec<It> {
         let orders = self.collect::<Vec<_>>();
-        let src_market_volume = orders.iter().copied().sell_order_volume();
+        // let src_market_volume = orders.iter().copied().sell_order_volume();
 
         orders
             .into_iter()
@@ -33,9 +33,9 @@ where
             })
             .into_iter()
             .map(|(k, v)| (k, v.collect::<Vec<It>>()))
-            .filter(|(_, v)| {
-                v.iter().copied().sell_order_volume() as f64 / src_market_volume as f64 > 0.05
-            })
+            // .filter(|(_, v)| {
+            //     v.iter().copied().sell_order_volume() as f64 / src_market_volume as f64 > 0.05
+            // })
             .map(|(_, v)| v.into_iter())
             .flatten()
             .collect_vec()
