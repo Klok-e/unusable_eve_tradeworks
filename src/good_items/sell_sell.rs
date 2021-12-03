@@ -17,11 +17,11 @@ pub fn get_good_items_sell_sell(
     pairs
         .into_iter()
         .map(|x| {
-            let src_mkt_orders = x.source.orders.iter().only_substantial_orders();
-            let src_mkt_volume = src_mkt_orders.iter().copied().sell_order_volume();
+            let src_mkt_orders = x.source.orders.clone();
+            let src_mkt_volume = src_mkt_orders.iter().sell_order_volume();
 
-            let dst_mkt_orders = x.destination.orders.iter().only_substantial_orders();
-            let dst_mkt_volume: i32 = dst_mkt_orders.iter().copied().sell_order_volume();
+            let dst_mkt_orders = x.destination.orders.clone();
+            let dst_mkt_volume: i32 = dst_mkt_orders.iter().sell_order_volume();
 
             let src_avgs = averages(config, &x.source.history);
             let dst_avgs = averages(config, &x.destination.history);
