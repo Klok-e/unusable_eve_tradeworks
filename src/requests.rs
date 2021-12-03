@@ -26,6 +26,7 @@ use rust_eveonline_esi::{
             GetMarketsRegionIdOrdersError, GetMarketsRegionIdOrdersParams,
             GetMarketsStructuresStructureIdParams,
         },
+        routes_api::{self, GetRouteOriginDestinationError, GetRouteOriginDestinationParams},
         search_api::{self, get_search, GetCharactersCharacterIdSearchParams, GetSearchParams},
         universe_api::{
             self, GetUniverseConstellationsConstellationIdParams,
@@ -36,12 +37,13 @@ use rust_eveonline_esi::{
         Error,
     },
     models::{
-        GetKillmailsKillmailIdKillmailHashItem, GetKillmailsKillmailIdKillmailHashItemsItem,
-        GetMarketsRegionIdOrders200Ok, GetUniverseTypesTypeIdOk,
+        get_markets_region_id_orders_200_ok, GetKillmailsKillmailIdKillmailHashItem,
+        GetKillmailsKillmailIdKillmailHashItemsItem, GetMarketsRegionIdOrders200Ok,
+        GetUniverseTypesTypeIdOk,
     },
 };
 
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 pub struct EsiRequestsService<'a> {
     pub config: &'a Configuration,
@@ -213,8 +215,150 @@ impl<'a> EsiRequestsService<'a> {
     }
 
     pub async fn get_orders_station(&self, station: StationIdData) -> Vec<Order> {
+        // download all orders
+        log::info!("Downloading region orders...");
+        let pages: Vec<GetMarketsRegionIdOrders200Ok> = get_all_pages(
+            |page| async move {
+                retry::retry::<_, _, _, Error<GetMarketsRegionIdOrdersError>>(|| async {
+                    Ok(market_api::get_markets_region_id_orders(
+                        self.config,
+                        GetMarketsRegionIdOrdersParams {
+                            order_type: "all".to_string(),
+                            region_id: station.region_id,
+                            datasource: None,
+                            if_none_match: None,
+                            page: Some(page),
+                            type_id: None,
+                        },
+                    )
+                    .await?
+                    .entity
+                    .unwrap())
+                })
+                .await
+            },
+            1000,
+        )
+        .await;
+        log::info!("All region orders downloaded. Calculating distances...");
+
+        let distance_cache = RwLock::new(HashMap::new());
+
+        // calculate distance to all buy orders
+        let pages: Vec<(GetMarketsRegionIdOrders200Ok, Option<usize>)> = stream::iter(pages)
+            .map(|x| async {
+                let dist_if_buy = if x.is_buy_order {
+                    let map = distance_cache.read().await;
+                    let dist = match map.get(&x.system_id) {
+                        Some(&dist) => dist,
+                        None => {
+                            drop(map);
+                            log::debug!(
+                                "Distance between origin {} and dest {} not in cache, making request...",
+                                station.system_id,
+                                x.system_id
+                            );
+                            let dist =
+                                retry::retry::<_, _, _, Error<GetRouteOriginDestinationError>>(
+                                    || async {
+                                        Ok(routes_api::get_route_origin_destination(
+                                            self.config,
+                                            GetRouteOriginDestinationParams {
+                                                destination: x.system_id,
+                                                origin: station.system_id,
+                                                avoid: None,
+                                                connections: None,
+                                                datasource: None,
+                                                flag: None,
+                                                if_none_match: None,
+                                            },
+                                        )
+                                        .await?
+                                        .entity
+                                        .unwrap())
+                                    },
+                                )
+                                .await
+                                .map(|x| Some(x.into_result().unwrap().len()))
+                                .unwrap_or_else(|| {
+                                    log::warn!(
+                                        "Couldn't calculate distance between origin {} and dest {}",
+                                        station.system_id,
+                                        x.system_id
+                                    );
+                                    None
+                                });
+                            log::debug!(
+                                "Inserting distance between origin {} and dest {} into cache...",
+                                station.system_id,
+                                x.system_id
+                            );
+                            let mut map = distance_cache.write().await;
+                            map.insert(x.system_id,dist);
+                            dist
+                        }
+                    };
+
+                    log::debug!(
+                        "Distance between origin {} and dest {} is {:?}",
+                        station.system_id,
+                        x.system_id,
+                        dist
+                    );
+
+                    dist
+                } else {
+                    None
+                };
+
+                (x, dist_if_buy)
+            })
+            .buffer_unordered(BUFFER_UNORDERED)
+            .collect::<Vec<_>>()
+            .await;
+        log::info!("All distances calculated.");
+
+        let mut orders_in_station = pages
+            .into_iter()
+            .filter(|it| {
+                it.0.location_id == station.station_id.id
+                    || (if let Some(dist) = it.1 {
+                        it.0.is_buy_order
+                            && (match it.0.range {
+                                get_markets_region_id_orders_200_ok::Range::Station => 0,
+                                get_markets_region_id_orders_200_ok::Range::Solarsystem => 0,
+                                get_markets_region_id_orders_200_ok::Range::_1 => 1,
+                                get_markets_region_id_orders_200_ok::Range::_2 => 2,
+                                get_markets_region_id_orders_200_ok::Range::_3 => 3,
+                                get_markets_region_id_orders_200_ok::Range::_4 => 4,
+                                get_markets_region_id_orders_200_ok::Range::_5 => 5,
+                                get_markets_region_id_orders_200_ok::Range::_10 => 10,
+                                get_markets_region_id_orders_200_ok::Range::_20 => 20,
+                                get_markets_region_id_orders_200_ok::Range::_30 => 30,
+                                get_markets_region_id_orders_200_ok::Range::_40 => 40,
+                                get_markets_region_id_orders_200_ok::Range::Region => 40,
+                            }) >= dist
+                    } else {
+                        false
+                    })
+            })
+            .map(|it| Order {
+                duration: it.0.duration,
+                is_buy_order: it.0.is_buy_order,
+                issued: it.0.issued,
+                location_id: it.0.location_id,
+                min_volume: it.0.min_volume,
+                order_id: it.0.order_id,
+                price: it.0.price,
+                type_id: it.0.type_id,
+                volume_remain: it.0.volume_remain,
+                volume_total: it.0.volume_total,
+            })
+            .collect::<Vec<_>>();
+
         if station.station_id.is_citadel {
-            get_all_pages(
+            log::info!("Loading citadel orders...");
+            let mut orders_in_citadel = get_all_pages(
                 |page| async move {
                     market_api::get_markets_structures_structure_id(
                         self.config,
@@ -247,48 +391,12 @@ impl<'a> EsiRequestsService<'a> {
                 volume_remain: it.volume_remain,
                 volume_total: it.volume_total,
             })
-            .collect::<Vec<_>>()
-        } else {
-            let pages: Vec<GetMarketsRegionIdOrders200Ok> = get_all_pages(
-                |page| async move {
-                    retry::retry::<_, _, _, Error<GetMarketsRegionIdOrdersError>>(|| async {
-                        Ok(market_api::get_markets_region_id_orders(
-                            self.config,
-                            GetMarketsRegionIdOrdersParams {
-                                order_type: "all".to_string(),
-                                region_id: station.region_id,
-                                datasource: None,
-                                if_none_match: None,
-                                page: Some(page),
-                                type_id: None,
-                            },
-                        )
-                        .await?
-                        .entity
-                        .unwrap())
-                    })
-                    .await
-                },
-                1000,
-            )
-            .await;
-            pages
-                .into_iter()
-                .filter(|it| it.system_id == station.system_id)
-                .map(|it| Order {
-                    duration: it.duration,
-                    is_buy_order: it.is_buy_order,
-                    issued: it.issued,
-                    location_id: it.location_id,
-                    min_volume: it.min_volume,
-                    order_id: it.order_id,
-                    price: it.price,
-                    type_id: it.type_id,
-                    volume_remain: it.volume_remain,
-                    volume_total: it.volume_total,
-                })
-                .collect::<Vec<_>>()
+            .collect::<Vec<_>>();
+            log::info!("All citadel orders loaded.");
+
+            orders_in_station.append(&mut orders_in_citadel);
         }
+        orders_in_station
     }
 
     pub async fn history(&self, item_types: &[i32], station: StationIdData) -> Vec<ItemType> {
@@ -416,9 +524,7 @@ impl<'a> EsiRequestsService<'a> {
     }
 
     async fn download_history(&self, item_types: &[i32], station: StationIdData) -> Vec<ItemType> {
-        log::info!("loading station orders");
         let station_orders = self.get_orders_station(station).await;
-        log::info!("loading station orders finished");
         let station_orders =
             Mutex::new(station_orders.into_iter().into_group_map_by(|x| x.type_id));
 

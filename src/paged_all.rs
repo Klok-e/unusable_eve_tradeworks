@@ -7,6 +7,7 @@ use rust_eveonline_esi::{
             GetMarketsRegionIdHistorySuccess, GetMarketsRegionIdOrdersSuccess,
             GetMarketsRegionIdTypesSuccess, GetMarketsStructuresStructureIdSuccess,
         },
+        routes_api::GetRouteOriginDestinationSuccess,
         search_api::{GetCharactersCharacterIdSearchSuccess, GetSearchSuccess},
         universe_api::{
             GetUniverseStationsStationIdSuccess, GetUniverseStructuresStructureIdSuccess,
@@ -165,6 +166,15 @@ impl ToResult<GetKillmailsKillmailIdKillmailHashOk, GetKillmailsKillmailIdKillma
     ) -> Result<GetKillmailsKillmailIdKillmailHashOk, GetKillmailsKillmailIdKillmailHashSuccess>
     {
         if let GetKillmailsKillmailIdKillmailHashSuccess::Status200(ok) = self {
+            Ok(ok)
+        } else {
+            Err(self)
+        }
+    }
+}
+impl ToResult<Vec<i32>, GetRouteOriginDestinationSuccess> for GetRouteOriginDestinationSuccess {
+    fn into_result(self) -> Result<Vec<i32>, GetRouteOriginDestinationSuccess> {
+        if let GetRouteOriginDestinationSuccess::Status200(ok) = self {
             Ok(ok)
         } else {
             Err(self)

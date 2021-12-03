@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use chrono::Duration;
-use futures::{stream, StreamExt};
+use futures::{stream, FutureExt, StreamExt};
 
 use oauth2::TokenResponse;
 use rust_eveonline_esi::apis::{
@@ -88,7 +88,7 @@ async fn run() -> Result<()> {
     let force_refresh = cli_args.is_present(cli::FORCE_REFRESH);
 
     let mut pairs: Vec<SystemMarketsItemData> = CachedData::load_or_create_async(
-        format!("cache/{}-path_data", config_file_name),
+        format!("cache/{}.rmp", config_file_name),
         force_refresh,
         Some(Duration::hours(consts::TIMEOUT_HOURS)),
         || {
@@ -130,8 +130,20 @@ async fn run() -> Result<()> {
                     .await
                     .unwrap();
 
-                let source_history = esi_requests.history(&all_types, source_region);
-                let dest_history = esi_requests.history(&all_types, dest_region);
+                let source_history = CachedData::load_or_create_async(
+                    format!("cache/{}.rmp", config.source.name),
+                    force_refresh,
+                    Some(Duration::hours(consts::TIMEOUT_HOURS)),
+                    || async { esi_requests.history(&all_types, source_region).await },
+                )
+                .map(|x| x.data);
+                let dest_history = CachedData::load_or_create_async(
+                    format!("cache/{}.rmp", config.destination.name),
+                    force_refresh,
+                    Some(Duration::hours(consts::TIMEOUT_HOURS)),
+                    || async { esi_requests.history(&all_types, dest_region).await },
+                )
+                .map(|x| x.data);
 
                 let (source_history, dest_history) = join!(source_history, dest_history);
 

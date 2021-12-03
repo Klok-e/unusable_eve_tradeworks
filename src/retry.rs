@@ -6,7 +6,7 @@ use rust_eveonline_esi::apis::{
     killmails_api::GetKillmailsKillmailIdKillmailHashError,
     market_api::{GetMarketsRegionIdHistoryError, GetMarketsRegionIdOrdersError},
     universe_api::GetUniverseTypesTypeIdError,
-    ResponseContent,
+    ResponseContent, routes_api::GetRouteOriginDestinationError,
 };
 use thiserror::Error;
 
@@ -132,6 +132,20 @@ impl IntoCcpError for rust_eveonline_esi::apis::Error<GetMarketsRegionIdOrdersEr
     }
 }
 impl IntoCcpError for rust_eveonline_esi::apis::Error<GetKillmailsKillmailIdKillmailHashError> {
+    fn as_ccp_error(&self) -> CcpError {
+        match self {
+            rust_eveonline_esi::apis::Error::ResponseError(ResponseContent { status, .. }) => {
+                if status.as_u16() == 420 {
+                    CcpError::ErrorLimited
+                } else {
+                    CcpError::Other
+                }
+            }
+            _ => CcpError::Other,
+        }
+    }
+}
+impl IntoCcpError for rust_eveonline_esi::apis::Error<GetRouteOriginDestinationError> {
     fn as_ccp_error(&self) -> CcpError {
         match self {
             rust_eveonline_esi::apis::Error::ResponseError(ResponseContent { status, .. }) => {
