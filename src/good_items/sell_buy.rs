@@ -94,7 +94,7 @@ pub fn get_good_items_sell_buy(
 
             let margin = (fin_sell_price - fin_expenses) / fin_expenses;
 
-            let rough_profit = (fin_sell_price - expenses) * recommend_buy_vol as f64;
+            let rough_profit = (fin_sell_price - fin_expenses) * recommend_buy_vol as f64;
 
             Some(PairCalculatedDataSellBuy {
                 market: x,
