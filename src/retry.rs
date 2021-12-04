@@ -5,8 +5,9 @@ use futures::Future;
 use rust_eveonline_esi::apis::{
     killmails_api::GetKillmailsKillmailIdKillmailHashError,
     market_api::{GetMarketsRegionIdHistoryError, GetMarketsRegionIdOrdersError},
+    routes_api::GetRouteOriginDestinationError,
     universe_api::GetUniverseTypesTypeIdError,
-    ResponseContent, routes_api::GetRouteOriginDestinationError,
+    ResponseContent,
 };
 use thiserror::Error;
 

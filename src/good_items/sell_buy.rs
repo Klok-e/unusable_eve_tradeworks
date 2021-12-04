@@ -25,7 +25,7 @@ pub fn get_good_items_sell_buy(
             let src_avgs = averages(config, &x.source.history);
             let dst_avgs = averages(config, &x.destination.history);
 
-            let (recommend_buy_vol, dest_sell_price, expenses) = {
+            let (recommend_buy_vol, dest_sell_price, max_buy_price) = {
                 let mut source_sell_orders = x
                     .source
                     .orders
@@ -38,35 +38,34 @@ pub fn get_good_items_sell_buy(
 
                 let mut recommend_bought_volume = 0;
                 let mut sum_sell_price = 0.;
-                let mut sum_expenses = 0.;
-                'outer: for order in x
+                let mut max_buy_price = 0.;
+                'outer: for buy_order in x
                     .destination
                     .orders
                     .iter()
                     .filter(|x| x.is_buy_order)
                     .sorted_by_key(|x| NotNan::new(-x.price).unwrap())
                 {
-                    let mut buy_order_fulfilled = order.volume_remain;
+                    let mut buy_order_fulfilled = buy_order.volume_remain;
                     while buy_order_fulfilled > 0 {
                         let bought_volume =
                             buy_order_fulfilled.min(curr_src_sell_order.volume_remain);
                         buy_order_fulfilled -= bought_volume;
 
-                        let expenses = (curr_src_sell_order.price
-                            * (1. + config.broker_fee_source)
+                        let expenses = (max_buy_price * (1. + config.broker_fee_source)
                             + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
-                            + curr_src_sell_order.price * config.freight_cost_collateral_percent)
+                            + max_buy_price * config.freight_cost_collateral_percent)
                             * bought_volume as f64;
 
                         let sell_price =
-                            bought_volume as f64 * order.price * (1. - config.sales_tax);
+                            bought_volume as f64 * buy_order.price * (1. - config.sales_tax);
 
                         if expenses >= sell_price {
                             break;
                         }
                         curr_src_sell_order.volume_remain -= bought_volume;
-                        sum_expenses += curr_src_sell_order.price * bought_volume as f64;
-                        sum_sell_price += order.price * bought_volume as f64;
+                        max_buy_price = curr_src_sell_order.price.max(max_buy_price);
+                        sum_sell_price += buy_order.price * bought_volume as f64;
                         recommend_bought_volume += bought_volume;
 
                         if curr_src_sell_order.volume_remain == 0 {
@@ -82,9 +81,13 @@ pub fn get_good_items_sell_buy(
                 (
                     recommend_bought_volume,
                     sum_sell_price / recommend_bought_volume as f64,
-                    sum_expenses / recommend_bought_volume as f64,
+                    max_buy_price,
                 )
             };
+
+            // multibuy can only buy at a fixed price, so all buys from multiple sell orders
+            // with different prices have you paid the same price for all of them
+            let expenses = max_buy_price;
 
             let buy_with_broker_fee = expenses * (1. + config.broker_fee_source);
             let fin_expenses = buy_with_broker_fee

@@ -86,11 +86,16 @@ async fn run() -> Result<()> {
         .unwrap();
 
     let force_refresh = cli_args.is_present(cli::FORCE_REFRESH);
+    let force_no_refresh = cli_args.is_present(cli::FORCE_NO_REFRESH);
 
     let mut pairs: Vec<SystemMarketsItemData> = CachedData::load_or_create_async(
         format!("cache/{}.rmp", config_file_name),
         force_refresh,
-        Some(Duration::hours(consts::TIMEOUT_HOURS)),
+        if force_no_refresh {
+            None
+        } else {
+            Some(Duration::hours(config.refresh_timeout_hours))
+        },
         || {
             let esi_config = &esi_config;
             let config = &config;
@@ -133,14 +138,14 @@ async fn run() -> Result<()> {
                 let source_history = CachedData::load_or_create_async(
                     format!("cache/{}.rmp", config.source.name),
                     force_refresh,
-                    Some(Duration::hours(consts::TIMEOUT_HOURS)),
+                    Some(Duration::hours(config.refresh_timeout_hours)),
                     || async { esi_requests.history(&all_types, source_region).await },
                 )
                 .map(|x| x.data);
                 let dest_history = CachedData::load_or_create_async(
                     format!("cache/{}.rmp", config.destination.name),
                     force_refresh,
-                    Some(Duration::hours(consts::TIMEOUT_HOURS)),
+                    Some(Duration::hours(config.refresh_timeout_hours)),
                     || async { esi_requests.history(&all_types, dest_region).await },
                 )
                 .map(|x| x.data);
@@ -255,7 +260,7 @@ async fn run() -> Result<()> {
             let kms = CachedData::load_or_create_async(
                 "cache/zkb_losses",
                 force_refresh,
-                Some(Duration::hours(consts::TIMEOUT_HOURS)),
+                Some(Duration::hours(config.refresh_timeout_hours)),
                 || {
                     let esi_requests = &esi_requests;
                     let client = &esi_config.client;

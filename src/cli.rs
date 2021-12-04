@@ -9,6 +9,7 @@ pub const SELL_BUY: &str = "sell-buy";
 pub const DISPLAY_SIMPLE_LIST: &str = "simple-list";
 pub const DEBUG_ITEM_ID: &str = "debug-item";
 pub const FORCE_REFRESH: &str = "force-refresh";
+pub const FORCE_NO_REFRESH: &str = "force-no-refresh";
 pub const NAME_LENGTH: &str = "name-length";
 
 pub fn matches() -> ArgMatches<'static> {
@@ -61,7 +62,14 @@ pub fn matches() -> ArgMatches<'static> {
             Arg::with_name(FORCE_REFRESH)
                 .short("r")
                 .long("force-refresh")
-                .takes_value(false),
+                .takes_value(false)
+                .conflicts_with(FORCE_NO_REFRESH),
+        )
+        .arg(
+            Arg::with_name(FORCE_NO_REFRESH)
+                .long("force-no-refresh")
+                .takes_value(false)
+                .conflicts_with(FORCE_REFRESH),
         )
         .get_matches();
     matches

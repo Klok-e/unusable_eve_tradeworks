@@ -10,7 +10,7 @@ use crate::{
 
 pub fn total_buy_from_sell_order_price(x: &[Order], recommend_buy_vol: i32) -> f64 {
     let mut recommend_bought_volume = 0;
-    let mut total_price = 0.;
+    let mut max_price = 0.;
     for order in x
         .iter()
         .filter(|x| !x.is_buy_order)
@@ -20,12 +20,12 @@ pub fn total_buy_from_sell_order_price(x: &[Order], recommend_buy_vol: i32) -> f
             .volume_remain
             .min(recommend_buy_vol - recommend_bought_volume);
         recommend_bought_volume += current_buy;
-        total_price += order.price * current_buy as f64;
+        max_price = order.price.max(max_price);
         if recommend_buy_vol <= recommend_bought_volume {
             break;
         }
     }
-    total_price
+    max_price * recommend_bought_volume as f64
 }
 
 pub fn averages(config: &Config, history: &[ItemHistoryDay]) -> ItemTypeAveraged {

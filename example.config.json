@@ -13,6 +13,7 @@
   "min_dst_volume": 0.1,
   "min_dst_zkb_lost_volume": 1,
   "zkb_download_pages": 20,
+  "refresh_timeout_hours": 10,
   "source": {
     "is_citadel": false,
     "name": "Jita IV - Moon 4 - Caldari Navy Assembly Plant"
