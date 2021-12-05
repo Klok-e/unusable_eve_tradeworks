@@ -52,9 +52,10 @@ pub fn get_good_items_sell_buy(
                             buy_order_fulfilled.min(curr_src_sell_order.volume_remain);
                         buy_order_fulfilled -= bought_volume;
 
-                        let expenses = (max_buy_price * (1. + config.broker_fee_source)
+                        let expenses = (curr_src_sell_order.price
+                            * (1. + config.broker_fee_source)
                             + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
-                            + max_buy_price * config.freight_cost_collateral_percent)
+                            + curr_src_sell_order.price * config.freight_cost_collateral_percent)
                             * bought_volume as f64;
 
                         let sell_price =
