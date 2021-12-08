@@ -8,7 +8,14 @@ use crate::{
     stat::AverageStat,
 };
 
-pub fn total_buy_from_sell_order_price(x: &[Order], recommend_buy_vol: i32) -> f64 {
+pub fn best_buy_volume_from_sell_to_sell(
+    x: &[Order],
+    recommend_buy_vol: i32,
+    sell_price: f64,
+    buy_broker_fee: f64,
+    sell_broker_fee: f64,
+    sell_tax: f64,
+) -> (f64, i32) {
     let mut recommend_bought_volume = 0;
     let mut max_price = 0.;
     for order in x
@@ -19,13 +26,23 @@ pub fn total_buy_from_sell_order_price(x: &[Order], recommend_buy_vol: i32) -> f
         let current_buy = order
             .volume_remain
             .min(recommend_buy_vol - recommend_bought_volume);
+
+        let profit =
+            sell_price * (1. - sell_broker_fee - sell_tax) - order.price * (1. + buy_broker_fee);
+        if profit <= 0. {
+            break;
+        }
+
         recommend_bought_volume += current_buy;
         max_price = order.price.max(max_price);
         if recommend_buy_vol <= recommend_bought_volume {
             break;
         }
     }
-    max_price * recommend_bought_volume as f64
+    (
+        max_price,
+        recommend_bought_volume,
+    )
 }
 
 pub fn averages(config: &Config, history: &[ItemHistoryDay]) -> ItemTypeAveraged {

@@ -9,7 +9,7 @@ use crate::{
     zkb::killmails::ItemFrequencies,
 };
 
-use super::help::{averages, total_buy_from_sell_order_price};
+use super::help::{averages, best_buy_volume_from_sell_to_sell};
 
 pub fn get_good_items_sell_sell_zkb(
     pairs: Vec<SystemMarketsItemData>,
@@ -32,29 +32,10 @@ pub fn get_good_items_sell_sell_zkb(
             let src_avgs = averages(config, &x.source.history);
             let dst_avgs = averages(config, &x.destination.history);
 
-            let recommend_buy_vol = (lost_per_day * config.rcmnd_fill_days)
+            let max_buy_vol = (lost_per_day * config.rcmnd_fill_days)
                 .max(1.)
                 .min(src_mkt_volume as f64)
                 .floor() as i32;
-
-            let src_sell_order_price = (!x.source.orders.iter().any(|x| !x.is_buy_order))
-                .then_some(src_avgs.highest.or_else(|| {
-                    log::debug!(
-                        "Item {} ({}) doesn't have any history in source.",
-                        x.desc.name,
-                        x.desc.type_id
-                    );
-                    None
-                })?)
-                .unwrap_or_else(|| {
-                    total_buy_from_sell_order_price(x.source.orders.as_slice(), recommend_buy_vol)
-                        / recommend_buy_vol as f64
-                });
-
-            let buy_price = src_sell_order_price * (1. + config.broker_fee_source);
-            let expenses = buy_price
-                + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
-                + buy_price * config.freight_cost_collateral_percent;
 
             // average can be none only if there's no history in dest
             // in this case we make history
@@ -64,15 +45,45 @@ pub fn get_good_items_sell_sell_zkb(
                     x.desc.name,
                     x.desc.type_id
                 );
-                expenses * 1.2
+                src_avgs.average.unwrap_or(0.) * 1.3
             });
+
+            let (buy_from_src_price, buy_from_src_volume) =
+                (!x.source.orders.iter().any(|x| !x.is_buy_order))
+                    .then_some((
+                        src_avgs.highest.or_else(|| {
+                            log::debug!(
+                                "Item {} ({}) doesn't have any history in source.",
+                                x.desc.name,
+                                x.desc.type_id
+                            );
+                            None
+                        })?,
+                        max_buy_vol,
+                    ))
+                    .unwrap_or_else(|| {
+                        let (price, volume) = best_buy_volume_from_sell_to_sell(
+                            x.source.orders.as_slice(),
+                            max_buy_vol,
+                            dest_sell_price,
+                            config.broker_fee_source,
+                            config.broker_fee_destination,
+                            config.sales_tax,
+                        );
+                        (price, volume)
+                    });
+
+            let buy_price = buy_from_src_price * (1. + config.broker_fee_source);
+            let expenses = buy_price
+                + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
+                + buy_price * config.freight_cost_collateral_percent;
 
             let sell_price =
                 dest_sell_price * (1. - config.broker_fee_destination - config.sales_tax);
 
             let margin = (sell_price - expenses) / expenses;
 
-            let rough_profit = (sell_price - expenses) * recommend_buy_vol as f64;
+            let rough_profit = (sell_price - expenses) * buy_from_src_volume as f64;
 
             let filled_for_days =
                 (lost_per_day > 0.).then(|| 1. / lost_per_day * dst_mkt_volume as f64);
@@ -82,11 +93,11 @@ pub fn get_good_items_sell_sell_zkb(
                 margin,
                 rough_profit,
                 market_dest_volume: dst_mkt_volume,
-                recommend_buy: recommend_buy_vol,
+                recommend_buy: buy_from_src_volume,
                 expenses,
                 sell_price,
                 filled_for_days,
-                src_buy_price: src_sell_order_price,
+                src_buy_price: buy_from_src_price,
                 dest_min_sell_price: dest_sell_price,
                 market_src_volume: src_mkt_volume,
                 src_avgs,

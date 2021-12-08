@@ -158,7 +158,7 @@ pub fn make_table_sell_buy<'a, 'b>(
         TableCell::new("mkt src"),
         TableCell::new("mkt dst"),
         TableCell::new("rough prft"),
-        TableCell::new("crfl buy"),
+        TableCell::new("crfl prft"),
         TableCell::new("rcmnd vlm"),
     ]))
     .chain(good_items.iter().map(|it| {
@@ -180,9 +180,9 @@ pub fn make_table_sell_buy<'a, 'b>(
             TableCell::new(format!(
                 "{}",
                 if (it.best_rough_profit - it.rough_profit) / it.rough_profit > 0.1 {
-                    "yes"
+                    format!("{:.2}", it.best_rough_profit - it.rough_profit)
                 } else {
-                    ""
+                    "".to_string()
                 }
             )),
             TableCell::new(format!("{}", it.recommend_buy)),
