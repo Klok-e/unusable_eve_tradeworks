@@ -39,10 +39,7 @@ pub fn best_buy_volume_from_sell_to_sell(
             break;
         }
     }
-    (
-        max_price,
-        recommend_bought_volume,
-    )
+    (max_price, recommend_bought_volume)
 }
 
 pub fn averages(config: &Config, history: &[ItemHistoryDay]) -> ItemTypeAveraged {

@@ -72,6 +72,9 @@ pub fn get_good_items_sell_sell_zkb(
                         );
                         (price, volume)
                     });
+            if buy_from_src_volume == 0 {
+                return None;
+            }
 
             let buy_price = buy_from_src_price * (1. + config.broker_fee_source);
             let expenses = buy_price
