@@ -6,9 +6,10 @@ use crate::{
     config::Config,
     item_type::{ItemTypeAveraged, SystemMarketsItemData},
     order_ext::OrderIterExt,
+    requests::to_not_nan,
 };
 
-use super::help::{averages, best_buy_volume_from_sell_to_sell};
+use super::help::{averages, best_buy_volume_from_sell_to_sell, max_avg_price};
 
 pub fn get_good_items_sell_sell(
     pairs: Vec<SystemMarketsItemData>,
@@ -26,9 +27,17 @@ pub fn get_good_items_sell_sell(
             let src_avgs = averages(config, &x.source.history);
             let dst_avgs = averages(config, &x.destination.history);
 
+            let dst_lowest_sell_order = dst_mkt_orders
+                .iter()
+                .filter(|x| !x.is_buy_order)
+                .map(|x| to_not_nan(x.price))
+                .min()
+                .map(|x| *x);
+            let dst_max_price = max_avg_price(config, &x.destination.history);
+
             // average can be none only if there's no history in dest
             // in this case we make history
-            let dest_sell_price = dst_avgs.average.unwrap_or_else(|| {
+            let dest_sell_price = dst_max_price.unwrap_or_else(|| {
                 log::debug!(
                     "Item {} ({}) doesn't have any history in destination.",
                     x.desc.name,
@@ -36,6 +45,8 @@ pub fn get_good_items_sell_sell(
                 );
                 src_avgs.average.unwrap_or(0.) * 1.3
             });
+            let dest_sell_price =
+                dst_lowest_sell_order.map_or(dest_sell_price, |x| x.min(dest_sell_price));
 
             let max_buy_vol = (dst_avgs.volume * config.rcmnd_fill_days)
                 .max(1.)

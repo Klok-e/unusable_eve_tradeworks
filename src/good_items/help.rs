@@ -84,3 +84,19 @@ pub fn averages(config: &Config, history: &[ItemHistoryDay]) -> ItemTypeAveraged
             .unwrap(),
     }
 }
+
+pub fn max_avg_price(config: &Config, history: &[ItemHistoryDay]) -> Option<f64> {
+    let lastndays = history
+        .iter()
+        .rev()
+        .take(config.days_average)
+        .collect::<Vec<_>>();
+
+    lastndays
+        .iter()
+        .map(|x| x.average)
+        .flatten()
+        .map(to_not_nan)
+        .max()
+        .map(|x| *x)
+}
