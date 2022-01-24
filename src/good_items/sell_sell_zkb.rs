@@ -124,6 +124,9 @@ pub fn get_good_items_sell_sell_zkb(
         .filter(|x| {
             x.src_avgs.volume > config.min_src_volume
                 && x.lost_per_day > config.min_dst_zkb_lost_volume
+                && config
+                    .min_profit
+                    .map_or(true, |min_prft| x.rough_profit > min_prft)
         })
         .filter(|x| {
             if let Some(filled_for_days) = x.filled_for_days {

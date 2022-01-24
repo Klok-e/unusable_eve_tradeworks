@@ -36,6 +36,7 @@ pub struct Config {
     pub destination: Station,
     pub zkill_entity: ZkillEntity,
     pub refresh_timeout_hours: i64,
+    pub min_profit: Option<f64>,
 }
 
 impl Config {

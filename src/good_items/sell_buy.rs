@@ -134,7 +134,11 @@ pub fn get_good_items_sell_buy(
         .flatten()
         .filter(|x| x.best_margin > config.margin_cutoff)
         .filter(|x| {
-            x.src_avgs.volume > config.min_src_volume && x.dst_avgs.volume > config.min_dst_volume
+            x.src_avgs.volume > config.min_src_volume
+                && x.dst_avgs.volume > config.min_dst_volume
+                && config
+                    .min_profit
+                    .map_or(true, |min_prft| x.best_rough_profit > min_prft)
         })
         .sorted_unstable_by_key(|x| NotNan::new(-x.best_rough_profit).unwrap())
         .take(config.items_take)

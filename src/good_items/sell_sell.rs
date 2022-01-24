@@ -115,7 +115,11 @@ pub fn get_good_items_sell_sell(
         .flatten()
         .filter(|x| x.margin > config.margin_cutoff)
         .filter(|x| {
-            x.src_avgs.volume > config.min_src_volume && x.dst_avgs.volume > config.min_dst_volume
+            x.src_avgs.volume > config.min_src_volume
+                && x.dst_avgs.volume > config.min_dst_volume
+                && config
+                    .min_profit
+                    .map_or(true, |min_prft| x.rough_profit > min_prft)
         })
         .filter(|x| {
             if let Some(filled_for_days) = x.filled_for_days {
