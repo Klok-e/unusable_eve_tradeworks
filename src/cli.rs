@@ -11,6 +11,7 @@ pub const DEBUG_ITEM_ID: &str = "debug-item";
 pub const FORCE_REFRESH: &str = "force-refresh";
 pub const FORCE_NO_REFRESH: &str = "force-no-refresh";
 pub const NAME_LENGTH: &str = "name-length";
+pub const QUIET: &str = "quiet";
 
 pub fn matches() -> ArgMatches<'static> {
     let matches = App::new("Eve Tradeworks")
@@ -71,6 +72,7 @@ pub fn matches() -> ArgMatches<'static> {
                 .takes_value(false)
                 .conflicts_with(FORCE_REFRESH),
         )
+        .arg(Arg::with_name(QUIET).short("q").takes_value(false))
         .get_matches();
     matches
 }

@@ -49,9 +49,10 @@ async fn main() -> Result<()> {
 }
 
 async fn run() -> Result<()> {
-    logger::setup_logger()?;
-
     let cli_args = cli::matches();
+
+    let quiet = cli_args.is_present(cli::QUIET);
+    logger::setup_logger(quiet)?;
 
     let config_file_name = cli_args.value_of(cli::CONFIG).unwrap_or("config.json");
     let config = Config::from_file_json(config_file_name)?;
@@ -293,7 +294,8 @@ async fn run() -> Result<()> {
     };
 
     let table = TableBuilder::new().rows(rows).build();
-    println!("Maybe good items:\n{}", table.render());
+
+    println!("{}", table.render());
 
     if cli_args.is_present(cli::DISPLAY_SIMPLE_LIST) {
         let format = simple_list

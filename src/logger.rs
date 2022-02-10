@@ -1,4 +1,4 @@
-pub fn setup_logger() -> Result<(), fern::InitError> {
+pub fn setup_logger(quiet: bool) -> Result<(), fern::InitError> {
     fern::Dispatch::new()
         .format(|out, message, record| {
             out.finish(format_args!(
@@ -12,7 +12,11 @@ pub fn setup_logger() -> Result<(), fern::InitError> {
         .level(log::LevelFilter::Debug)
         .chain(
             fern::Dispatch::new()
-                .level(log::LevelFilter::Info)
+                .level(if quiet {
+                    log::LevelFilter::Off
+                } else {
+                    log::LevelFilter::Info
+                })
                 .chain(std::io::stdout()),
         )
         .chain(
