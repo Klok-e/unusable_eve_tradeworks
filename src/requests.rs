@@ -337,7 +337,7 @@ impl<'a> EsiRequestsService<'a> {
                                 get_markets_region_id_orders_200_ok::Range::_30 => 30,
                                 get_markets_region_id_orders_200_ok::Range::_40 => 40,
                                 get_markets_region_id_orders_200_ok::Range::Region => 40,
-                            }) >= dist
+                            }) >= dist - 1
                     } else {
                         false
                     })
