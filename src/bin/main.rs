@@ -116,7 +116,7 @@ async fn run() -> Result<()> {
                 let all_types = CachedData::load_or_create_json_async(
                     "cache/all_types.json",
                     force_refresh,
-                    None,
+                    Some(Duration::days(7)),
                     || async {
                         let mut all_types =
                             get_all_item_types(esi_config, source_region.region_id).await;
