@@ -154,9 +154,10 @@ pub fn prepare_sell_sell(
     let expenses = buy_price
         + market_data.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
         + buy_price * config.freight_cost_collateral_percent;
-    let sell_price = dest_sell_price * (1. - config.broker_fee_destination - config.sales_tax);
-    let margin = (sell_price - expenses) / expenses;
-    let rough_profit = (sell_price - expenses) * buy_from_src_volume as f64;
+    let sell_price_with_taxes =
+        dest_sell_price * (1. - config.broker_fee_destination - config.sales_tax);
+    let margin = (sell_price_with_taxes - expenses) / expenses;
+    let rough_profit = (sell_price_with_taxes - expenses) * buy_from_src_volume as f64;
     let filled_for_days =
         (volume_dest > 0.).then(|| 1. / volume_dest * dst_volume_on_market as f64);
     PairCalculatedDataSellSellCommon {
@@ -166,7 +167,7 @@ pub fn prepare_sell_sell(
         market_dest_volume: dst_volume_on_market,
         recommend_buy: buy_from_src_volume,
         expenses,
-        sell_price,
+        sell_price: sell_price_with_taxes,
         filled_for_days,
         src_buy_price: buy_from_src_price,
         dest_min_sell_price: dest_sell_price,

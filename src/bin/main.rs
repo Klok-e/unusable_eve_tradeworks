@@ -9,7 +9,7 @@ use rust_eveonline_esi::apis::{
     market_api::{self, GetMarketsRegionIdTypesParams},
 };
 
-use term_table::TableBuilder;
+use term_table::{row::Row, table_cell::TableCell, TableBuilder, TableStyle};
 use tokio::join;
 
 use serde::{Deserialize, Serialize};
@@ -243,6 +243,7 @@ async fn run() -> Result<()> {
                 .map(|x| SimpleDisplay {
                     name: x.market.desc.name.clone(),
                     recommend_buy: x.recommend_buy,
+                    sell_price: x.dest_min_sell_price,
                 })
                 .collect();
             make_table_sell_sell(&good_items, name_len)
@@ -254,6 +255,7 @@ async fn run() -> Result<()> {
                 .map(|x| SimpleDisplay {
                     name: x.market.desc.name.clone(),
                     recommend_buy: x.recommend_buy,
+                    sell_price: x.dest_min_sell_price,
                 })
                 .collect();
             make_table_sell_buy(&good_items, name_len)
@@ -292,6 +294,7 @@ async fn run() -> Result<()> {
                 .map(|x| SimpleDisplay {
                     name: x.market.desc.name.clone(),
                     recommend_buy: x.recommend_buy,
+                    sell_price: x.dest_min_sell_price,
                 })
                 .collect();
             make_table_sell_sell_zkb(&good_items, name_len)
@@ -299,15 +302,48 @@ async fn run() -> Result<()> {
     };
 
     let table = TableBuilder::new().rows(rows).build();
-
     println!("{}", table.render());
 
     if cli_args.is_present(cli::DISPLAY_SIMPLE_LIST) {
-        let format = simple_list
+        let rows = simple_list
             .iter()
-            .map(|it| format!("{} {}", it.name, it.recommend_buy))
+            .map(|it| {
+                Row::new(vec![
+                    TableCell::new(it.name.clone()),
+                    TableCell::new(it.recommend_buy),
+                ])
+            })
             .collect::<Vec<_>>();
-        println!("Item names only:\n{}", format.join("\n"));
+
+        let table = TableBuilder::new()
+            .style(TableStyle::empty())
+            .separate_rows(false)
+            .has_bottom_boarder(false)
+            .has_top_boarder(false)
+            .rows(rows)
+            .build();
+        println!("Item names only:\n{}", table.render());
+    }
+    if cli_args.is_present(cli::DISPLAY_SIMPLE_LIST_PRICE) {
+        let rows = simple_list
+            .iter()
+            .map(|it| {
+                Row::new(vec![
+                    TableCell::new(it.name.clone()),
+                    TableCell::new(it.recommend_buy),
+                    TableCell::new(it.sell_price),
+                ])
+            })
+            .collect::<Vec<_>>();
+
+        let table = TableBuilder::new()
+            .style(TableStyle::empty())
+            .separate_rows(false)
+            .has_bottom_boarder(false)
+            .has_top_boarder(false)
+            .rows(rows)
+            .build();
+        println!("Item names only:\n{}", table.render());
     }
     Ok(())
 }
@@ -315,4 +351,5 @@ async fn run() -> Result<()> {
 pub struct SimpleDisplay {
     pub name: String,
     pub recommend_buy: i32,
+    pub sell_price: f64,
 }

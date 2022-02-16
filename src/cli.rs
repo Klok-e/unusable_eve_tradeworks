@@ -7,6 +7,7 @@ pub const SELL_SELL: &str = "sell-sell";
 pub const SELL_SELL_ZKB: &str = "sell-sell-zkb";
 pub const SELL_BUY: &str = "sell-buy";
 pub const DISPLAY_SIMPLE_LIST: &str = "simple-list";
+pub const DISPLAY_SIMPLE_LIST_PRICE: &str = "simple-list-price";
 pub const DEBUG_ITEM_ID: &str = "debug-item";
 pub const FORCE_REFRESH: &str = "force-refresh";
 pub const FORCE_NO_REFRESH: &str = "force-no-refresh";
@@ -46,6 +47,12 @@ pub fn matches() -> ArgMatches<'static> {
             Arg::with_name(DISPLAY_SIMPLE_LIST)
                 .short("l")
                 .long("simple-list")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name(DISPLAY_SIMPLE_LIST_PRICE)
+                .short("p")
+                .long("simple-list-price")
                 .takes_value(false),
         )
         .arg(
