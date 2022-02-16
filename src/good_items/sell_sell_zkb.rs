@@ -45,17 +45,15 @@ pub fn get_good_items_sell_sell_zkb(
                 None
             })?;
 
-            let volume_dest = lost_per_day;
-
             let common = prepare_sell_sell(
                 config,
                 x,
-                volume_dest,
+                lost_per_day,
                 src_volume_on_market,
                 src_avgs,
                 dst_volume_on_market,
                 dst_avgs,
-            )?;
+            );
             Some(PairCalculatedDataSellSellZkb {
                 common,
                 lost_per_day,

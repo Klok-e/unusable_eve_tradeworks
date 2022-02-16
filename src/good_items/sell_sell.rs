@@ -2,11 +2,7 @@ use itertools::Itertools;
 use ordered_float::NotNan;
 use term_table::{row::Row, table_cell::TableCell};
 
-use crate::{
-    config::Config,
-    item_type::{ItemTypeAveraged, SystemMarketsItemData},
-    order_ext::OrderIterExt,
-};
+use crate::{config::Config, item_type::SystemMarketsItemData, order_ext::OrderIterExt};
 
 use super::help::{averages, prepare_sell_sell, PairCalculatedDataSellSellCommon};
 
@@ -41,18 +37,15 @@ pub fn get_good_items_sell_sell(
                 None
             })?;
 
-            let volume_dest = dst_avgs.volume;
-
             let common = prepare_sell_sell(
                 config,
                 x,
-                volume_dest,
+                dst_avgs.volume,
                 src_volume_on_market,
                 src_avgs,
                 dst_volume_on_market,
                 dst_avgs,
-            )?;
-            dbg!("asdasdas");
+            );
 
             Some(PairCalculatedDataSellSell { common })
         })

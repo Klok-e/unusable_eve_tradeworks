@@ -23,6 +23,9 @@ pub fn best_buy_volume_from_sell_to_sell(
         .filter(|x| !x.is_buy_order)
         .sorted_by_key(|x| NotNan::new(x.price).unwrap())
     {
+        if max_price == 0. {
+            max_price = order.price;
+        }
         let current_buy = order
             .volume_remain
             .min(recommend_buy_vol - recommend_bought_volume);
@@ -71,6 +74,11 @@ pub fn averages(config: &Config, history: &[ItemHistoryDay]) -> Option<ItemTypeA
     }
 }
 
+// time is in 0..1 range
+fn time_weight(time: f64) -> f64 {
+    -(-3. * time).exp() + 1.05
+}
+
 pub fn weighted_price(config: &Config, history: &[ItemHistoryDay]) -> f64 {
     let last_n_days = history
         .iter()
@@ -78,11 +86,19 @@ pub fn weighted_price(config: &Config, history: &[ItemHistoryDay]) -> f64 {
         .take(config.days_average)
         .collect::<Vec<_>>();
 
-    let sum_volume = last_n_days.iter().map(|x| x.volume).sum::<i64>() as f64;
+    // scale volumes so that more recent ones are more important than old ones
+    let sum_volume = last_n_days
+        .iter()
+        .enumerate()
+        .map(|(i, x)| x.volume as f64 * time_weight(i as f64 / last_n_days.len() as f64))
+        .sum::<f64>();
 
     last_n_days
         .iter()
-        .map(|x| x.average.unwrap() * x.volume as f64)
+        .enumerate()
+        .map(|(i, x)| {
+            x.average.unwrap() * x.volume as f64 * time_weight(i as f64 / last_n_days.len() as f64)
+        })
         .sum::<f64>()
         / sum_volume
 }
@@ -111,7 +127,7 @@ pub fn prepare_sell_sell(
     src_avgs: Option<ItemTypeAveraged>,
     dst_volume_on_market: i32,
     dst_avgs: ItemTypeAveraged,
-) -> Option<PairCalculatedDataSellSellCommon> {
+) -> PairCalculatedDataSellSellCommon {
     let dst_lowest_sell_order = market_data
         .destination
         .orders
@@ -144,7 +160,7 @@ pub fn prepare_sell_sell(
     let rough_profit = (sell_price - expenses) * buy_from_src_volume as f64;
     let filled_for_days =
         (volume_dest > 0.).then(|| 1. / volume_dest * dst_volume_on_market as f64);
-    Some(PairCalculatedDataSellSellCommon {
+    PairCalculatedDataSellSellCommon {
         market: market_data,
         margin,
         rough_profit,
@@ -158,5 +174,5 @@ pub fn prepare_sell_sell(
         market_src_volume: src_volume_on_market,
         src_avgs,
         dst_avgs,
-    })
+    }
 }
