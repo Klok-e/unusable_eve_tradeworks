@@ -181,11 +181,11 @@ pub fn make_table_sell_buy<'a, 'b>(
             TableCell::new(format!("{:.2}", it.market_dest_volume)),
             TableCell::new(format!("{:.2}", it.rough_profit)),
             TableCell::new(
-                (if (it.best_rough_profit - it.rough_profit) / it.rough_profit > 0.1 {
+                if (it.best_rough_profit - it.rough_profit) / it.rough_profit > 0.1 {
                     format!("{:.2}", it.best_rough_profit - it.rough_profit)
                 } else {
                     "".to_string()
-                }),
+                },
             ),
             TableCell::new(format!("{}", it.recommend_buy)),
         ])
