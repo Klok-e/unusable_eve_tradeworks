@@ -123,6 +123,7 @@ async fn run() -> Result<()> {
                         let all_types_dest =
                             get_all_item_types(esi_config, dest_region.region_id).await;
                         all_types.extend(all_types_dest);
+                        all_types.sort_unstable();
                         all_types.dedup();
                         all_types
                     },
