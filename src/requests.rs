@@ -576,14 +576,13 @@ impl<'a> EsiRequestsService<'a> {
             .items
             .unwrap_or_default()
             .into_iter()
-            .map(|x| {
+            .flat_map(|x| {
                 std::iter::once(KillmailItem::from(x.clone())).chain(
                     x.items
                         .map(|x| x.into_iter().map(KillmailItem::from))
                         .unwrap_or_else(|| Vec::new().into_iter().map(KillmailItem::from)),
                 )
             })
-            .flatten()
             .map(|item| {
                 let qty = item.quantity_destroyed.unwrap_or(0) + item.quantity_dropped.unwrap_or(0);
                 if qty < 1 {

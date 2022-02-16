@@ -15,7 +15,7 @@ pub fn get_good_items_sell_buy(
 ) -> Vec<PairCalculatedDataSellBuy> {
     pairs
         .into_iter()
-        .map(|x| {
+        .filter_map(|x| {
             let src_mkt_orders = x.source.orders.clone();
             let src_mkt_volume = src_mkt_orders.iter().sell_order_volume();
 
@@ -131,7 +131,6 @@ pub fn get_good_items_sell_buy(
                 dst_avgs,
             })
         })
-        .flatten()
         .filter(|x| x.best_margin > config.margin_cutoff)
         .filter(|x| {
             x.src_avgs.volume > config.min_src_volume
@@ -181,14 +180,13 @@ pub fn make_table_sell_buy<'a, 'b>(
             TableCell::new(format!("{:.2}", it.market_src_volume)),
             TableCell::new(format!("{:.2}", it.market_dest_volume)),
             TableCell::new(format!("{:.2}", it.rough_profit)),
-            TableCell::new(format!(
-                "{}",
-                if (it.best_rough_profit - it.rough_profit) / it.rough_profit > 0.1 {
+            TableCell::new(
+                (if (it.best_rough_profit - it.rough_profit) / it.rough_profit > 0.1 {
                     format!("{:.2}", it.best_rough_profit - it.rough_profit)
                 } else {
                     "".to_string()
-                }
-            )),
+                }),
+            ),
             TableCell::new(format!("{}", it.recommend_buy)),
         ])
     }))

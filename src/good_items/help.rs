@@ -3,7 +3,7 @@ use ordered_float::NotNan;
 
 use crate::{
     config::Config,
-    item_type::{ItemHistoryDay, ItemTypeAveraged, Order},
+    item_type::{ItemHistoryDay, ItemTypeAveraged, Order, SystemMarketsItemData},
     requests::to_not_nan,
     stat::AverageStat,
 };
@@ -51,22 +51,19 @@ pub fn averages(config: &Config, history: &[ItemHistoryDay]) -> ItemTypeAveraged
     ItemTypeAveraged {
         average: lastndays
             .iter()
-            .map(|x| x.average)
-            .flatten()
+            .filter_map(|x| x.average)
             .map(to_not_nan)
             .average()
             .map(|x| *x),
         highest: lastndays
             .iter()
-            .map(|x| x.highest)
-            .flatten()
+            .filter_map(|x| x.highest)
             .map(to_not_nan)
             .average()
             .map(|x| *x),
         lowest: lastndays
             .iter()
-            .map(|x| x.lowest)
-            .flatten()
+            .filter_map(|x| x.lowest)
             .map(to_not_nan)
             .average()
             .map(|x| *x),
@@ -94,9 +91,106 @@ pub fn max_avg_price(config: &Config, history: &[ItemHistoryDay]) -> Option<f64>
 
     lastndays
         .iter()
-        .map(|x| x.average)
-        .flatten()
+        .filter_map(|x| x.average)
         .map(to_not_nan)
         .max()
         .map(|x| *x)
+}
+
+pub struct PairCalculatedDataSellSellCommon {
+    pub market: SystemMarketsItemData,
+    pub margin: f64,
+    pub rough_profit: f64,
+    pub market_dest_volume: i32,
+    pub recommend_buy: i32,
+    pub expenses: f64,
+    pub sell_price: f64,
+    pub filled_for_days: Option<f64>,
+    pub src_buy_price: f64,
+    pub dest_min_sell_price: f64,
+    pub src_avgs: ItemTypeAveraged,
+    pub dst_avgs: ItemTypeAveraged,
+    pub market_src_volume: i32,
+}
+
+pub fn prepare_sell_sell(
+    dst_mkt_orders: Vec<crate::item_type::Order>,
+    config: &Config,
+    x: SystemMarketsItemData,
+    volume_dest: f64,
+    src_mkt_volume: i32,
+    src_avgs: ItemTypeAveraged,
+    dst_mkt_volume: i32,
+    dst_avgs: ItemTypeAveraged,
+) -> Option<PairCalculatedDataSellSellCommon> {
+    let dst_lowest_sell_order = dst_mkt_orders
+        .iter()
+        .filter(|x| !x.is_buy_order)
+        .map(|x| to_not_nan(x.price))
+        .min()
+        .map(|x| *x);
+    let dst_max_price = max_avg_price(config, &x.destination.history);
+    let dest_sell_price = dst_max_price.unwrap_or_else(|| {
+        log::debug!(
+            "Item {} ({}) doesn't have any history in destination.",
+            x.desc.name,
+            x.desc.type_id
+        );
+        src_avgs.average.unwrap_or(0.) * 1.3
+    });
+    let dest_sell_price = dst_lowest_sell_order.map_or(dest_sell_price, |x| x.min(dest_sell_price));
+    let max_buy_vol = (volume_dest * config.rcmnd_fill_days)
+        .max(1.)
+        .min(src_mkt_volume as f64)
+        .floor() as i32;
+    let (buy_from_src_price, buy_from_src_volume) =
+        (!x.source.orders.iter().any(|x| !x.is_buy_order))
+            .then_some((
+                src_avgs.highest.or_else(|| {
+                    log::debug!(
+                        "Item {} ({}) doesn't have any history in source.",
+                        x.desc.name,
+                        x.desc.type_id
+                    );
+                    None
+                })?,
+                max_buy_vol,
+            ))
+            .unwrap_or_else(|| {
+                let (price, volume) = best_buy_volume_from_sell_to_sell(
+                    x.source.orders.as_slice(),
+                    max_buy_vol,
+                    dest_sell_price,
+                    config.broker_fee_source,
+                    config.broker_fee_destination,
+                    config.sales_tax,
+                );
+                (price, volume)
+            });
+    if buy_from_src_volume == 0 {
+        return None;
+    }
+    let buy_price = buy_from_src_price * (1. + config.broker_fee_source);
+    let expenses = buy_price
+        + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
+        + buy_price * config.freight_cost_collateral_percent;
+    let sell_price = dest_sell_price * (1. - config.broker_fee_destination - config.sales_tax);
+    let margin = (sell_price - expenses) / expenses;
+    let rough_profit = (sell_price - expenses) * buy_from_src_volume as f64;
+    let filled_for_days = (volume_dest > 0.).then(|| 1. / volume_dest * dst_mkt_volume as f64);
+    Some(PairCalculatedDataSellSellCommon {
+        market: x,
+        margin,
+        rough_profit,
+        market_dest_volume: dst_mkt_volume,
+        recommend_buy: buy_from_src_volume,
+        expenses,
+        sell_price,
+        filled_for_days,
+        src_buy_price: buy_from_src_price,
+        dest_min_sell_price: dest_sell_price,
+        market_src_volume: src_mkt_volume,
+        src_avgs,
+        dst_avgs,
+    })
 }

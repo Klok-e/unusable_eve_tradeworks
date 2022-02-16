@@ -211,8 +211,7 @@ async fn run() -> Result<()> {
 
     if let Some(v) = cli_args
         .value_of(cli::DEBUG_ITEM_ID)
-        .map(|x| x.parse::<i32>().ok())
-        .flatten()
+        .and_then(|x| x.parse::<i32>().ok())
     {
         pairs.retain(|x| x.desc.type_id == v);
     }
@@ -220,7 +219,7 @@ async fn run() -> Result<()> {
     let simple_list: Vec<_>;
     let rows = {
         let cli_in = cli_args.value_of(cli::NAME_LENGTH);
-        let name_len = if let Some(v) = cli_in.map(|x| x.parse::<usize>().ok()).flatten() {
+        let name_len = if let Some(v) = cli_in.and_then(|x| x.parse::<usize>().ok()) {
             v
         } else {
             log::warn!(
