@@ -107,34 +107,28 @@ async fn run() -> Result<()> {
                     .await
                     .unwrap();
 
-                // all item type ids
-                let all_types = get_all_pages(
-                    |page| {
-                        let config = &esi_config;
-                        async move {
-                            market_api::get_markets_region_id_types(
-                                config,
-                                GetMarketsRegionIdTypesParams {
-                                    region_id: source_region.region_id,
-                                    datasource: None,
-                                    if_none_match: None,
-                                    page: Some(page),
-                                },
-                            )
-                            .await
-                            .unwrap()
-                            .entity
-                            .unwrap()
-                        }
-                    },
-                    1000,
-                )
-                .await;
-
                 let dest_region = esi_requests
                     .find_region_id_station(config.destination.clone(), character_id)
                     .await
                     .unwrap();
+
+                // all item type ids
+                let all_types = CachedData::load_or_create_json_async(
+                    "cache/all_types.json",
+                    force_refresh,
+                    None,
+                    || async {
+                        let mut all_types =
+                            get_all_item_types(esi_config, source_region.region_id).await;
+                        let all_types_dest =
+                            get_all_item_types(esi_config, dest_region.region_id).await;
+                        all_types.extend(all_types_dest);
+                        all_types.dedup();
+                        all_types
+                    },
+                )
+                .await
+                .data;
 
                 let source_history = CachedData::load_or_create_async(
                     format!("cache/{}.rmp", config.source.name),
@@ -346,6 +340,31 @@ async fn run() -> Result<()> {
         println!("Item sell prices:\n{}", table.render());
     }
     Ok(())
+}
+
+async fn get_all_item_types(esi_config: &Configuration, region_id: i32) -> Vec<i32> {
+    get_all_pages(
+        |page| {
+            let config = &esi_config;
+            async move {
+                market_api::get_markets_region_id_types(
+                    config,
+                    GetMarketsRegionIdTypesParams {
+                        region_id: region_id,
+                        datasource: None,
+                        if_none_match: None,
+                        page: Some(page),
+                    },
+                )
+                .await
+                .unwrap()
+                .entity
+                .unwrap()
+            }
+        },
+        1000,
+    )
+    .await
 }
 
 pub struct SimpleDisplay {
