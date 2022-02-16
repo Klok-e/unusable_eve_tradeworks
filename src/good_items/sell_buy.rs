@@ -12,6 +12,7 @@ use super::help::averages;
 pub fn get_good_items_sell_buy(
     pairs: Vec<SystemMarketsItemData>,
     config: &Config,
+    disable_filters: bool,
 ) -> Vec<PairCalculatedDataSellBuy> {
     pairs
         .into_iter()
@@ -131,11 +132,12 @@ pub fn get_good_items_sell_buy(
                 dst_avgs,
             })
         })
-        .filter(|x| x.best_margin > config.margin_cutoff)
+        .filter(|x| disable_filters || x.best_margin > config.margin_cutoff)
         .filter(|x| {
-            config
-                .min_profit
-                .map_or(true, |min_prft| x.best_rough_profit > min_prft)
+            disable_filters
+                || config
+                    .min_profit
+                    .map_or(true, |min_prft| x.best_rough_profit > min_prft)
         })
         .sorted_unstable_by_key(|x| NotNan::new(-x.best_rough_profit).unwrap())
         .take(config.items_take)

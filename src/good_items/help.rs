@@ -135,9 +135,6 @@ pub fn prepare_sell_sell(
         config.broker_fee_destination,
         config.sales_tax,
     );
-    if buy_from_src_volume == 0 {
-        return None;
-    }
     let buy_price = buy_from_src_price * (1. + config.broker_fee_source);
     let expenses = buy_price
         + market_data.desc.volume.unwrap() as f64 * config.freight_cost_iskm3

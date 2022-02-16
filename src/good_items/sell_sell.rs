@@ -13,6 +13,7 @@ use super::help::{averages, prepare_sell_sell, PairCalculatedDataSellSellCommon}
 pub fn get_good_items_sell_sell(
     pairs: Vec<SystemMarketsItemData>,
     config: &Config,
+    disable_filters: bool,
 ) -> Vec<PairCalculatedDataSellSell> {
     pairs
         .into_iter()
@@ -51,23 +52,26 @@ pub fn get_good_items_sell_sell(
                 dst_volume_on_market,
                 dst_avgs,
             )?;
+            dbg!("asdasdas");
 
             Some(PairCalculatedDataSellSell { common })
         })
-        .filter(|x| x.margin > config.margin_cutoff)
+        .filter(|x| disable_filters || x.margin > config.margin_cutoff)
         .filter(|x| {
-            x.src_avgs.map(|x| x.volume).unwrap_or(0f64) > config.min_src_volume
-                && x.dst_avgs.volume > config.min_dst_volume
-                && config
-                    .min_profit
-                    .map_or(true, |min_prft| x.rough_profit > min_prft)
+            disable_filters
+                || x.src_avgs.map(|x| x.volume).unwrap_or(0f64) > config.min_src_volume
+                    && x.dst_avgs.volume > config.min_dst_volume
+                    && config
+                        .min_profit
+                        .map_or(true, |min_prft| x.rough_profit > min_prft)
         })
         .filter(|x| {
-            if let Some(filled_for_days) = x.filled_for_days {
-                filled_for_days < config.max_filled_for_days_cutoff
-            } else {
-                true
-            }
+            disable_filters
+                || if let Some(filled_for_days) = x.filled_for_days {
+                    filled_for_days < config.max_filled_for_days_cutoff
+                } else {
+                    true
+                }
         })
         .sorted_unstable_by_key(|x| NotNan::new(-x.rough_profit).unwrap())
         .take(config.items_take)

@@ -209,11 +209,13 @@ async fn run() -> Result<()> {
     .await
     .data;
 
+    let mut disable_filters = false;
     if let Some(v) = cli_args
         .value_of(cli::DEBUG_ITEM_ID)
         .and_then(|x| x.parse::<i32>().ok())
     {
         pairs.retain(|x| x.desc.type_id == v);
+        disable_filters = true;
     }
 
     let simple_list: Vec<_>;
@@ -235,7 +237,7 @@ async fn run() -> Result<()> {
         let sell_buy = cli_args.is_present(cli::SELL_BUY);
         if sell_sell || (!sell_buy && !sell_sell_zkb) {
             log::trace!("Sell sell path.");
-            let good_items = get_good_items_sell_sell(pairs, &config);
+            let good_items = get_good_items_sell_sell(pairs, &config, disable_filters);
             simple_list = good_items
                 .iter()
                 .map(|x| SimpleDisplay {
@@ -246,7 +248,7 @@ async fn run() -> Result<()> {
             make_table_sell_sell(&good_items, name_len)
         } else if sell_buy {
             log::trace!("Sell buy path.");
-            let good_items = get_good_items_sell_buy(pairs, &config);
+            let good_items = get_good_items_sell_buy(pairs, &config, disable_filters);
             simple_list = good_items
                 .iter()
                 .map(|x| SimpleDisplay {
@@ -284,7 +286,7 @@ async fn run() -> Result<()> {
             .await
             .data;
 
-            let good_items = get_good_items_sell_sell_zkb(pairs, kms, &config);
+            let good_items = get_good_items_sell_sell_zkb(pairs, kms, &config, disable_filters);
             simple_list = good_items
                 .iter()
                 .map(|x| SimpleDisplay {
