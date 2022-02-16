@@ -133,11 +133,9 @@ pub fn get_good_items_sell_buy(
         })
         .filter(|x| x.best_margin > config.margin_cutoff)
         .filter(|x| {
-            x.src_avgs.volume > config.min_src_volume
-                && x.dst_avgs.volume > config.min_dst_volume
-                && config
-                    .min_profit
-                    .map_or(true, |min_prft| x.best_rough_profit > min_prft)
+            config
+                .min_profit
+                .map_or(true, |min_prft| x.best_rough_profit > min_prft)
         })
         .sorted_unstable_by_key(|x| NotNan::new(-x.best_rough_profit).unwrap())
         .take(config.items_take)
@@ -175,8 +173,14 @@ pub fn make_table_sell_buy<'a, 'b>(
             TableCell::new(format!("{:.2}", it.expenses)),
             TableCell::new(format!("{:.2}", it.sell_price)),
             TableCell::new(format!("{:.2}", it.margin)),
-            TableCell::new(format!("{:.2}", it.src_avgs.volume)),
-            TableCell::new(format!("{:.2}", it.dst_avgs.volume)),
+            TableCell::new(format!(
+                "{:.2}",
+                it.src_avgs.map(|x| x.volume).unwrap_or(0f64)
+            )),
+            TableCell::new(format!(
+                "{:.2}",
+                it.dst_avgs.map(|x| x.volume).unwrap_or(0f64)
+            )),
             TableCell::new(format!("{:.2}", it.market_src_volume)),
             TableCell::new(format!("{:.2}", it.market_dest_volume)),
             TableCell::new(format!("{:.2}", it.rough_profit)),
@@ -204,8 +208,8 @@ pub struct PairCalculatedDataSellBuy {
     pub sell_price: f64,
     pub src_buy_price: f64,
     pub dest_min_sell_price: f64,
-    pub src_avgs: ItemTypeAveraged,
-    pub dst_avgs: ItemTypeAveraged,
+    pub src_avgs: Option<ItemTypeAveraged>,
+    pub dst_avgs: Option<ItemTypeAveraged>,
     pub market_src_volume: i32,
     best_rough_profit: f64,
     best_margin: f64,

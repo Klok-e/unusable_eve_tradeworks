@@ -32,12 +32,9 @@ pub struct Order {
     pub volume_total: i32,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Copy, Clone)]
 pub struct ItemTypeAveraged {
-    pub average: Option<f64>,
-    pub highest: Option<f64>,
-    pub lowest: Option<f64>,
-    pub order_count: f64,
+    pub average: f64,
     pub volume: f64,
 }
 

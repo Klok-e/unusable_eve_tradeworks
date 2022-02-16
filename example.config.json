@@ -9,7 +9,7 @@
   "freight_cost_iskm3": 1500,
   "freight_cost_collateral_percent": 0.01,
   "items_take": 10,
-  "min_src_volume": 2,
+  "min_src_volume": 0,
   "min_dst_volume": 0.1,
   "min_dst_zkb_lost_volume": 1,
   "zkb_download_pages": 20,

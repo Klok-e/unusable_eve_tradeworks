@@ -42,59 +42,49 @@ pub fn best_buy_volume_from_sell_to_sell(
     (max_price, recommend_bought_volume)
 }
 
-pub fn averages(config: &Config, history: &[ItemHistoryDay]) -> ItemTypeAveraged {
-    let lastndays = history
+pub fn averages(config: &Config, history: &[ItemHistoryDay]) -> Option<ItemTypeAveraged> {
+    let last_n_days = history
         .iter()
         .rev()
         .take(config.days_average)
         .collect::<Vec<_>>();
-    ItemTypeAveraged {
-        average: lastndays
-            .iter()
-            .filter_map(|x| x.average)
-            .map(to_not_nan)
-            .average()
-            .map(|x| *x),
-        highest: lastndays
-            .iter()
-            .filter_map(|x| x.highest)
-            .map(to_not_nan)
-            .average()
-            .map(|x| *x),
-        lowest: lastndays
-            .iter()
-            .filter_map(|x| x.lowest)
-            .map(to_not_nan)
-            .average()
-            .map(|x| *x),
-        order_count: *lastndays
-            .iter()
-            .map(|x| x.order_count as f64)
-            .map(to_not_nan)
-            .average()
-            .unwrap(),
-        volume: *lastndays
-            .iter()
-            .map(|x| x.volume as f64)
-            .map(to_not_nan)
-            .average()
-            .unwrap(),
+
+    let avg_price = last_n_days
+        .iter()
+        .map(|x| x.average)
+        .flatten()
+        .map(to_not_nan)
+        .average()
+        .map(|x| *x);
+    let avg_volume = *last_n_days
+        .iter()
+        .map(|x| x.volume as f64)
+        .map(to_not_nan)
+        .average()
+        .unwrap();
+    match (avg_price, avg_volume) {
+        (Some(p), v) => Some(ItemTypeAveraged {
+            average: p,
+            volume: v,
+        }),
+        _ => None,
     }
 }
 
-pub fn max_avg_price(config: &Config, history: &[ItemHistoryDay]) -> Option<f64> {
-    let lastndays = history
+pub fn weighted_price(config: &Config, history: &[ItemHistoryDay]) -> f64 {
+    let last_n_days = history
         .iter()
         .rev()
         .take(config.days_average)
         .collect::<Vec<_>>();
 
-    lastndays
+    let sum_volume = last_n_days.iter().map(|x| x.volume).sum::<i64>() as f64;
+
+    last_n_days
         .iter()
-        .filter_map(|x| x.average)
-        .map(to_not_nan)
-        .max()
-        .map(|x| *x)
+        .map(|x| x.average.unwrap() * x.volume as f64)
+        .sum::<f64>()
+        / sum_volume
 }
 
 pub struct PairCalculatedDataSellSellCommon {
@@ -108,71 +98,49 @@ pub struct PairCalculatedDataSellSellCommon {
     pub filled_for_days: Option<f64>,
     pub src_buy_price: f64,
     pub dest_min_sell_price: f64,
-    pub src_avgs: ItemTypeAveraged,
+    pub src_avgs: Option<ItemTypeAveraged>,
     pub dst_avgs: ItemTypeAveraged,
     pub market_src_volume: i32,
 }
 
 pub fn prepare_sell_sell(
-    dst_mkt_orders: Vec<crate::item_type::Order>,
     config: &Config,
-    x: SystemMarketsItemData,
+    market_data: SystemMarketsItemData,
     volume_dest: f64,
     src_volume_on_market: i32,
-    src_avgs: ItemTypeAveraged,
+    src_avgs: Option<ItemTypeAveraged>,
     dst_volume_on_market: i32,
     dst_avgs: ItemTypeAveraged,
 ) -> Option<PairCalculatedDataSellSellCommon> {
-    let dst_lowest_sell_order = dst_mkt_orders
+    let dst_lowest_sell_order = market_data
+        .destination
+        .orders
         .iter()
         .filter(|x| !x.is_buy_order)
         .map(|x| to_not_nan(x.price))
         .min()
         .map(|x| *x);
-    let dst_max_price = max_avg_price(config, &x.destination.history);
-    let dest_sell_price = dst_max_price.unwrap_or_else(|| {
-        log::debug!(
-            "Item {} ({}) doesn't have any history in destination.",
-            x.desc.name,
-            x.desc.type_id
-        );
-        src_avgs.average.unwrap_or(0.) * 1.3
-    });
-    let dest_sell_price = dst_lowest_sell_order.map_or(dest_sell_price, |x| x.min(dest_sell_price));
+    let dst_weighted_price = weighted_price(config, &market_data.destination.history);
+    let dest_sell_price =
+        dst_lowest_sell_order.map_or(dst_weighted_price, |x| x.min(dst_weighted_price));
     let max_buy_vol = (volume_dest * config.rcmnd_fill_days)
         .max(1.)
         .min(src_volume_on_market as f64)
         .floor() as i32;
-    let (buy_from_src_price, buy_from_src_volume) =
-        (!x.source.orders.iter().any(|x| !x.is_buy_order))
-            .then_some((
-                src_avgs.highest.or_else(|| {
-                    log::debug!(
-                        "Item {} ({}) doesn't have any history in source.",
-                        x.desc.name,
-                        x.desc.type_id
-                    );
-                    None
-                })?,
-                max_buy_vol,
-            ))
-            .unwrap_or_else(|| {
-                let (price, volume) = best_buy_volume_from_sell_to_sell(
-                    x.source.orders.as_slice(),
-                    max_buy_vol,
-                    dest_sell_price,
-                    config.broker_fee_source,
-                    config.broker_fee_destination,
-                    config.sales_tax,
-                );
-                (price, volume)
-            });
+    let (buy_from_src_price, buy_from_src_volume) = best_buy_volume_from_sell_to_sell(
+        market_data.source.orders.as_slice(),
+        max_buy_vol,
+        dest_sell_price,
+        config.broker_fee_source,
+        config.broker_fee_destination,
+        config.sales_tax,
+    );
     if buy_from_src_volume == 0 {
         return None;
     }
     let buy_price = buy_from_src_price * (1. + config.broker_fee_source);
     let expenses = buy_price
-        + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
+        + market_data.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
         + buy_price * config.freight_cost_collateral_percent;
     let sell_price = dest_sell_price * (1. - config.broker_fee_destination - config.sales_tax);
     let margin = (sell_price - expenses) / expenses;
@@ -180,7 +148,7 @@ pub fn prepare_sell_sell(
     let filled_for_days =
         (volume_dest > 0.).then(|| 1. / volume_dest * dst_volume_on_market as f64);
     Some(PairCalculatedDataSellSellCommon {
-        market: x,
+        market: market_data,
         margin,
         rough_profit,
         market_dest_volume: dst_volume_on_market,

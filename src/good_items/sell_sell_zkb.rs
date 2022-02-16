@@ -27,13 +27,26 @@ pub fn get_good_items_sell_sell_zkb(
             let dst_mkt_orders = x.destination.orders.clone();
             let dst_volume_on_market: i32 = dst_mkt_orders.iter().sell_order_volume();
 
-            let src_avgs = averages(config, &x.source.history);
-            let dst_avgs = averages(config, &x.destination.history);
+            let src_avgs = averages(config, &x.source.history).or_else(|| {
+                log::debug!(
+                    "Item {} ({}) doesn't have any history in source.",
+                    x.desc.name,
+                    x.desc.type_id
+                );
+                None
+            });
+            let dst_avgs = averages(config, &x.destination.history).or_else(|| {
+                log::debug!(
+                    "Item {} ({}) doesn't have any history in destination.",
+                    x.desc.name,
+                    x.desc.type_id
+                );
+                None
+            })?;
 
             let volume_dest = lost_per_day;
 
             let common = prepare_sell_sell(
-                dst_mkt_orders,
                 config,
                 x,
                 volume_dest,
@@ -49,7 +62,7 @@ pub fn get_good_items_sell_sell_zkb(
         })
         .filter(|x| x.margin > config.margin_cutoff)
         .filter(|x| {
-            x.src_avgs.volume > config.min_src_volume
+            x.src_avgs.map(|x| x.volume).unwrap_or(0f64) > config.min_src_volume
                 && x.lost_per_day > config.min_dst_zkb_lost_volume
                 && config
                     .min_profit
@@ -99,7 +112,10 @@ pub fn make_table_sell_sell_zkb<'a, 'b>(
             TableCell::new(format!("{:.2}", it.expenses)),
             TableCell::new(format!("{:.2}", it.sell_price)),
             TableCell::new(format!("{:.2}", it.margin)),
-            TableCell::new(format!("{:.2}", it.src_avgs.volume)),
+            TableCell::new(format!(
+                "{:.2}",
+                it.src_avgs.map(|x| x.volume).unwrap_or(0f64)
+            )),
             TableCell::new(format!("{:.2}", it.dst_avgs.volume)),
             TableCell::new(format!("{:.2}", it.market_src_volume)),
             TableCell::new(format!("{:.2}", it.market_dest_volume)),
