@@ -260,7 +260,11 @@ async fn run() -> Result<()> {
             let kms = CachedData::load_or_create_async(
                 "cache/zkb_losses",
                 force_refresh,
-                Some(Duration::hours(config.refresh_timeout_hours)),
+                if force_no_refresh {
+                    None
+                } else {
+                    Some(Duration::hours(config.refresh_timeout_hours))
+                },
                 || {
                     let esi_requests = &esi_requests;
                     let client = &esi_config.client;

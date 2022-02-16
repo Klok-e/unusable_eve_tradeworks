@@ -177,7 +177,8 @@ pub fn prepare_sell_sell(
     let sell_price = dest_sell_price * (1. - config.broker_fee_destination - config.sales_tax);
     let margin = (sell_price - expenses) / expenses;
     let rough_profit = (sell_price - expenses) * buy_from_src_volume as f64;
-    let filled_for_days = (volume_dest > 0.).then(|| 1. / volume_dest * dst_volume_on_market as f64);
+    let filled_for_days =
+        (volume_dest > 0.).then(|| 1. / volume_dest * dst_volume_on_market as f64);
     Some(PairCalculatedDataSellSellCommon {
         market: x,
         margin,
