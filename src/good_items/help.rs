@@ -54,8 +54,7 @@ pub fn averages(config: &Config, history: &[ItemHistoryDay]) -> Option<ItemTypeA
 
     let avg_price = last_n_days
         .iter()
-        .map(|x| x.average)
-        .flatten()
+        .filter_map(|x| x.average)
         .map(to_not_nan)
         .average()
         .map(|x| *x);

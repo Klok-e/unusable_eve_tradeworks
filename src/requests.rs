@@ -141,8 +141,7 @@ impl<'a> EsiRequestsService<'a> {
         };
 
         // get system constellation
-        let constellation;
-        if let GetUniverseSystemsSystemIdSuccess::Status200(jita_const) =
+        let constellation = if let GetUniverseSystemsSystemIdSuccess::Status200(jita_const) =
             universe_api::get_universe_systems_system_id(
                 self.config,
                 GetUniverseSystemsSystemIdParams {
@@ -158,14 +157,13 @@ impl<'a> EsiRequestsService<'a> {
             .entity
             .unwrap()
         {
-            constellation = jita_const.constellation_id;
+            jita_const.constellation_id
         } else {
             panic!();
-        }
+        };
 
         // get system region
-        let region;
-        if let GetUniverseConstellationsConstellationIdSuccess::Status200(ok) =
+        let region = if let GetUniverseConstellationsConstellationIdSuccess::Status200(ok) =
             universe_api::get_universe_constellations_constellation_id(
                 self.config,
                 GetUniverseConstellationsConstellationIdParams {
@@ -181,10 +179,10 @@ impl<'a> EsiRequestsService<'a> {
             .entity
             .unwrap()
         {
-            region = ok.region_id;
+            ok.region_id
         } else {
             panic!();
-        }
+        };
         Ok(StationIdData {
             station_id: StationId {
                 is_citadel: station.is_citadel,
