@@ -322,7 +322,7 @@ async fn run() -> Result<()> {
             .has_top_boarder(false)
             .rows(rows)
             .build();
-        println!("Item names only:\n{}", table.render());
+        println!("Item names:\n{}", table.render());
     }
     if cli_args.is_present(cli::DISPLAY_SIMPLE_LIST_PRICE) {
         let rows = simple_list
@@ -331,7 +331,7 @@ async fn run() -> Result<()> {
                 Row::new(vec![
                     TableCell::new(it.name.clone()),
                     TableCell::new(it.recommend_buy),
-                    TableCell::new(it.sell_price),
+                    TableCell::new(format!("{:.2}", it.sell_price)),
                 ])
             })
             .collect::<Vec<_>>();
@@ -343,7 +343,7 @@ async fn run() -> Result<()> {
             .has_top_boarder(false)
             .rows(rows)
             .build();
-        println!("Item names only:\n{}", table.render());
+        println!("Item sell prices:\n{}", table.render());
     }
     Ok(())
 }
