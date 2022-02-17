@@ -27,8 +27,8 @@ use unusable_eve_tradeworks_lib::{
     },
     item_type::{SystemMarketsItem, SystemMarketsItemData},
     logger,
-    paged_all::get_all_pages,
-    requests::EsiRequestsService,
+    requests::paged_all::get_all_pages,
+    requests::requests::EsiRequestsService,
     zkb::{killmails::KillmailService, zkb_requests::ZkbRequestsService},
 };
 
@@ -125,28 +125,27 @@ async fn run() -> Result<()> {
                         all_types.extend(all_types_dest);
                         all_types.sort_unstable();
                         all_types.dedup();
-                        all_types
+                        Ok(all_types)
                     },
                 )
-                .await
+                .await?
                 .data;
 
                 let source_history = CachedData::load_or_create_async(
                     format!("cache/{}.rmp", config.source.name),
                     force_refresh,
                     Some(Duration::hours(config.refresh_timeout_hours)),
-                    || async { esi_requests.history(&all_types, source_region).await },
-                )
-                .map(|x| x.data);
+                    || async { Ok(esi_requests.history(&all_types, source_region).await?) },
+                );
                 let dest_history = CachedData::load_or_create_async(
                     format!("cache/{}.rmp", config.destination.name),
                     force_refresh,
                     Some(Duration::hours(config.refresh_timeout_hours)),
-                    || async { esi_requests.history(&all_types, dest_region).await },
-                )
-                .map(|x| x.data);
+                    || async { Ok(esi_requests.history(&all_types, dest_region).await?) },
+                );
 
                 let (source_history, dest_history) = join!(source_history, dest_history);
+                let (source_history, dest_history) = (source_history?.data, dest_history?.data);
 
                 // turn history into n day average
                 let source_types_average = source_history
@@ -177,7 +176,7 @@ async fn run() -> Result<()> {
                     })
                 });
 
-                stream::iter(pairs)
+                Ok(stream::iter(pairs)
                     .map(|it| {
                         let it = it;
                         let esi_requests = &esi_requests;
@@ -197,11 +196,11 @@ async fn run() -> Result<()> {
                     .await
                     .into_iter()
                     .flatten()
-                    .collect()
+                    .collect())
             }
         },
     )
-    .await
+    .await?
     .data;
 
     let mut disable_filters = false;
@@ -271,16 +270,16 @@ async fn run() -> Result<()> {
                     async move {
                         let zkb = ZkbRequestsService::new(client);
                         let km_service = KillmailService::new(&zkb, esi_requests);
-                        km_service
+                        Ok(km_service
                             .get_kill_item_frequencies(
                                 &config.zkill_entity,
                                 config.zkb_download_pages,
                             )
-                            .await
+                            .await)
                     }
                 },
             )
-            .await
+            .await?
             .data;
 
             let good_items = get_good_items_sell_sell_zkb(pairs, kms, &config, disable_filters);
@@ -346,27 +345,24 @@ async fn run() -> Result<()> {
 }
 
 async fn get_all_item_types(esi_config: &Configuration, region_id: i32) -> Vec<i32> {
-    get_all_pages(
-        |page| {
-            let config = &esi_config;
-            async move {
-                market_api::get_markets_region_id_types(
-                    config,
-                    GetMarketsRegionIdTypesParams {
-                        region_id: region_id,
-                        datasource: None,
-                        if_none_match: None,
-                        page: Some(page),
-                    },
-                )
-                .await
-                .unwrap()
-                .entity
-                .unwrap()
-            }
-        },
-        1000,
-    )
+    get_all_pages(|page| {
+        let config = &esi_config;
+        async move {
+            market_api::get_markets_region_id_types(
+                config,
+                GetMarketsRegionIdTypesParams {
+                    region_id: region_id,
+                    datasource: None,
+                    if_none_match: None,
+                    page: Some(page),
+                },
+            )
+            .await
+            .unwrap()
+            .entity
+            .unwrap()
+        }
+    })
     .await
 }
 

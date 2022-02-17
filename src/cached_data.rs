@@ -1,5 +1,6 @@
 use std::{future::Future, path::Path};
 
+use super::error::Result;
 use chrono::{DateTime, Utc};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -17,10 +18,10 @@ where
         refresh: bool,
         timeout: Option<chrono::Duration>,
         gen: F,
-    ) -> Self
+    ) -> Result<Self>
     where
         F: FnOnce() -> FO,
-        FO: Future<Output = T>,
+        FO: Future<Output = Result<T>>,
     {
         Self::load_data_or_create_async(path, DataFormat::Bin, refresh, timeout, gen).await
     }
@@ -30,10 +31,10 @@ where
         refresh: bool,
         timeout: Option<chrono::Duration>,
         gen: F,
-    ) -> Self
+    ) -> Result<Self>
     where
         F: FnOnce() -> FO,
-        FO: Future<Output = T>,
+        FO: Future<Output = Result<T>>,
     {
         Self::load_data_or_create_async(path, DataFormat::Json, refresh, timeout, gen).await
     }
@@ -44,10 +45,10 @@ where
         refresh: bool,
         timeout: Option<chrono::Duration>,
         gen: F,
-    ) -> Self
+    ) -> Result<Self>
     where
         F: FnOnce() -> FO,
-        FO: Future<Output = T>,
+        FO: Future<Output = Result<T>>,
     {
         let cont = if path.as_ref().exists() && !refresh {
             let str = std::fs::read(path.as_ref()).unwrap();
@@ -64,7 +65,7 @@ where
                         deser.time + timeout,
                         Utc::now()
                     );
-                    gen_and_save(&path, gen, format).await
+                    gen_and_save(&path, gen, format).await?
                 }
                 _ => {
                     log::info!("Path {:?} loaded", path.as_ref());
@@ -72,20 +73,24 @@ where
                 }
             }
         } else {
-            gen_and_save(&path, gen, format).await
+            gen_and_save(&path, gen, format).await?
         };
-        Self { data: cont.data }
+        Ok(Self { data: cont.data })
     }
 }
 
-async fn gen_and_save<T, F, FO>(path: &impl AsRef<Path>, gen: F, format: DataFormat) -> Container<T>
+async fn gen_and_save<T, F, FO>(
+    path: &impl AsRef<Path>,
+    gen: F,
+    format: DataFormat,
+) -> Result<Container<T>>
 where
     F: FnOnce() -> FO,
-    FO: Future<Output = T>,
+    FO: Future<Output = Result<T>>,
     T: Serialize,
 {
     log::info!("Generating path {:?}", path.as_ref());
-    let generated = gen().await;
+    let generated = gen().await?;
     let generated = Container {
         data: generated,
         time: Utc::now(),
@@ -98,7 +103,7 @@ where
     comp.pop();
     std::fs::create_dir_all(comp).unwrap();
     std::fs::write(path.as_ref(), s).unwrap();
-    generated
+    Ok(generated)
 }
 
 enum DataFormat {

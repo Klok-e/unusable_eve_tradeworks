@@ -23,12 +23,13 @@ impl Auth {
             let token = Self::request_new(config).await;
             let expiration_date =
                 Utc::now() + chrono::Duration::from_std(token.expires_in().unwrap()).unwrap();
-            Auth {
+            Ok(Auth {
                 token,
                 expiration_date,
-            }
+            })
         })
         .await
+        .unwrap()
         .data;
 
         // if expired use refresh token
@@ -49,9 +50,10 @@ impl Auth {
 
             CachedData::load_or_create_json_async(path, true, None, || {
                 let data = data.clone();
-                async { data }
+                async { Ok(data) }
             })
-            .await;
+            .await
+            .unwrap();
         }
 
         data

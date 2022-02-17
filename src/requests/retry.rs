@@ -65,6 +65,8 @@ where
                     None
                 } else {
                     retries += 1;
+                    // don't make too many retries sequentially
+                    tokio::time::sleep(Duration::from_secs_f32(1.)).await;
                     continue;
                 }
             }

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::retry::{retry_simple, Retry};
+use crate::requests::retry::{retry_simple, Retry};
 
 pub struct ZkbRequestsService<'a> {
     client: &'a reqwest::Client,

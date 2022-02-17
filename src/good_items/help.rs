@@ -4,7 +4,7 @@ use ordered_float::NotNan;
 use crate::{
     config::Config,
     item_type::{ItemHistoryDay, ItemTypeAveraged, Order, SystemMarketsItemData},
-    requests::to_not_nan,
+    requests::requests::to_not_nan,
     stat::AverageStat,
 };
 

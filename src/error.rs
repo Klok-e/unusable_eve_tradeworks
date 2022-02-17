@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use rust_eveonline_esi::apis::{
     self,
     market_api::{GetMarketsGroupsError, GetMarketsRegionIdOrdersError},
@@ -8,13 +10,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("market group")]
-    MarketGroups(#[from] apis::Error<GetMarketsGroupsError>),
-    #[error("regional market orders")]
-    MarketOrders(#[from] apis::Error<GetMarketsRegionIdOrdersError>),
-    #[error("search")]
-    Search(#[from] apis::Error<GetSearchError>),
-    #[error("structure search")]
-    StructSearch(#[from] apis::Error<GetCharactersCharacterIdSearchError>),
+    EsiApi(#[from] crate::requests::error::EsiApiError),
     #[error("Logger initialization failure")]
     Log(#[from] fern::InitError),
     #[error("Logger initialization failure")]
