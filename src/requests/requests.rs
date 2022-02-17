@@ -9,7 +9,7 @@ use crate::{
 use crate::{
     consts::{self, BUFFER_UNORDERED},
     item_type::ItemType,
-    requests::paged_all::{get_all_pages, OnlyOk},
+    requests::paged_all::OnlyOk,
     requests::retry,
     StationId,
 };
@@ -31,7 +31,8 @@ use rust_eveonline_esi::{
         market_api::{
             self, GetMarketsRegionIdHistoryError, GetMarketsRegionIdHistoryParams,
             GetMarketsRegionIdOrdersError, GetMarketsRegionIdOrdersParams,
-            GetMarketsRegionIdOrdersSuccess, GetMarketsStructuresStructureIdParams,
+            GetMarketsRegionIdOrdersSuccess, GetMarketsRegionIdTypesParams,
+            GetMarketsStructuresStructureIdParams,
         },
         routes_api::{self, GetRouteOriginDestinationError, GetRouteOriginDestinationParams},
         search_api::{self, get_search, GetCharactersCharacterIdSearchParams, GetSearchParams},
@@ -359,8 +360,8 @@ impl<'a> EsiRequestsService<'a> {
 
         if station.station_id.is_citadel {
             log::info!("Loading citadel orders...");
-            let mut orders_in_citadel = get_all_pages(|page| async move {
-                market_api::get_markets_structures_structure_id(
+            let mut orders_in_citadel = get_all_pages_simple(|page| async move {
+                let orders = market_api::get_markets_structures_structure_id(
                     self.config,
                     GetMarketsStructuresStructureIdParams {
                         structure_id: station.station_id.id,
@@ -370,12 +371,13 @@ impl<'a> EsiRequestsService<'a> {
                         token: None,
                     },
                 )
-                .await
-                .unwrap()
+                .await?
                 .entity
-                .unwrap()
+                .unwrap();
+
+                Ok(orders.into_ok().unwrap())
             })
-            .await
+            .await?
             .into_iter()
             .map(|it| Order {
                 duration: it.duration,
@@ -611,6 +613,31 @@ impl<'a> EsiRequestsService<'a> {
             time: NaiveDateTime::parse_from_str(km.killmail_time.as_str(), consts::DATE_TIME_FMT)
                 .unwrap(),
         })
+    }
+
+    pub async fn get_all_item_types(&self, region_id: i32) -> Result<Vec<i32>> {
+        let pages = get_all_pages_simple(|page| {
+            let config = &self.config;
+            async move {
+                let types = market_api::get_markets_region_id_types(
+                    config,
+                    GetMarketsRegionIdTypesParams {
+                        region_id: region_id,
+                        datasource: None,
+                        if_none_match: None,
+                        page: Some(page),
+                    },
+                )
+                .await?
+                .entity
+                .unwrap();
+
+                Ok(types.into_ok().unwrap())
+            }
+        })
+        .await?;
+
+        Ok(pages)
     }
 }
 

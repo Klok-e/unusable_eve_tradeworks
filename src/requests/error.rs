@@ -5,6 +5,7 @@ use rust_eveonline_esi::apis::{
     self,
     market_api::{
         GetMarketsGroupsError, GetMarketsRegionIdOrdersError, GetMarketsRegionIdOrdersSuccess,
+        GetMarketsRegionIdTypesError, GetMarketsStructuresStructureIdError,
     },
     search_api::{GetCharactersCharacterIdSearchError, GetSearchError},
 };
@@ -30,12 +31,16 @@ impl Display for EsiApiError {
 enum EsiApiErrorEnum {
     #[error("market group")]
     MarketGroups(#[from] apis::Error<GetMarketsGroupsError>),
-    #[error("regional market orders")]
+    #[error("regional market")]
     MarketOrders(#[from] apis::Error<GetMarketsRegionIdOrdersError>),
     #[error("search")]
     Search(#[from] apis::Error<GetSearchError>),
     #[error("structure search")]
     StructSearch(#[from] apis::Error<GetCharactersCharacterIdSearchError>),
+    #[error("structure market")]
+    StructureMarket(#[from] apis::Error<GetMarketsStructuresStructureIdError>),
+    #[error("region type ids")]
+    RegionTypeId(#[from] apis::Error<GetMarketsRegionIdTypesError>),
 }
 
 impl From<apis::Error<GetMarketsGroupsError>> for EsiApiError {
@@ -76,8 +81,35 @@ impl From<apis::Error<GetSearchError>> for EsiApiError {
         }
     }
 }
+
 impl From<apis::Error<GetCharactersCharacterIdSearchError>> for EsiApiError {
     fn from(x: apis::Error<GetCharactersCharacterIdSearchError>) -> Self {
+        let code = match &x {
+            apis::Error::ResponseError(x) => x.status,
+            _ => panic!(),
+        };
+        EsiApiError {
+            internal: x.into(),
+            status: code,
+        }
+    }
+}
+
+impl From<apis::Error<GetMarketsStructuresStructureIdError>> for EsiApiError {
+    fn from(x: apis::Error<GetMarketsStructuresStructureIdError>) -> Self {
+        let code = match &x {
+            apis::Error::ResponseError(x) => x.status,
+            _ => panic!(),
+        };
+        EsiApiError {
+            internal: x.into(),
+            status: code,
+        }
+    }
+}
+
+impl From<apis::Error<GetMarketsRegionIdTypesError>> for EsiApiError {
+    fn from(x: apis::Error<GetMarketsRegionIdTypesError>) -> Self {
         let code = match &x {
             apis::Error::ResponseError(x) => x.status,
             _ => panic!(),

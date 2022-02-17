@@ -27,28 +27,6 @@ use crate::requests::retry::{self, Retry};
 
 use super::error::EsiApiError;
 
-pub async fn get_all_pages<T, F, TO, TOS, E>(get: F) -> Vec<TOS>
-where
-    F: Fn(i32) -> T,
-    T: Future<Output = TO>,
-    TO: OnlyOk<Vec<TOS>, E>,
-    E: Debug,
-{
-    let mut all_types = Vec::new();
-    let mut page = 1;
-    loop {
-        let types = get(page).await;
-        let mut types = types.into_ok().unwrap();
-        all_types.append(&mut types);
-        if types.is_empty() {
-            break;
-        }
-
-        page += 1;
-    }
-    all_types
-}
-
 pub async fn get_all_pages_simple<T, F, TOS>(get: F) -> Result<Vec<TOS>, super::error::EsiApiError>
 where
     F: Fn(i32) -> T,
@@ -231,6 +209,7 @@ impl OnlyOk<GetKillmailsKillmailIdKillmailHashOk, GetKillmailsKillmailIdKillmail
         }
     }
 }
+
 impl OnlyOk<Vec<i32>, GetRouteOriginDestinationSuccess> for GetRouteOriginDestinationSuccess {
     fn into_ok(self) -> Result<Vec<i32>, GetRouteOriginDestinationSuccess> {
         if let GetRouteOriginDestinationSuccess::Status200(ok) = self {

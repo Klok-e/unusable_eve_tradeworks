@@ -27,7 +27,6 @@ use unusable_eve_tradeworks_lib::{
     },
     item_type::{SystemMarketsItem, SystemMarketsItemData},
     logger,
-    requests::paged_all::get_all_pages,
     requests::requests::EsiRequestsService,
     zkb::{killmails::KillmailService, zkb_requests::ZkbRequestsService},
 };
@@ -98,7 +97,6 @@ async fn run() -> Result<()> {
             Some(Duration::hours(config.refresh_timeout_hours))
         },
         || {
-            let esi_config = &esi_config;
             let config = &config;
             let esi_requests = &esi_requests;
             async move {
@@ -118,10 +116,12 @@ async fn run() -> Result<()> {
                     force_refresh,
                     Some(Duration::days(7)),
                     || async {
-                        let mut all_types =
-                            get_all_item_types(esi_config, source_region.region_id).await;
-                        let all_types_dest =
-                            get_all_item_types(esi_config, dest_region.region_id).await;
+                        let mut all_types = esi_requests
+                            .get_all_item_types(source_region.region_id)
+                            .await?;
+                        let all_types_dest = esi_requests
+                            .get_all_item_types(dest_region.region_id)
+                            .await?;
                         all_types.extend(all_types_dest);
                         all_types.sort_unstable();
                         all_types.dedup();
@@ -342,28 +342,6 @@ async fn run() -> Result<()> {
         println!("Item sell prices:\n{}", table.render());
     }
     Ok(())
-}
-
-async fn get_all_item_types(esi_config: &Configuration, region_id: i32) -> Vec<i32> {
-    get_all_pages(|page| {
-        let config = &esi_config;
-        async move {
-            market_api::get_markets_region_id_types(
-                config,
-                GetMarketsRegionIdTypesParams {
-                    region_id: region_id,
-                    datasource: None,
-                    if_none_match: None,
-                    page: Some(page),
-                },
-            )
-            .await
-            .unwrap()
-            .entity
-            .unwrap()
-        }
-    })
-    .await
 }
 
 pub struct SimpleDisplay {
