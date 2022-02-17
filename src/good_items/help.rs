@@ -73,11 +73,6 @@ pub fn averages(config: &Config, history: &[ItemHistoryDay]) -> Option<ItemTypeA
     }
 }
 
-// time is in 0..1 range
-fn time_weight(time: f64) -> f64 {
-    -(-3. * time).exp() + 1.05
-}
-
 pub fn weighted_price(config: &Config, history: &[ItemHistoryDay]) -> f64 {
     let last_n_days = history
         .iter()
@@ -85,19 +80,11 @@ pub fn weighted_price(config: &Config, history: &[ItemHistoryDay]) -> f64 {
         .take(config.days_average)
         .collect::<Vec<_>>();
 
-    // scale volumes so that more recent ones are more important than old ones
-    let sum_volume = last_n_days
-        .iter()
-        .enumerate()
-        .map(|(i, x)| x.volume as f64 * time_weight(i as f64 / last_n_days.len() as f64))
-        .sum::<f64>();
+    let sum_volume = last_n_days.iter().map(|x| x.volume).sum::<i64>() as f64;
 
     last_n_days
         .iter()
-        .enumerate()
-        .map(|(i, x)| {
-            x.average.unwrap() * x.volume as f64 * time_weight(i as f64 / last_n_days.len() as f64)
-        })
+        .map(|x| x.average.unwrap() * x.volume as f64)
         .sum::<f64>()
         / sum_volume
 }
