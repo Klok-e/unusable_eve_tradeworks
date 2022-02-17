@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use crate::{consts::DATE_FMT, item_type::MarketsRegionHistory, Station, StationIdData};
+use crate::{
+    consts::DATE_FMT, item_type::MarketsRegionHistory, retry::IntoCcpError, Station, StationIdData,
+};
 use crate::{
     consts::{self, BUFFER_UNORDERED},
     error::Result,
@@ -24,7 +26,7 @@ use rust_eveonline_esi::{
         market_api::{
             self, GetMarketsRegionIdHistoryError, GetMarketsRegionIdHistoryParams,
             GetMarketsRegionIdOrdersError, GetMarketsRegionIdOrdersParams,
-            GetMarketsStructuresStructureIdParams,
+            GetMarketsRegionIdOrdersSuccess, GetMarketsStructuresStructureIdParams,
         },
         routes_api::{self, GetRouteOriginDestinationError, GetRouteOriginDestinationParams},
         search_api::{self, get_search, GetCharactersCharacterIdSearchParams, GetSearchParams},
@@ -34,7 +36,7 @@ use rust_eveonline_esi::{
             GetUniverseStructuresStructureIdParams, GetUniverseSystemsSystemIdParams,
             GetUniverseSystemsSystemIdSuccess, GetUniverseTypesTypeIdParams,
         },
-        Error,
+        Error, ResponseContent,
     },
     models::{
         get_markets_region_id_orders_200_ok, GetKillmailsKillmailIdKillmailHashItem,
@@ -215,28 +217,25 @@ impl<'a> EsiRequestsService<'a> {
     pub async fn get_orders_station(&self, station: StationIdData) -> Vec<Order> {
         // download all orders
         log::info!("Downloading region orders...");
-        let pages: Vec<GetMarketsRegionIdOrders200Ok> = get_all_pages(
-            |page| async move {
-                retry::retry::<_, _, _, Error<GetMarketsRegionIdOrdersError>>(|| async {
-                    Ok(market_api::get_markets_region_id_orders(
-                        self.config,
-                        GetMarketsRegionIdOrdersParams {
-                            order_type: "all".to_string(),
-                            region_id: station.region_id,
-                            datasource: None,
-                            if_none_match: None,
-                            page: Some(page),
-                            type_id: None,
-                        },
-                    )
-                    .await?
-                    .entity
-                    .unwrap())
-                })
-                .await
-            },
-            1000,
-        )
+        let pages: Vec<GetMarketsRegionIdOrders200Ok> = get_all_pages(|page| async move {
+            retry::retry::<_, _, _, Error<GetMarketsRegionIdOrdersError>>(|| async {
+                Ok(market_api::get_markets_region_id_orders(
+                    self.config,
+                    GetMarketsRegionIdOrdersParams {
+                        order_type: "all".to_string(),
+                        region_id: station.region_id,
+                        datasource: None,
+                        if_none_match: None,
+                        page: Some(page),
+                        type_id: None,
+                    },
+                )
+                .await?
+                .entity
+                .unwrap())
+            })
+            .await
+        })
         .await;
         log::info!("All region orders downloaded. Calculating distances...");
 
@@ -356,25 +355,22 @@ impl<'a> EsiRequestsService<'a> {
 
         if station.station_id.is_citadel {
             log::info!("Loading citadel orders...");
-            let mut orders_in_citadel = get_all_pages(
-                |page| async move {
-                    market_api::get_markets_structures_structure_id(
-                        self.config,
-                        GetMarketsStructuresStructureIdParams {
-                            structure_id: station.station_id.id,
-                            datasource: None,
-                            if_none_match: None,
-                            page: Some(page),
-                            token: None,
-                        },
-                    )
-                    .await
-                    .unwrap()
-                    .entity
-                    .unwrap()
-                },
-                1000,
-            )
+            let mut orders_in_citadel = get_all_pages(|page| async move {
+                market_api::get_markets_structures_structure_id(
+                    self.config,
+                    GetMarketsStructuresStructureIdParams {
+                        structure_id: station.station_id.id,
+                        datasource: None,
+                        if_none_match: None,
+                        page: Some(page),
+                        token: None,
+                    },
+                )
+                .await
+                .unwrap()
+                .entity
+                .unwrap()
+            })
             .await
             .into_iter()
             .map(|it| Order {

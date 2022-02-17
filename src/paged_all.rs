@@ -22,7 +22,7 @@ use rust_eveonline_esi::{
     },
 };
 
-pub async fn get_all_pages<T, F, TO, TOS, E>(get: F, max_items_batch: usize) -> Vec<TOS>
+pub async fn get_all_pages<T, F, TO, TOS, E>(get: F) -> Vec<TOS>
 where
     F: Fn(i32) -> T,
     T: Future<Output = TO>,
@@ -34,9 +34,8 @@ where
     loop {
         let types = get(page).await;
         let mut types = types.into_result().unwrap();
-        let var_name = types.len() < max_items_batch;
         all_types.append(&mut types);
-        if var_name {
+        if types.is_empty() {
             break;
         }
 

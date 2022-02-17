@@ -1,6 +1,6 @@
 use rust_eveonline_esi::apis::{
     self,
-    market_api::GetMarketsGroupsError,
+    market_api::{GetMarketsGroupsError, GetMarketsRegionIdOrdersError},
     search_api::{GetCharactersCharacterIdSearchError, GetSearchError},
 };
 use thiserror::Error;
@@ -9,6 +9,8 @@ use thiserror::Error;
 pub enum Error {
     #[error("market group")]
     MarketGroups(#[from] apis::Error<GetMarketsGroupsError>),
+    #[error("regional market orders")]
+    MarketOrders(#[from] apis::Error<GetMarketsRegionIdOrdersError>),
     #[error("search")]
     Search(#[from] apis::Error<GetSearchError>),
     #[error("structure search")]
