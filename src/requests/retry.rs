@@ -1,7 +1,9 @@
 use std::{fmt::Display, time::Duration};
 
+use super::error::{EsiApiError, Result};
 use crate::consts::RETRIES;
 use futures::Future;
+use reqwest::StatusCode;
 use rust_eveonline_esi::apis::{
     killmails_api::GetKillmailsKillmailIdKillmailHashError,
     market_api::{GetMarketsRegionIdHistoryError, GetMarketsRegionIdOrdersError},
@@ -14,7 +16,7 @@ use thiserror::Error;
 #[track_caller]
 pub fn retry<T, Fut, F, E>(func: F) -> impl Future<Output = Option<T>>
 where
-    Fut: Future<Output = Result<T, E>>,
+    Fut: Future<Output = std::result::Result<T, E>>,
     F: Fn() -> Fut,
     E: IntoCcpError + Display,
 {
@@ -51,9 +53,45 @@ where
         }
     }
 }
-pub async fn retry_simple<T, Fut, F, E>(func: F) -> Result<Option<T>, E>
+
+pub async fn retry_smart<T, Fut, F>(func: F) -> Result<Option<T>>
 where
-    Fut: Future<Output = Result<Retry<T>, E>>,
+    Fut: Future<Output = Result<Retry<T>>>,
+    F: Fn() -> Fut,
+{
+    let res = retry_simple(|| async {
+        let out = func().await;
+        match out {
+            Ok(Retry::Success(x)) => Ok(Retry::Success(x)),
+            Ok(Retry::Retry) => Ok(Retry::Retry),
+
+            // error limited
+            Err(e @ EsiApiError { status, .. }) if status == StatusCode::from_u16(420).unwrap() => {
+                log::warn!("Error limited: {}. Retrying in 30 seconds...", e);
+                tokio::time::sleep(Duration::from_secs_f32(30.)).await;
+                Ok(Retry::Retry)
+            }
+
+            // common error for ccp servers
+            Err(
+                e @ EsiApiError {
+                    status: StatusCode::BAD_GATEWAY,
+                    ..
+                },
+            ) => {
+                log::warn!("Error: {}. Retrying...", e);
+                Ok(Retry::Retry)
+            }
+            Err(e) => Err(e),
+        }
+    })
+    .await?;
+    Ok(res)
+}
+
+pub async fn retry_simple<T, Fut, F, E>(func: F) -> std::result::Result<Option<T>, E>
+where
+    Fut: Future<Output = std::result::Result<Retry<T>, E>>,
     F: Fn() -> Fut,
 {
     let mut retries = 0;

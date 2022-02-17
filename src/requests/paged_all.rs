@@ -35,7 +35,7 @@ where
     let mut all_types = Vec::new();
     let mut page = 1;
     loop {
-        let types = retry::retry_simple(|| async {
+        let types = retry::retry_smart(|| async {
             match get(page).await {
                 Ok(x) => Ok(Retry::Success(x)),
 
@@ -45,25 +45,6 @@ where
                     ..
                 }) => Ok(Retry::Success(Vec::new())),
 
-                // error limited
-                Err(e @ EsiApiError { status, .. })
-                    if status == StatusCode::from_u16(420).unwrap() =>
-                {
-                    log::warn!("Error limited: {}. Retrying in 30 seconds...", e);
-                    tokio::time::sleep(Duration::from_secs_f32(30.)).await;
-                    Ok(Retry::Retry)
-                }
-
-                // common error for ccp servers
-                Err(
-                    e @ EsiApiError {
-                        status: StatusCode::BAD_GATEWAY,
-                        ..
-                    },
-                ) => {
-                    log::warn!("Error: {}. Retrying...", e);
-                    Ok(Retry::Retry)
-                }
                 Err(e) => Err(e),
             }
         })
