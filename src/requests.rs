@@ -394,6 +394,12 @@ impl<'a> EsiRequestsService<'a> {
 
             orders_in_station.append(&mut orders_in_citadel);
         }
+
+        // some orders can be both regional and placed in a citadel
+        // so there may be duplicates
+        orders_in_station.sort_unstable_by_key(|x| x.order_id);
+        orders_in_station.dedup_by_key(|x| x.order_id);
+
         orders_in_station
     }
 
@@ -528,7 +534,6 @@ impl<'a> EsiRequestsService<'a> {
 
         let hists = stream::iter(item_types)
             .map(|&item_type| {
-                let _config = self.config;
                 let station_orders = &station_orders;
                 async move {
                     self.get_item_type_history(station, item_type, station_orders)
