@@ -27,7 +27,7 @@ use crate::requests::retry::{self, Retry};
 
 use super::error::EsiApiError;
 
-pub async fn get_all_pages_simple<T, F, TOS>(get: F) -> Result<Vec<TOS>, super::error::EsiApiError>
+pub async fn get_all_pages<T, F, TOS>(get: F) -> Result<Vec<TOS>, super::error::EsiApiError>
 where
     F: Fn(i32) -> T,
     T: Future<Output = Result<Vec<TOS>, super::error::EsiApiError>>,

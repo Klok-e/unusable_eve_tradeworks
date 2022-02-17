@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    consts::DATE_FMT, item_type::MarketsRegionHistory, requests::paged_all::get_all_pages_simple,
-    Station, StationIdData,
+    consts::DATE_FMT, item_type::MarketsRegionHistory, requests::paged_all::get_all_pages, Station,
+    StationIdData,
 };
 use crate::{
     consts::{self, BUFFER_UNORDERED},
@@ -220,7 +220,7 @@ impl<'a> EsiRequestsService<'a> {
     pub async fn get_orders_station(&self, station: StationIdData) -> Result<Vec<Order>> {
         // download all orders
         log::info!("Downloading region orders...");
-        let pages: Vec<GetMarketsRegionIdOrders200Ok> = get_all_pages_simple(|page| async move {
+        let pages: Vec<GetMarketsRegionIdOrders200Ok> = get_all_pages(|page| async move {
             let orders = market_api::get_markets_region_id_orders(
                 self.config,
                 GetMarketsRegionIdOrdersParams {
@@ -357,7 +357,7 @@ impl<'a> EsiRequestsService<'a> {
 
         if station.station_id.is_citadel {
             log::info!("Loading citadel orders...");
-            let mut orders_in_citadel = get_all_pages_simple(|page| async move {
+            let mut orders_in_citadel = get_all_pages(|page| async move {
                 let orders = market_api::get_markets_structures_structure_id(
                     self.config,
                     GetMarketsStructuresStructureIdParams {
@@ -613,7 +613,7 @@ impl<'a> EsiRequestsService<'a> {
     }
 
     pub async fn get_all_item_types(&self, region_id: i32) -> Result<Vec<i32>> {
-        let pages = get_all_pages_simple(|page| {
+        let pages = get_all_pages(|page| {
             let config = &self.config;
             async move {
                 let types = market_api::get_markets_region_id_types(
