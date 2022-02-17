@@ -1,11 +1,10 @@
 use std::fmt::Display;
 
-use reqwest::StatusCode;
 use rust_eveonline_esi::apis::{
     self,
     market_api::{
-        GetMarketsGroupsError, GetMarketsRegionIdOrdersError, GetMarketsRegionIdOrdersSuccess,
-        GetMarketsRegionIdTypesError, GetMarketsStructuresStructureIdError,
+        GetMarketsGroupsError, GetMarketsRegionIdOrdersError, GetMarketsRegionIdTypesError,
+        GetMarketsStructuresStructureIdError,
     },
     search_api::{GetCharactersCharacterIdSearchError, GetSearchError},
 };

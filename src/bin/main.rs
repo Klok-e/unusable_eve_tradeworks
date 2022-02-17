@@ -4,10 +4,7 @@ use chrono::Duration;
 use futures::{stream, FutureExt, StreamExt};
 
 use oauth2::TokenResponse;
-use rust_eveonline_esi::apis::{
-    configuration::Configuration,
-    market_api::{self, GetMarketsRegionIdTypesParams},
-};
+use rust_eveonline_esi::apis::configuration::Configuration;
 
 use term_table::{row::Row, table_cell::TableCell, TableBuilder, TableStyle};
 use tokio::join;
@@ -27,7 +24,7 @@ use unusable_eve_tradeworks_lib::{
     },
     item_type::{SystemMarketsItem, SystemMarketsItemData},
     logger,
-    requests::requests::EsiRequestsService,
+    requests::service::EsiRequestsService,
     zkb::{killmails::KillmailService, zkb_requests::ZkbRequestsService},
 };
 

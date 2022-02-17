@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     consts::BUFFER_UNORDERED,
-    requests::requests::{EsiRequestsService, Killmail},
+    requests::service::{EsiRequestsService, Killmail},
 };
 
 use super::zkb_requests::{ZkbRequestsService, ZkillEntity};

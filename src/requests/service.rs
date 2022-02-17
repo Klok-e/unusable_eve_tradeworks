@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    consts::DATE_FMT,
-    item_type::MarketsRegionHistory,
-    requests::{paged_all::get_all_pages_simple, retry::IntoCcpError},
+    consts::DATE_FMT, item_type::MarketsRegionHistory, requests::paged_all::get_all_pages_simple,
     Station, StationIdData,
 };
 use crate::{
@@ -30,8 +28,7 @@ use rust_eveonline_esi::{
         },
         market_api::{
             self, GetMarketsRegionIdHistoryError, GetMarketsRegionIdHistoryParams,
-            GetMarketsRegionIdOrdersError, GetMarketsRegionIdOrdersParams,
-            GetMarketsRegionIdOrdersSuccess, GetMarketsRegionIdTypesParams,
+            GetMarketsRegionIdOrdersParams, GetMarketsRegionIdTypesParams,
             GetMarketsStructuresStructureIdParams,
         },
         routes_api::{self, GetRouteOriginDestinationError, GetRouteOriginDestinationParams},
@@ -42,7 +39,7 @@ use rust_eveonline_esi::{
             GetUniverseStructuresStructureIdParams, GetUniverseSystemsSystemIdParams,
             GetUniverseSystemsSystemIdSuccess, GetUniverseTypesTypeIdParams,
         },
-        Error, ResponseContent,
+        Error,
     },
     models::{
         get_markets_region_id_orders_200_ok, GetKillmailsKillmailIdKillmailHashItem,
@@ -622,7 +619,7 @@ impl<'a> EsiRequestsService<'a> {
                 let types = market_api::get_markets_region_id_types(
                     config,
                     GetMarketsRegionIdTypesParams {
-                        region_id: region_id,
+                        region_id,
                         datasource: None,
                         if_none_match: None,
                         page: Some(page),

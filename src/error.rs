@@ -1,10 +1,3 @@
-use std::fmt::Display;
-
-use rust_eveonline_esi::apis::{
-    self,
-    market_api::{GetMarketsGroupsError, GetMarketsRegionIdOrdersError},
-    search_api::{GetCharactersCharacterIdSearchError, GetSearchError},
-};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
