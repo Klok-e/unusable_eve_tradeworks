@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use chrono::Duration;
-use futures::{stream, StreamExt};
+use futures::{stream, Future, StreamExt};
 
 use oauth2::TokenResponse;
 use rust_eveonline_esi::apis::configuration::Configuration;
@@ -16,7 +16,7 @@ use unusable_eve_tradeworks_lib::{
     cli,
     config::{AuthConfig, Config},
     consts::{self, BUFFER_UNORDERED},
-    error::Result,
+    error::{self, Result},
     good_items::{
         sell_buy::{get_good_items_sell_buy, make_table_sell_buy},
         sell_sell::{get_good_items_sell_sell, make_table_sell_sell},
@@ -178,19 +178,23 @@ async fn run() -> Result<()> {
                         let it = it;
                         let esi_requests = &esi_requests;
                         async move {
-                            Some(SystemMarketsItemData {
-                                desc: match esi_requests.get_item_stuff(it.id).await {
+                            let req_res = esi_requests.get_item_stuff(it.id).await?;
+
+                            Ok(Some(SystemMarketsItemData {
+                                desc: match req_res {
                                     Some(x) => x.into(),
-                                    None => return None,
+                                    None => return Ok(None),
                                 },
                                 source: it.source,
                                 destination: it.destination,
-                            })
+                            }))
                         }
                     })
                     .buffer_unordered(BUFFER_UNORDERED)
-                    .collect::<Vec<Option<SystemMarketsItemData>>>()
+                    .collect::<Vec<Result<Option<SystemMarketsItemData>>>>()
                     .await
+                    .into_iter()
+                    .collect::<Result<Vec<Option<SystemMarketsItemData>>>>()?
                     .into_iter()
                     .flatten()
                     .collect())
@@ -272,7 +276,7 @@ async fn run() -> Result<()> {
                                 &config.zkill_entity,
                                 config.zkb_download_pages,
                             )
-                            .await)
+                            .await?)
                     }
                 },
             )

@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
 use crate::{
-    consts::DATE_FMT, item_type::MarketsRegionHistory, requests::paged_all::get_all_pages, Station,
-    StationIdData,
+    consts::DATE_FMT,
+    item_type::MarketsRegionHistory,
+    requests::{paged_all::get_all_pages, retry::Retry},
+    Station, StationIdData,
 };
 use crate::{
     consts::{self, BUFFER_UNORDERED},
@@ -12,8 +14,9 @@ use crate::{
     StationId,
 };
 use chrono::{Duration, NaiveDate, NaiveDateTime, Utc};
+use reqwest::StatusCode;
 
-use super::error::Result;
+use super::error::{EsiApiError, Result};
 use crate::item_type::Order;
 use crate::stat::MedianStat;
 
@@ -197,24 +200,26 @@ impl<'a> EsiRequestsService<'a> {
             region_id: region,
         })
     }
-    pub async fn get_item_stuff(&self, id: i32) -> Option<GetUniverseTypesTypeIdOk> {
-        {
-            retry::retry(|| async {
-                universe_api::get_universe_types_type_id(
-                    self.config,
-                    GetUniverseTypesTypeIdParams {
-                        type_id: id,
-                        accept_language: None,
-                        datasource: None,
-                        if_none_match: None,
-                        language: None,
-                    },
-                )
-                .await
-            })
-            .await
-        }
-        .map(|x| x.entity.unwrap().into_ok().unwrap())
+    pub async fn get_item_stuff(&self, id: i32) -> Result<Option<GetUniverseTypesTypeIdOk>> {
+        let res = retry::retry_smart(|| async {
+            let res = universe_api::get_universe_types_type_id(
+                self.config,
+                GetUniverseTypesTypeIdParams {
+                    type_id: id,
+                    accept_language: None,
+                    datasource: None,
+                    if_none_match: None,
+                    language: None,
+                },
+            )
+            .await?
+            .entity
+            .unwrap();
+            Ok(Retry::Success(res.into_ok().unwrap()))
+        })
+        .await?;
+
+        Ok(res)
     }
 
     pub async fn get_orders_station(&self, station: StationIdData) -> Result<Vec<Order>> {
@@ -258,9 +263,9 @@ impl<'a> EsiRequestsService<'a> {
                                 x.system_id
                             );
                             let dist =
-                                retry::retry::<_, _, _, Error<GetRouteOriginDestinationError>>(
+                                retry::retry_smart(
                                     || async {
-                                        Ok(routes_api::get_route_origin_destination(
+                                        let res = routes_api::get_route_origin_destination(
                                             self.config,
                                             GetRouteOriginDestinationParams {
                                                 destination: x.system_id,
@@ -274,11 +279,13 @@ impl<'a> EsiRequestsService<'a> {
                                         )
                                         .await?
                                         .entity
-                                        .unwrap())
+                                        .unwrap();
+
+                                        Ok(Retry::Success(res.into_ok().unwrap()))
                                     },
                                 )
-                                .await
-                                .map(|x| Some(x.into_ok().unwrap().len()))
+                                .await?
+                                .map(|x| Some(x.len()))
                                 .unwrap_or_else(|| {
                                     log::warn!(
                                         "Couldn't calculate distance between origin {} and dest {}",
@@ -310,11 +317,13 @@ impl<'a> EsiRequestsService<'a> {
                     None
                 };
 
-                (x, dist_if_buy)
+                Ok((x, dist_if_buy))
             })
             .buffer_unordered(BUFFER_UNORDERED)
-            .collect::<Vec<_>>()
-            .await;
+            .collect::<Vec<Result<_>>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>>>()?;
         log::info!("All distances calculated.");
 
         let mut orders_in_station = pages
@@ -476,58 +485,62 @@ impl<'a> EsiRequestsService<'a> {
         station: StationIdData,
         item_type: i32,
         station_orders: &Mutex<HashMap<i32, Vec<Order>>>,
-    ) -> Option<ItemType> {
-        let res: Option<ItemType> =
-            retry::retry::<_, _, _, Error<GetMarketsRegionIdHistoryError>>(|| async {
-                let hist_for_type = (|| async {
-                    Ok(market_api::get_markets_region_id_history(
-                        self.config,
-                        GetMarketsRegionIdHistoryParams {
-                            region_id: station.region_id,
-                            type_id: item_type,
-                            datasource: None,
-                            if_none_match: None,
-                        },
-                    )
-                    .await?
-                    .entity
-                    .unwrap()
-                    .into_ok()
-                    .unwrap())
-                })()
-                .await;
-
-                // turn all 404 errors into empty vecs
-                let hist_for_type = match hist_for_type {
-                    Err(Error::ResponseError(e)) if e.status.as_u16() == 404 => Ok(Vec::new()),
-                    e => e,
-                }?;
-
-                let mut dummy_empty_vec = Vec::new();
-                Ok(ItemType {
-                    id: item_type,
-                    history: hist_for_type
-                        .into_iter()
-                        .map(|x| MarketsRegionHistory {
-                            average: Some(x.average),
-                            date: x.date,
-                            highest: Some(x.highest),
-                            lowest: Some(x.lowest),
-                            order_count: x.order_count,
-                            volume: x.volume,
-                        })
-                        .collect(),
-                    orders: std::mem::take(
-                        station_orders
-                            .lock()
-                            .await
-                            .get_mut(&item_type)
-                            .unwrap_or(&mut dummy_empty_vec),
-                    ),
-                })
-            })
+    ) -> Result<Option<ItemType>> {
+        let res: Option<ItemType> = retry::retry_smart(|| async {
+            let hist_for_type: Result<_> = (|| async {
+                Ok(market_api::get_markets_region_id_history(
+                    self.config,
+                    GetMarketsRegionIdHistoryParams {
+                        region_id: station.region_id,
+                        type_id: item_type,
+                        datasource: None,
+                        if_none_match: None,
+                    },
+                )
+                .await?
+                .entity
+                .unwrap()
+                .into_ok()
+                .unwrap())
+            })()
             .await;
-        res
+
+            // turn all 404 errors into empty vecs
+            let hist_for_type = match hist_for_type {
+                Ok(ok) => ok,
+                Err(EsiApiError {
+                    status: StatusCode::NOT_FOUND,
+                    ..
+                }) => Vec::new(),
+                Err(e) => return Err(e),
+            };
+
+            let mut dummy_empty_vec = Vec::new();
+            let item = ItemType {
+                id: item_type,
+                history: hist_for_type
+                    .into_iter()
+                    .map(|x| MarketsRegionHistory {
+                        average: Some(x.average),
+                        date: x.date,
+                        highest: Some(x.highest),
+                        lowest: Some(x.lowest),
+                        order_count: x.order_count,
+                        volume: x.volume,
+                    })
+                    .collect(),
+                orders: std::mem::take(
+                    station_orders
+                        .lock()
+                        .await
+                        .get_mut(&item_type)
+                        .unwrap_or(&mut dummy_empty_vec),
+                ),
+            };
+            Ok(Retry::Success(item))
+        })
+        .await?;
+        Ok(res)
     }
 
     async fn download_history(
@@ -552,6 +565,8 @@ impl<'a> EsiRequestsService<'a> {
             .collect::<Vec<_>>()
             .await
             .into_iter()
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
             .flatten()
             .collect::<Vec<_>>())
     }
@@ -560,26 +575,27 @@ impl<'a> EsiRequestsService<'a> {
         &self,
         killmail_id: i32,
         hash: String,
-    ) -> Option<Killmail> {
-        let km =
-            retry::retry::<_, _, _, Error<GetKillmailsKillmailIdKillmailHashError>>(|| async {
-                let res = killmails_api::get_killmails_killmail_id_killmail_hash(
-                    self.config,
-                    GetKillmailsKillmailIdKillmailHashParams {
-                        killmail_hash: hash.clone(),
-                        killmail_id,
-                        datasource: None,
-                        if_none_match: None,
-                    },
-                )
-                .await?
-                .entity
-                .unwrap()
-                .into_ok()
-                .unwrap();
-                Ok(res)
-            })
-            .await?;
+    ) -> Result<Option<Killmail>> {
+        let km = retry::retry_smart(|| async {
+            let res = killmails_api::get_killmails_killmail_id_killmail_hash(
+                self.config,
+                GetKillmailsKillmailIdKillmailHashParams {
+                    killmail_hash: hash.clone(),
+                    killmail_id,
+                    datasource: None,
+                    if_none_match: None,
+                },
+            )
+            .await?
+            .entity
+            .unwrap();
+            Ok(Retry::Success(res.into_ok().unwrap()))
+        })
+        .await?;
+        let km = match km {
+            Some(km) => km,
+            None => return Ok(None),
+        };
 
         let km_items = km
             .victim
@@ -601,7 +617,7 @@ impl<'a> EsiRequestsService<'a> {
                 (item.item_type_id, qty)
             })
             .chain(std::iter::once((km.victim.ship_type_id, 1)));
-        Some(Killmail {
+        Ok(Some(Killmail {
             items: km_items
                 .group_by(|x| x.0)
                 .into_iter()
@@ -609,7 +625,7 @@ impl<'a> EsiRequestsService<'a> {
                 .collect(),
             time: NaiveDateTime::parse_from_str(km.killmail_time.as_str(), consts::DATE_TIME_FMT)
                 .unwrap(),
-        })
+        }))
     }
 
     pub async fn get_all_item_types(&self, region_id: i32) -> Result<Vec<i32>> {

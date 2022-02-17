@@ -24,7 +24,7 @@ impl<'a> KillmailService<'a> {
         &self,
         entity: &ZkillEntity,
         pages: u32,
-    ) -> ItemFrequencies {
+    ) -> crate::requests::error::Result<ItemFrequencies> {
         let kms = self.zkb.get_killmails(entity, pages).await.unwrap();
         let frequencies = kms.into_iter().map(|km| {
             self.esi
@@ -37,12 +37,14 @@ impl<'a> KillmailService<'a> {
             .collect::<Vec<_>>()
             .await
             .into_iter()
+            .collect::<crate::requests::error::Result<Vec<_>>>()?
+            .into_iter()
             .flatten()
             .collect();
 
         let most_recent_time = km_freqs.iter().map(|x| x.time).max().unwrap();
         let oldest_time = km_freqs.iter().map(|x| x.time).min().unwrap();
-        ItemFrequencies {
+        Ok(ItemFrequencies {
             items: km_freqs.iter().fold(HashMap::new(), |mut acc, x| {
                 for (k, v) in x.items.iter() {
                     *acc.entry(*k).or_insert(0) += v;
@@ -50,7 +52,7 @@ impl<'a> KillmailService<'a> {
                 acc
             }),
             period_seconds: (most_recent_time - oldest_time).num_seconds(),
-        }
+        })
     }
 }
 
