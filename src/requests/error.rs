@@ -3,7 +3,9 @@ use std::fmt::Display;
 use reqwest::StatusCode;
 use rust_eveonline_esi::apis::{
     self,
-    market_api::{GetMarketsGroupsError, GetMarketsRegionIdOrdersError, GetMarketsRegionIdOrdersSuccess},
+    market_api::{
+        GetMarketsGroupsError, GetMarketsRegionIdOrdersError, GetMarketsRegionIdOrdersSuccess,
+    },
     search_api::{GetCharactersCharacterIdSearchError, GetSearchError},
 };
 use thiserror::Error;
@@ -25,7 +27,7 @@ impl Display for EsiApiError {
 }
 
 #[derive(Error, Debug)]
- enum EsiApiErrorEnum {
+enum EsiApiErrorEnum {
     #[error("market group")]
     MarketGroups(#[from] apis::Error<GetMarketsGroupsError>),
     #[error("regional market orders")]
