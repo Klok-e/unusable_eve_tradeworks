@@ -1,4 +1,4 @@
-use std::{future::Future, time::Duration};
+use std::future::Future;
 
 use reqwest::StatusCode;
 use rust_eveonline_esi::{

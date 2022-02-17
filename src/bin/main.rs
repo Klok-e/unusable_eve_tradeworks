@@ -16,7 +16,7 @@ use unusable_eve_tradeworks_lib::{
     cli,
     config::{AuthConfig, Config},
     consts::{self, BUFFER_UNORDERED},
-    error::{self, Result},
+    error::Result,
     good_items::{
         sell_buy::{get_good_items_sell_buy, make_table_sell_buy},
         sell_sell::{get_good_items_sell_sell, make_table_sell_sell},

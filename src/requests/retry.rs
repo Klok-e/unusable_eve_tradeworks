@@ -1,17 +1,9 @@
-use std::{fmt::Display, time::Duration};
+use std::time::Duration;
 
 use super::error::{EsiApiError, Result};
 use crate::consts::RETRIES;
 use futures::Future;
 use reqwest::StatusCode;
-use rust_eveonline_esi::apis::{
-    killmails_api::GetKillmailsKillmailIdKillmailHashError,
-    market_api::{GetMarketsRegionIdHistoryError, GetMarketsRegionIdOrdersError},
-    routes_api::GetRouteOriginDestinationError,
-    universe_api::GetUniverseTypesTypeIdError,
-    ResponseContent,
-};
-use thiserror::Error;
 
 #[track_caller]
 pub fn retry_smart<T, Fut, F>(func: F) -> impl Future<Output = Result<Option<T>>>

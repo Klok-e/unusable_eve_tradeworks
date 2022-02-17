@@ -4,8 +4,8 @@ use rust_eveonline_esi::apis::{
     self,
     killmails_api::GetKillmailsKillmailIdKillmailHashError,
     market_api::{
-        GetMarketsGroupsError, GetMarketsRegionIdOrdersError, GetMarketsRegionIdTypesError,
-        GetMarketsStructuresStructureIdError, GetMarketsRegionIdHistoryError,
+        GetMarketsGroupsError, GetMarketsRegionIdHistoryError, GetMarketsRegionIdOrdersError,
+        GetMarketsRegionIdTypesError, GetMarketsStructuresStructureIdError,
     },
     routes_api::GetRouteOriginDestinationError,
     search_api::{GetCharactersCharacterIdSearchError, GetSearchError},

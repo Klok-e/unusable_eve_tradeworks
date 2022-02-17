@@ -26,15 +26,12 @@ use ordered_float::NotNan;
 use rust_eveonline_esi::{
     apis::{
         configuration::Configuration,
-        killmails_api::{
-            self, GetKillmailsKillmailIdKillmailHashError, GetKillmailsKillmailIdKillmailHashParams,
-        },
+        killmails_api::{self, GetKillmailsKillmailIdKillmailHashParams},
         market_api::{
-            self, GetMarketsRegionIdHistoryError, GetMarketsRegionIdHistoryParams,
-            GetMarketsRegionIdOrdersParams, GetMarketsRegionIdTypesParams,
-            GetMarketsStructuresStructureIdParams,
+            self, GetMarketsRegionIdHistoryParams, GetMarketsRegionIdOrdersParams,
+            GetMarketsRegionIdTypesParams, GetMarketsStructuresStructureIdParams,
         },
-        routes_api::{self, GetRouteOriginDestinationError, GetRouteOriginDestinationParams},
+        routes_api::{self, GetRouteOriginDestinationParams},
         search_api::{self, get_search, GetCharactersCharacterIdSearchParams, GetSearchParams},
         universe_api::{
             self, GetUniverseConstellationsConstellationIdParams,
@@ -42,7 +39,6 @@ use rust_eveonline_esi::{
             GetUniverseStructuresStructureIdParams, GetUniverseSystemsSystemIdParams,
             GetUniverseSystemsSystemIdSuccess, GetUniverseTypesTypeIdParams,
         },
-        Error,
     },
     models::{
         get_markets_region_id_orders_200_ok, GetKillmailsKillmailIdKillmailHashItem,
