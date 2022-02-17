@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use chrono::Duration;
-use futures::{stream, FutureExt, StreamExt};
+use futures::{stream, StreamExt};
 
 use oauth2::TokenResponse;
 use rust_eveonline_esi::apis::configuration::Configuration;
