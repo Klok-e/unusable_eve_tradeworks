@@ -24,22 +24,20 @@ where
                     if status == StatusCode::from_u16(420).unwrap() =>
                 {
                     log::warn!(
-                        "[{}] Error limited: {}. Retrying in 30 seconds...",
+                        "[{}] Error limited: {}. Retrying in 60 seconds...",
                         caller,
                         e
                     );
-                    tokio::time::sleep(Duration::from_secs_f32(30.)).await;
+                    tokio::time::sleep(Duration::from_secs_f32(60.)).await;
                     Ok(Retry::Retry)
                 }
 
                 // common error for ccp servers
-                Err(
-                    e @ EsiApiError {
-                        status: StatusCode::BAD_GATEWAY,
-                        ..
-                    },
-                ) => {
-                    log::warn!("[{}] Error: {}. Retrying...", caller, e);
+                Err(EsiApiError {
+                    status: status @ StatusCode::BAD_GATEWAY,
+                    ..
+                }) => {
+                    log::warn!("[{}] Error: {}. Retrying...", caller, status);
                     Ok(Retry::Retry)
                 }
                 Err(e) => Err(e),

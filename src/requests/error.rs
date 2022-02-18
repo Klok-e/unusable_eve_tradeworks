@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use reqwest::StatusCode;
 use rust_eveonline_esi::apis::{
     self,
     killmails_api::GetKillmailsKillmailIdKillmailHashError,
@@ -10,6 +11,7 @@ use rust_eveonline_esi::apis::{
     routes_api::GetRouteOriginDestinationError,
     search_api::{GetCharactersCharacterIdSearchError, GetSearchError},
     universe_api::GetUniverseTypesTypeIdError,
+    ResponseContent,
 };
 use thiserror::Error;
 
@@ -107,7 +109,13 @@ impl From<apis::Error<GetCharactersCharacterIdSearchError>> for EsiApiError {
 
 impl From<apis::Error<GetMarketsStructuresStructureIdError>> for EsiApiError {
     fn from(x: apis::Error<GetMarketsStructuresStructureIdError>) -> Self {
+        // this particular endpoint returns 500 code on invalid page
+        // so we have to extract error message
         let code = match &x {
+            apis::Error::ResponseError(ResponseContent {
+                entity: Some(GetMarketsStructuresStructureIdError::Status400(r)),
+                ..
+            }) if r.error.contains("Undefined 404 response") => StatusCode::NOT_FOUND,
             apis::Error::ResponseError(x) => x.status,
             _ => panic!(),
         };
@@ -120,7 +128,13 @@ impl From<apis::Error<GetMarketsStructuresStructureIdError>> for EsiApiError {
 
 impl From<apis::Error<GetMarketsRegionIdTypesError>> for EsiApiError {
     fn from(x: apis::Error<GetMarketsRegionIdTypesError>) -> Self {
+        // this particular endpoint returns 500 code on invalid page
+        // so we have to extract error message
         let code = match &x {
+            apis::Error::ResponseError(ResponseContent {
+                entity: Some(GetMarketsRegionIdTypesError::Status400(r)),
+                ..
+            }) if r.error.contains("Undefined 404 response") => StatusCode::NOT_FOUND,
             apis::Error::ResponseError(x) => x.status,
             _ => panic!(),
         };

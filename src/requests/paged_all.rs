@@ -1,4 +1,4 @@
-use std::future::Future;
+use std::{fmt::Debug, future::Future};
 
 use reqwest::StatusCode;
 use rust_eveonline_esi::{
@@ -27,10 +27,11 @@ use crate::requests::retry::{self, Retry};
 
 use super::error::EsiApiError;
 
-pub async fn get_all_pages<T, F, TOS>(get: F) -> Result<Vec<TOS>, super::error::EsiApiError>
+pub async fn get_all_pages<Ret, F, T>(get: F) -> Result<Vec<T>, super::error::EsiApiError>
 where
-    F: Fn(i32) -> T,
-    T: Future<Output = Result<Vec<TOS>, super::error::EsiApiError>>,
+    F: Fn(i32) -> Ret,
+    Ret: Future<Output = Result<Vec<T>, super::error::EsiApiError>>,
+    T: Debug,
 {
     let mut all_types = Vec::new();
     let mut page = 1;
@@ -53,10 +54,10 @@ where
             log::warn!("Max retry count exceeded and error wasn't resolved.");
             Vec::new()
         });
-        all_types.append(&mut types);
         if types.is_empty() {
             break;
         }
+        all_types.append(&mut types);
 
         page += 1;
     }
