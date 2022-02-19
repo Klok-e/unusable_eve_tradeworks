@@ -32,14 +32,15 @@ where
                     Ok(Retry::Retry)
                 }
 
-                // common error for ccp servers
+                // common errors for ccp servers
                 Err(EsiApiError {
-                    status: status @ StatusCode::BAD_GATEWAY,
+                    status: status @ (StatusCode::BAD_GATEWAY | StatusCode::SERVICE_UNAVAILABLE),
                     ..
                 }) => {
                     log::warn!("[{}] Error: {}. Retrying...", caller, status);
                     Ok(Retry::Retry)
                 }
+
                 Err(e) => Err(e),
             }
         })

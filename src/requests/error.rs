@@ -59,7 +59,7 @@ impl From<apis::Error<GetMarketsGroupsError>> for EsiApiError {
     fn from(x: apis::Error<GetMarketsGroupsError>) -> Self {
         let code = match &x {
             apis::Error::ResponseError(x) => x.status,
-            _ => panic!(),
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         EsiApiError {
             internal: x.into(),
@@ -72,7 +72,7 @@ impl From<apis::Error<GetMarketsRegionIdOrdersError>> for EsiApiError {
     fn from(x: apis::Error<GetMarketsRegionIdOrdersError>) -> Self {
         let code = match &x {
             apis::Error::ResponseError(x) => x.status,
-            _ => panic!(),
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         EsiApiError {
             internal: x.into(),
@@ -85,7 +85,7 @@ impl From<apis::Error<GetSearchError>> for EsiApiError {
     fn from(x: apis::Error<GetSearchError>) -> Self {
         let code = match &x {
             apis::Error::ResponseError(x) => x.status,
-            _ => panic!(),
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         EsiApiError {
             internal: x.into(),
@@ -98,7 +98,7 @@ impl From<apis::Error<GetCharactersCharacterIdSearchError>> for EsiApiError {
     fn from(x: apis::Error<GetCharactersCharacterIdSearchError>) -> Self {
         let code = match &x {
             apis::Error::ResponseError(x) => x.status,
-            _ => panic!(),
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         EsiApiError {
             internal: x.into(),
@@ -117,7 +117,7 @@ impl From<apis::Error<GetMarketsStructuresStructureIdError>> for EsiApiError {
                 ..
             }) if r.error.contains("Undefined 404 response") => StatusCode::NOT_FOUND,
             apis::Error::ResponseError(x) => x.status,
-            _ => panic!(),
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         EsiApiError {
             internal: x.into(),
@@ -136,7 +136,7 @@ impl From<apis::Error<GetMarketsRegionIdTypesError>> for EsiApiError {
                 ..
             }) if r.error.contains("Undefined 404 response") => StatusCode::NOT_FOUND,
             apis::Error::ResponseError(x) => x.status,
-            _ => panic!(),
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         EsiApiError {
             internal: x.into(),
@@ -149,7 +149,7 @@ impl From<apis::Error<GetRouteOriginDestinationError>> for EsiApiError {
     fn from(x: apis::Error<GetRouteOriginDestinationError>) -> Self {
         let code = match &x {
             apis::Error::ResponseError(x) => x.status,
-            _ => panic!(),
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         EsiApiError {
             internal: x.into(),
@@ -162,7 +162,7 @@ impl From<apis::Error<GetKillmailsKillmailIdKillmailHashError>> for EsiApiError 
     fn from(x: apis::Error<GetKillmailsKillmailIdKillmailHashError>) -> Self {
         let code = match &x {
             apis::Error::ResponseError(x) => x.status,
-            _ => panic!(),
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         EsiApiError {
             internal: x.into(),
@@ -175,7 +175,7 @@ impl From<apis::Error<GetUniverseTypesTypeIdError>> for EsiApiError {
     fn from(x: apis::Error<GetUniverseTypesTypeIdError>) -> Self {
         let code = match &x {
             apis::Error::ResponseError(x) => x.status,
-            _ => panic!(),
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         EsiApiError {
             internal: x.into(),
@@ -188,7 +188,7 @@ impl From<apis::Error<GetMarketsRegionIdHistoryError>> for EsiApiError {
     fn from(x: apis::Error<GetMarketsRegionIdHistoryError>) -> Self {
         let code = match &x {
             apis::Error::ResponseError(x) => x.status,
-            _ => panic!(),
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         EsiApiError {
             internal: x.into(),
