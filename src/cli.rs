@@ -13,6 +13,7 @@ pub const FORCE_REFRESH: &str = "force-refresh";
 pub const FORCE_NO_REFRESH: &str = "force-no-refresh";
 pub const NAME_LENGTH: &str = "name-length";
 pub const QUIET: &str = "quiet";
+pub const FILE_LOUD: &str = "file-loud";
 
 pub fn matches() -> ArgMatches<'static> {
     let matches = App::new("Eve Tradeworks")
@@ -80,6 +81,7 @@ pub fn matches() -> ArgMatches<'static> {
                 .conflicts_with(FORCE_REFRESH),
         )
         .arg(Arg::with_name(QUIET).short("q").takes_value(false))
+        .arg(Arg::with_name(FILE_LOUD).short("v").takes_value(false))
         .get_matches();
     matches
 }

@@ -1,4 +1,4 @@
-pub fn setup_logger(quiet: bool) -> Result<(), fern::InitError> {
+pub fn setup_logger(quiet: bool, log_file_debug: bool) -> Result<(), fern::InitError> {
     fern::Dispatch::new()
         .format(|out, message, record| {
             out.finish(format_args!(
@@ -9,7 +9,11 @@ pub fn setup_logger(quiet: bool) -> Result<(), fern::InitError> {
                 message
             ))
         })
-        .level(log::LevelFilter::Debug)
+        .level(if log_file_debug {
+            log::LevelFilter::Debug
+        } else {
+            log::LevelFilter::Info
+        })
         .chain(
             fern::Dispatch::new()
                 .level(if quiet {

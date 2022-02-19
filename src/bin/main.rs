@@ -48,7 +48,8 @@ async fn run() -> Result<()> {
     let cli_args = cli::matches();
 
     let quiet = cli_args.is_present(cli::QUIET);
-    logger::setup_logger(quiet)?;
+    let file_loud = cli_args.is_present(cli::FILE_LOUD);
+    logger::setup_logger(quiet, file_loud)?;
 
     let config_file_name = cli_args.value_of(cli::CONFIG).unwrap_or("config.json");
     let config = Config::from_file_json(config_file_name)?;
@@ -85,141 +86,125 @@ async fn run() -> Result<()> {
     let force_refresh = cli_args.is_present(cli::FORCE_REFRESH);
     let force_no_refresh = cli_args.is_present(cli::FORCE_NO_REFRESH);
 
-    let mut pairs: Vec<SystemMarketsItemData> = CachedData::load_or_create_async(
-        format!("cache/{}.rmp", config_file_name),
-        force_refresh,
-        if force_no_refresh {
-            None
-        } else {
-            Some(Duration::hours(config.refresh_timeout_hours))
-        },
-        || {
-            let config = &config;
-            let esi_requests = &esi_requests;
-            async move {
-                let source_region = esi_requests
-                    .find_region_id_station(config.source.clone(), character_id)
-                    .await
-                    .unwrap();
+    let mut pairs: Vec<SystemMarketsItemData> = {
+        let config = &config;
+        let esi_requests = &esi_requests;
+        let source_region = esi_requests
+            .find_region_id_station(config.source.clone(), character_id)
+            .await
+            .unwrap();
 
-                let dest_region = esi_requests
-                    .find_region_id_station(config.destination.clone(), character_id)
-                    .await
-                    .unwrap();
+        let dest_region = esi_requests
+            .find_region_id_station(config.destination.clone(), character_id)
+            .await
+            .unwrap();
 
-                // all item type ids
-                let all_types = CachedData::load_or_create_json_async(
-                    "cache/all_types.json",
-                    force_refresh,
-                    Some(Duration::days(7)),
-                    || async {
-                        let all_types = esi_requests.get_all_item_types(source_region.region_id);
-                        let all_types_dest = esi_requests.get_all_item_types(dest_region.region_id);
-                        let (all_types, all_types_dest) = join!(all_types, all_types_dest);
-                        let (mut all_types, all_types_dest) = (all_types?, all_types_dest?);
+        // all item type ids
+        let all_types = CachedData::load_or_create_json_async(
+            "cache/all_types.json",
+            force_refresh,
+            Some(Duration::days(7)),
+            || async {
+                let all_types = esi_requests.get_all_item_types(source_region.region_id);
+                let all_types_dest = esi_requests.get_all_item_types(dest_region.region_id);
+                let (all_types, all_types_dest) = join!(all_types, all_types_dest);
+                let (mut all_types, all_types_dest) = (all_types?, all_types_dest?);
 
-                        all_types.extend(all_types_dest);
-                        all_types.sort_unstable();
-                        all_types.dedup();
-                        Ok(all_types)
-                    },
-                )
-                .await?
-                .data;
+                all_types.extend(all_types_dest);
+                all_types.sort_unstable();
+                all_types.dedup();
+                Ok(all_types)
+            },
+        )
+        .await?
+        .data;
 
-                let all_type_descriptions: HashMap<i32, Option<TypeDescription>> =
-                    CachedData::load_or_create_json_async(
-                        "cache/all_type_descriptions.json",
-                        force_refresh,
-                        Some(Duration::days(7)),
-                        || async {
-                            let res = stream::iter(all_types.clone())
-                                .map(|id| {
-                                    let esi_requests = &esi_requests;
-                                    async move {
-                                        let req_res = esi_requests.get_item_stuff(id).await?;
+        let all_type_descriptions: HashMap<i32, Option<TypeDescription>> =
+            CachedData::load_or_create_async(
+                "cache/all_type_descriptions.rmp",
+                force_refresh,
+                Some(Duration::days(7)),
+                || async {
+                    let res = stream::iter(all_types.clone())
+                        .map(|id| {
+                            let esi_requests = &esi_requests;
+                            async move {
+                                let req_res = esi_requests.get_item_stuff(id).await?;
 
-                                        Ok((id, req_res.map(|x| x.into())))
-                                    }
-                                })
-                                .buffer_unordered(BUFFER_UNORDERED)
-                                .collect::<Vec<Result<_>>>()
-                                .await
-                                .into_iter()
-                                .collect::<Result<Vec<_>>>()?
-                                .into_iter()
-                                .collect();
-
-                            Ok(res)
-                        },
-                    )
-                    .await?
-                    .data;
-
-                let source_history = CachedData::load_or_create_async(
-                    format!("cache/{}.rmp", config.source.name),
-                    force_refresh,
-                    Some(Duration::hours(config.refresh_timeout_hours)),
-                    || async { Ok(esi_requests.history(&all_types, source_region).await?) },
-                );
-                let dest_history = CachedData::load_or_create_async(
-                    format!("cache/{}.rmp", config.destination.name),
-                    force_refresh,
-                    Some(Duration::hours(config.refresh_timeout_hours)),
-                    || async { Ok(esi_requests.history(&all_types, dest_region).await?) },
-                );
-
-                let (source_history, dest_history) = join!(source_history, dest_history);
-                let (source_history, dest_history) = (source_history?.data, dest_history?.data);
-
-                // turn history into n day average
-                let source_types_average = source_history
-                    .into_iter()
-                    .map(|x| (x.id, x))
-                    .collect::<HashMap<_, _>>();
-
-                let mut dest_types_average = dest_history
-                    .into_iter()
-                    .map(|x| (x.id, x))
-                    .collect::<HashMap<_, _>>();
-
-                // pair
-                let pairs = source_types_average.into_iter().flat_map(|(k, v)| {
-                    Some(SystemMarketsItem {
-                        id: k,
-                        source: v.into(),
-                        destination: match dest_types_average.insert(k, Default::default()) {
-                            Some(x) => x.into(),
-                            None => {
-                                log::warn!(
-                                    "Destination history didn't have history for item: {}",
-                                    k
-                                );
-                                return None;
+                                Ok((id, req_res.map(|x| x.into())))
                             }
-                        },
-                    })
-                });
-
-                Ok(pairs
-                    .filter_map(|it| {
-                        let req_res = all_type_descriptions[&it.id].clone();
-
-                        Some(SystemMarketsItemData {
-                            desc: match req_res {
-                                Some(x) => x,
-                                None => return None,
-                            },
-                            source: it.source,
-                            destination: it.destination,
                         })
-                    })
-                    .collect())
-            }
-        },
-    )
-    .await?
-    .data;
+                        .buffer_unordered(BUFFER_UNORDERED)
+                        .collect::<Vec<Result<_>>>()
+                        .await
+                        .into_iter()
+                        .collect::<Result<Vec<_>>>()?
+                        .into_iter()
+                        .collect();
+
+                    Ok(res)
+                },
+            )
+            .await?
+            .data;
+
+        let source_history = CachedData::load_or_create_async(
+            format!("cache/{}.rmp", config.source.name),
+            force_refresh,
+            Some(Duration::hours(config.refresh_timeout_hours)),
+            || async { Ok(esi_requests.history(&all_types, source_region).await?) },
+        );
+        let dest_history = CachedData::load_or_create_async(
+            format!("cache/{}.rmp", config.destination.name),
+            force_refresh,
+            Some(Duration::hours(config.refresh_timeout_hours)),
+            || async { Ok(esi_requests.history(&all_types, dest_region).await?) },
+        );
+
+        let (source_history, dest_history) = join!(source_history, dest_history);
+        let (source_history, dest_history) = (source_history?.data, dest_history?.data);
+
+        // turn history into n day average
+        let source_types_average = source_history
+            .into_iter()
+            .map(|x| (x.id, x))
+            .collect::<HashMap<_, _>>();
+
+        let mut dest_types_average = dest_history
+            .into_iter()
+            .map(|x| (x.id, x))
+            .collect::<HashMap<_, _>>();
+
+        // pair
+        let pairs = source_types_average.into_iter().flat_map(|(k, v)| {
+            Some(SystemMarketsItem {
+                id: k,
+                source: v.into(),
+                destination: match dest_types_average.insert(k, Default::default()) {
+                    Some(x) => x.into(),
+                    None => {
+                        log::warn!("Destination history didn't have history for item: {}", k);
+                        return None;
+                    }
+                },
+            })
+        });
+
+        pairs
+            .filter_map(|it| {
+                let req_res = all_type_descriptions[&it.id].clone();
+
+                Some(SystemMarketsItemData {
+                    desc: match req_res {
+                        Some(x) => x,
+                        None => return None,
+                    },
+                    source: it.source,
+                    destination: it.destination,
+                })
+            })
+            .collect::<Vec<SystemMarketsItemData>>()
+    };
 
     let mut disable_filters = false;
     if let Some(v) = cli_args
