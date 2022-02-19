@@ -300,7 +300,7 @@ async fn run() -> Result<()> {
     println!("{}", table.render());
 
     if cli_args.is_present(cli::DISPLAY_SIMPLE_LIST) {
-        let mut rows = simple_list
+        let rows = simple_list
             .iter()
             .map(|it| {
                 Row::new(vec![
@@ -309,7 +309,6 @@ async fn run() -> Result<()> {
                 ])
             })
             .collect::<Vec<_>>();
-        rows.sort_by_key(|x| x.cells[0].data.clone());
 
         let table = TableBuilder::new()
             .style(TableStyle::empty())
@@ -321,7 +320,7 @@ async fn run() -> Result<()> {
         println!("Item names:\n{}", table.render());
     }
     if cli_args.is_present(cli::DISPLAY_SIMPLE_LIST_PRICE) {
-        let mut rows = simple_list
+        let rows = simple_list
             .iter()
             .map(|it| {
                 Row::new(vec![
@@ -331,7 +330,6 @@ async fn run() -> Result<()> {
                 ])
             })
             .collect::<Vec<_>>();
-        rows.sort_by_key(|x| x.cells[0].data.clone());
 
         let table = TableBuilder::new()
             .style(TableStyle::empty())
