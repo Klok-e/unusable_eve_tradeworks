@@ -22,7 +22,7 @@ use unusable_eve_tradeworks_lib::{
         sell_sell::{get_good_items_sell_sell, make_table_sell_sell},
         sell_sell_zkb::{get_good_items_sell_sell_zkb, make_table_sell_sell_zkb},
     },
-    item_type::{SystemMarketsItem, SystemMarketsItemData},
+    item_type::{SystemMarketsItem, SystemMarketsItemData, TypeDescription},
     logger,
     requests::service::EsiRequestsService,
     zkb::{killmails::KillmailService, zkb_requests::ZkbRequestsService},
@@ -113,12 +113,11 @@ async fn run() -> Result<()> {
                     force_refresh,
                     Some(Duration::days(7)),
                     || async {
-                        let mut all_types = esi_requests
-                            .get_all_item_types(source_region.region_id)
-                            .await?;
-                        let all_types_dest = esi_requests
-                            .get_all_item_types(dest_region.region_id)
-                            .await?;
+                        let all_types = esi_requests.get_all_item_types(source_region.region_id);
+                        let all_types_dest = esi_requests.get_all_item_types(dest_region.region_id);
+                        let (all_types, all_types_dest) = join!(all_types, all_types_dest);
+                        let (mut all_types, all_types_dest) = (all_types?, all_types_dest?);
+
                         all_types.extend(all_types_dest);
                         all_types.sort_unstable();
                         all_types.dedup();
@@ -127,6 +126,35 @@ async fn run() -> Result<()> {
                 )
                 .await?
                 .data;
+
+                let all_type_descriptions: HashMap<i32, Option<TypeDescription>> =
+                    CachedData::load_or_create_json_async(
+                        "cache/all_type_descriptions.json",
+                        force_refresh,
+                        Some(Duration::days(7)),
+                        || async {
+                            let res = stream::iter(all_types.clone())
+                                .map(|id| {
+                                    let esi_requests = &esi_requests;
+                                    async move {
+                                        let req_res = esi_requests.get_item_stuff(id).await?;
+
+                                        Ok((id, req_res.map(|x| x.into())))
+                                    }
+                                })
+                                .buffer_unordered(BUFFER_UNORDERED)
+                                .collect::<Vec<Result<_>>>()
+                                .await
+                                .into_iter()
+                                .collect::<Result<Vec<_>>>()?
+                                .into_iter()
+                                .collect();
+
+                            Ok(res)
+                        },
+                    )
+                    .await?
+                    .data;
 
                 let source_history = CachedData::load_or_create_async(
                     format!("cache/{}.rmp", config.source.name),
@@ -173,30 +201,19 @@ async fn run() -> Result<()> {
                     })
                 });
 
-                Ok(stream::iter(pairs)
-                    .map(|it| {
-                        let it = it;
-                        let esi_requests = &esi_requests;
-                        async move {
-                            let req_res = esi_requests.get_item_stuff(it.id).await?;
+                Ok(pairs
+                    .filter_map(|it| {
+                        let req_res = all_type_descriptions[&it.id].clone();
 
-                            Ok(Some(SystemMarketsItemData {
-                                desc: match req_res {
-                                    Some(x) => x.into(),
-                                    None => return Ok(None),
-                                },
-                                source: it.source,
-                                destination: it.destination,
-                            }))
-                        }
+                        Some(SystemMarketsItemData {
+                            desc: match req_res {
+                                Some(x) => x,
+                                None => return None,
+                            },
+                            source: it.source,
+                            destination: it.destination,
+                        })
                     })
-                    .buffer_unordered(BUFFER_UNORDERED)
-                    .collect::<Vec<Result<Option<SystemMarketsItemData>>>>()
-                    .await
-                    .into_iter()
-                    .collect::<Result<Vec<Option<SystemMarketsItemData>>>>()?
-                    .into_iter()
-                    .flatten()
                     .collect())
             }
         },
