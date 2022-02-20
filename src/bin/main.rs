@@ -6,15 +6,13 @@ use futures::{stream, StreamExt};
 use oauth2::TokenResponse;
 use rust_eveonline_esi::apis::configuration::Configuration;
 
-use bzip2;
-use rusqlite;
 use term_table::{row::Row, table_cell::TableCell, TableBuilder, TableStyle};
 use tokio::join;
 
 use serde::{Deserialize, Serialize};
 use unusable_eve_tradeworks_lib::{
     auth::Auth,
-    cached_data::{self, load_or_create_async, load_or_create_json_async},
+    cached_data::{self},
     cli,
     config::{AuthConfig, Config},
     consts::{self, BUFFER_UNORDERED},
