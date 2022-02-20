@@ -249,11 +249,10 @@ async fn run() -> Result<()> {
 
                 // include only specific groups
                 if let Some(ids) = &group_ids {
-                    if !(req_res
+                    if !req_res
                         .market_group_id
                         .map(|x| ids.contains(&x))
                         .unwrap_or(false)
-                        || ids.contains(&req_res.group_id))
                     {
                         return None;
                     }
