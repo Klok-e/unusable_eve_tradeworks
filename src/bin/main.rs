@@ -239,8 +239,6 @@ async fn run() -> Result<()> {
             })
             .transpose()?;
 
-        // dbg!(group_ids.as_ref().map(|x| x.contains(&2466)));
-
         pairs
             .filter_map(|it| {
                 let req_res = all_type_descriptions[&it.id].clone();
