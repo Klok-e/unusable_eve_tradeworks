@@ -37,6 +37,7 @@ pub struct Config {
     pub zkill_entity: ZkillEntity,
     pub refresh_timeout_hours: i64,
     pub min_profit: Option<f64>,
+    pub include_groups: Option<Vec<String>>,
 }
 
 impl Config {

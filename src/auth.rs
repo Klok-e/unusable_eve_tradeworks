@@ -1,4 +1,7 @@
-use crate::{cached_data::CachedData, config::AuthConfig};
+use crate::{
+    cached_data::{self},
+    config::AuthConfig,
+};
 
 use chrono::{DateTime, Utc};
 use oauth2::{
@@ -19,7 +22,7 @@ pub struct Auth {
 impl Auth {
     pub async fn load_or_request_token(config: &AuthConfig) -> Self {
         let path = "cache/auth";
-        let mut data = CachedData::load_or_create_json_async(path, false, None, || async {
+        let mut data = cached_data::load_or_create_json_async(path, false, None, || async {
             let token = Self::request_new(config).await;
             let expiration_date =
                 Utc::now() + chrono::Duration::from_std(token.expires_in().unwrap()).unwrap();
@@ -29,8 +32,7 @@ impl Auth {
             })
         })
         .await
-        .unwrap()
-        .data;
+        .unwrap();
 
         // if expired use refresh token
         if data.expiration_date < Utc::now() {
@@ -48,7 +50,7 @@ impl Auth {
                 expiration_date,
             };
 
-            CachedData::load_or_create_json_async(path, true, None, || {
+            cached_data::load_or_create_json_async(path, true, None, || {
                 let data = data.clone();
                 async { Ok(data) }
             })

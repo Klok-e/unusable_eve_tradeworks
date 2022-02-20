@@ -10,6 +10,10 @@ pub enum Error {
     File(#[from] std::io::Error),
     #[error("Serialization failure")]
     Serialization(#[from] serde_json::Error),
+    #[error("Reqwest error")]
+    Reqwest(#[from] reqwest::Error),
+    #[error("Rusqlite error")]
+    Rusqlite(#[from] rusqlite::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

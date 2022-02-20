@@ -5,6 +5,7 @@ pub mod cached_data;
 pub mod cli;
 pub mod config;
 pub mod consts;
+pub mod datadump_service;
 pub mod error;
 pub mod good_items;
 pub mod item_type;

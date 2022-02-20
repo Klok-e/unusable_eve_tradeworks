@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, io::Read};
 
 use chrono::Duration;
 use futures::{stream, StreamExt};
@@ -6,16 +6,19 @@ use futures::{stream, StreamExt};
 use oauth2::TokenResponse;
 use rust_eveonline_esi::apis::configuration::Configuration;
 
+use bzip2;
+use rusqlite;
 use term_table::{row::Row, table_cell::TableCell, TableBuilder, TableStyle};
 use tokio::join;
 
 use serde::{Deserialize, Serialize};
 use unusable_eve_tradeworks_lib::{
     auth::Auth,
-    cached_data::CachedData,
+    cached_data::{self, load_or_create_async, load_or_create_json_async},
     cli,
     config::{AuthConfig, Config},
     consts::{self, BUFFER_UNORDERED},
+    datadump_service::DatadumpService,
     error::Result,
     good_items::{
         sell_buy::{get_good_items_sell_buy, make_table_sell_buy},
@@ -69,6 +72,36 @@ async fn run() -> Result<()> {
 
     let esi_requests = EsiRequestsService::new(&esi_config);
 
+    let path_to_datadump = cached_data::load_or_create_json_async(
+        "cache/datadump.json",
+        false,
+        Some(Duration::days(14)),
+        || async {
+            let client = &esi_config.client;
+            let res = client
+                .get("https://www.fuzzwork.co.uk/dump/sqlite-latest.sqlite.bz2")
+                .send()
+                .await?;
+            let bytes = res.bytes().await?.to_vec();
+
+            // decompress
+            let mut decompressor = bzip2::read::BzDecoder::new(bytes.as_slice());
+            let mut contents = Vec::new();
+            decompressor.read_to_end(&mut contents).unwrap();
+
+            let path = "cache/datadump.db".to_string();
+            std::fs::write(&path, contents)?;
+            Ok(path)
+        },
+    )
+    .await?;
+
+    let db = rusqlite::Connection::open_with_flags(
+        path_to_datadump,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?;
+    let data_service = DatadumpService::new(db);
+
     // TODO: dangerous plese don't use in production
     let character_info = jsonwebtoken::dangerous_insecure_decode::<CharacterInfo>(
         auth.token.access_token().secret(),
@@ -100,7 +133,7 @@ async fn run() -> Result<()> {
             .unwrap();
 
         // all item type ids
-        let all_types = CachedData::load_or_create_json_async(
+        let all_types = cached_data::load_or_create_json_async(
             "cache/all_types.json",
             force_refresh,
             Some(Duration::days(7)),
@@ -116,11 +149,10 @@ async fn run() -> Result<()> {
                 Ok(all_types)
             },
         )
-        .await?
-        .data;
+        .await?;
 
         let all_type_descriptions: HashMap<i32, Option<TypeDescription>> =
-            CachedData::load_or_create_async(
+            cached_data::load_or_create_async(
                 "cache/all_type_descriptions.rmp",
                 force_refresh,
                 Some(Duration::days(7)),
@@ -145,16 +177,15 @@ async fn run() -> Result<()> {
                     Ok(res)
                 },
             )
-            .await?
-            .data;
+            .await?;
 
-        let source_history = CachedData::load_or_create_async(
+        let source_history = cached_data::load_or_create_async(
             format!("cache/{}.rmp", config.source.name),
             force_refresh,
             Some(Duration::hours(config.refresh_timeout_hours)),
             || async { Ok(esi_requests.history(&all_types, source_region).await?) },
         );
-        let dest_history = CachedData::load_or_create_async(
+        let dest_history = cached_data::load_or_create_async(
             format!("cache/{}.rmp", config.destination.name),
             force_refresh,
             Some(Duration::hours(config.refresh_timeout_hours)),
@@ -162,7 +193,7 @@ async fn run() -> Result<()> {
         );
 
         let (source_history, dest_history) = join!(source_history, dest_history);
-        let (source_history, dest_history) = (source_history?.data, dest_history?.data);
+        let (source_history, dest_history) = (source_history?, dest_history?);
 
         // turn history into n day average
         let source_types_average = source_history
@@ -190,20 +221,48 @@ async fn run() -> Result<()> {
             })
         });
 
+        let group_ids = config
+            .include_groups
+            .as_ref()
+            .map(|x| {
+                let groups = x
+                    .iter()
+                    .map(|name| {
+                        let children =
+                            data_service.get_all_group_id_with_root_name(name.as_str())?;
+
+                        Ok(children)
+                    })
+                    .collect::<Result<Vec<_>>>()?
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>();
+                Result::Ok(groups)
+            })
+            .transpose()?;
+
         pairs
             .filter_map(|it| {
                 let req_res = all_type_descriptions[&it.id].clone();
+                let req_res = match req_res {
+                    Some(x) => x,
+                    None => return None,
+                };
+
+                // include only specific groups
+                if let Some(ids) = &group_ids {
+                    if !ids.contains(&req_res.group_id) {
+                        return None;
+                    }
+                }
 
                 Some(SystemMarketsItemData {
-                    desc: match req_res {
-                        Some(x) => x,
-                        None => return None,
-                    },
+                    desc: req_res,
                     source: it.source,
                     destination: it.destination,
                 })
             })
-            .collect::<Vec<SystemMarketsItemData>>()
+            .collect::<Vec<_>>()
     };
 
     let mut disable_filters = false;
@@ -258,7 +317,7 @@ async fn run() -> Result<()> {
             make_table_sell_buy(&good_items, name_len)
         } else {
             log::trace!("Sell sell zkb path.");
-            let kms = CachedData::load_or_create_async(
+            let kms = cached_data::load_or_create_async(
                 "cache/zkb_losses",
                 force_refresh,
                 if force_no_refresh {
@@ -282,8 +341,7 @@ async fn run() -> Result<()> {
                     }
                 },
             )
-            .await?
-            .data;
+            .await?;
 
             let good_items = get_good_items_sell_sell_zkb(pairs, kms, &config, disable_filters);
             simple_list = good_items
