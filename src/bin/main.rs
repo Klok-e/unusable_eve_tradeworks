@@ -320,12 +320,16 @@ async fn run() -> Result<()> {
         } else {
             log::trace!("Sell sell zkb path.");
             let kms = cached_data::load_or_create_async(
-                "cache/zkb_losses",
+                format!(
+                    "cache/zkb_losses.{}.{}.rmp",
+                    config.zkill_entity.tp.zkill_filter_string(),
+                    config.zkill_entity.id
+                ),
                 force_refresh,
                 if force_no_refresh {
                     None
                 } else {
-                    Some(Duration::hours(config.refresh_timeout_hours))
+                    Some(Duration::hours(24))
                 },
                 || {
                     let esi_requests = &esi_requests;

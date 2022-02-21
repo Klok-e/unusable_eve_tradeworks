@@ -16,6 +16,7 @@ pub struct ZkillEntity {
 pub enum ZkillEntityType {
     Corporation,
     Alliance,
+    Region,
 }
 
 impl ZkillEntityType {
@@ -23,6 +24,7 @@ impl ZkillEntityType {
         match self {
             ZkillEntityType::Corporation => "corporationID",
             ZkillEntityType::Alliance => "allianceID",
+            ZkillEntityType::Region => "regionID",
         }
     }
 }
