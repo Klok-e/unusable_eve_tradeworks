@@ -10,7 +10,7 @@ rust_eveonline_esi = { git = "https://github.com/LokiVKlokeNaAndoke/rust_eveonli
 tokio = { version = "1.11", features = ["macros", "rt-multi-thread"] }
 thiserror = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-rmp-serde = "0.15"
+rmp-serde = "1.0"
 futures = { version = "0.3", default-features = false, features = ["std"] }
 chrono = { version = "0.4", features = ["serde"] }
 itertools = "0.10"
@@ -22,9 +22,9 @@ ordered-float = "2.8"
 fern = "0.6"
 log = "0.4"
 num-traits = "0.2"
-clap = "2.33"
+clap = "3.1"
 oauth2 = { version = "4.1", default-features = false, features = ["reqwest"] }
-tiny_http = "0.9"
+tiny_http = "0.10"
 rusqlite = "0.26"
 bzip2 = "0.4"
 

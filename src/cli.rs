@@ -15,50 +15,50 @@ pub const NAME_LENGTH: &str = "name-length";
 pub const QUIET: &str = "quiet";
 pub const FILE_LOUD: &str = "file-loud";
 
-pub fn matches() -> ArgMatches<'static> {
+pub fn matches() -> ArgMatches {
     let matches = App::new("Eve Tradeworks")
         .arg(
             Arg::with_name(CONFIG)
-                .short("c")
+                .short('c')
                 .long("config")
                 .takes_value(true),
         )
         .arg(
             Arg::with_name(SELL_SELL)
-                .short("s")
+                .short('s')
                 .long("sell-sell")
                 .takes_value(false)
                 .conflicts_with_all(&[SELL_BUY, SELL_SELL_ZKB]),
         )
         .arg(
             Arg::with_name(SELL_SELL_ZKB)
-                .short("z")
+                .short('z')
                 .long("sell-sell-zkb")
                 .takes_value(false)
                 .conflicts_with_all(&[SELL_BUY, SELL_SELL]),
         )
         .arg(
             Arg::with_name(SELL_BUY)
-                .short("b")
+                .short('b')
                 .long("sell-buy")
                 .takes_value(false)
                 .conflicts_with_all(&[SELL_SELL, SELL_SELL_ZKB]),
         )
         .arg(
             Arg::with_name(DISPLAY_SIMPLE_LIST)
-                .short("l")
+                .short('l')
                 .long("simple-list")
                 .takes_value(false),
         )
         .arg(
             Arg::with_name(DISPLAY_SIMPLE_LIST_PRICE)
-                .short("p")
+                .short('p')
                 .long("simple-list-price")
                 .takes_value(false),
         )
         .arg(
             Arg::with_name(NAME_LENGTH)
-                .short("n")
+                .short('n')
                 .long("name-length")
                 .default_value(ITEM_NAME_LEN),
         )
@@ -69,7 +69,7 @@ pub fn matches() -> ArgMatches<'static> {
         )
         .arg(
             Arg::with_name(FORCE_REFRESH)
-                .short("r")
+                .short('r')
                 .long("force-refresh")
                 .takes_value(false)
                 .conflicts_with(FORCE_NO_REFRESH),
@@ -80,8 +80,8 @@ pub fn matches() -> ArgMatches<'static> {
                 .takes_value(false)
                 .conflicts_with(FORCE_REFRESH),
         )
-        .arg(Arg::with_name(QUIET).short("q").takes_value(false))
-        .arg(Arg::with_name(FILE_LOUD).short("v").takes_value(false))
+        .arg(Arg::with_name(QUIET).short('q').takes_value(false))
+        .arg(Arg::with_name(FILE_LOUD).short('v').takes_value(false))
         .get_matches();
     matches
 }

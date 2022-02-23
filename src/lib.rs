@@ -1,5 +1,3 @@
-#![feature(bool_to_option)]
-
 pub mod auth;
 pub mod cached_data;
 pub mod cli;
