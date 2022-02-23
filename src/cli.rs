@@ -1,4 +1,4 @@
-use clap::{App, Arg, ArgMatches, Command};
+use clap::{Arg, ArgMatches, Command};
 
 use crate::consts::ITEM_NAME_LEN;
 
