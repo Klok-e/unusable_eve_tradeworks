@@ -1,4 +1,4 @@
-use clap::{App, Arg, ArgMatches};
+use clap::{App, Arg, ArgMatches, Command};
 
 use crate::consts::ITEM_NAME_LEN;
 
@@ -16,72 +16,63 @@ pub const QUIET: &str = "quiet";
 pub const FILE_LOUD: &str = "file-loud";
 
 pub fn matches() -> ArgMatches {
-    let matches = App::new("Eve Tradeworks")
+    let matches = Command::new("Eve Tradeworks")
+        .arg(Arg::new(CONFIG).short('c').long("config").takes_value(true))
         .arg(
-            Arg::with_name(CONFIG)
-                .short('c')
-                .long("config")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name(SELL_SELL)
+            Arg::new(SELL_SELL)
                 .short('s')
                 .long("sell-sell")
                 .takes_value(false)
                 .conflicts_with_all(&[SELL_BUY, SELL_SELL_ZKB]),
         )
         .arg(
-            Arg::with_name(SELL_SELL_ZKB)
+            Arg::new(SELL_SELL_ZKB)
                 .short('z')
                 .long("sell-sell-zkb")
                 .takes_value(false)
                 .conflicts_with_all(&[SELL_BUY, SELL_SELL]),
         )
         .arg(
-            Arg::with_name(SELL_BUY)
+            Arg::new(SELL_BUY)
                 .short('b')
                 .long("sell-buy")
                 .takes_value(false)
                 .conflicts_with_all(&[SELL_SELL, SELL_SELL_ZKB]),
         )
         .arg(
-            Arg::with_name(DISPLAY_SIMPLE_LIST)
+            Arg::new(DISPLAY_SIMPLE_LIST)
                 .short('l')
                 .long("simple-list")
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name(DISPLAY_SIMPLE_LIST_PRICE)
+            Arg::new(DISPLAY_SIMPLE_LIST_PRICE)
                 .short('p')
                 .long("simple-list-price")
                 .takes_value(false),
         )
         .arg(
-            Arg::with_name(NAME_LENGTH)
+            Arg::new(NAME_LENGTH)
                 .short('n')
                 .long("name-length")
                 .default_value(ITEM_NAME_LEN),
         )
+        .arg(Arg::new(DEBUG_ITEM_ID).long("debug-item").takes_value(true))
         .arg(
-            Arg::with_name(DEBUG_ITEM_ID)
-                .long("debug-item")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name(FORCE_REFRESH)
+            Arg::new(FORCE_REFRESH)
                 .short('r')
                 .long("force-refresh")
                 .takes_value(false)
                 .conflicts_with(FORCE_NO_REFRESH),
         )
         .arg(
-            Arg::with_name(FORCE_NO_REFRESH)
+            Arg::new(FORCE_NO_REFRESH)
                 .long("force-no-refresh")
                 .takes_value(false)
                 .conflicts_with(FORCE_REFRESH),
         )
-        .arg(Arg::with_name(QUIET).short('q').takes_value(false))
-        .arg(Arg::with_name(FILE_LOUD).short('v').takes_value(false))
+        .arg(Arg::new(QUIET).short('q').takes_value(false))
+        .arg(Arg::new(FILE_LOUD).short('v').takes_value(false))
         .get_matches();
     matches
 }
