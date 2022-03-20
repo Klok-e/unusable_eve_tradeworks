@@ -46,6 +46,8 @@ async fn main() -> Result<()> {
 }
 
 async fn run() -> Result<()> {
+    std::fs::create_dir_all("cache/")?;
+
     let cli_args = cli::matches();
 
     let quiet = cli_args.is_present(cli::QUIET);
