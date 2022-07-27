@@ -1,3 +1,4 @@
+use good_lp::SolverModel;
 use itertools::Itertools;
 use ordered_float::NotNan;
 use term_table::{row::Row, table_cell::TableCell};
@@ -140,8 +141,62 @@ pub fn get_good_items_sell_buy(
                     .map_or(true, |min_prft| x.best_rough_profit > min_prft)
         })
         .sorted_unstable_by_key(|x| NotNan::new(-x.best_rough_profit).unwrap())
-        .take(config.items_take)
         .collect::<Vec<_>>()
+        .take_maximizing_profit(config.cargo_capacity)
+}
+
+trait DataVecExt {
+    fn take_maximizing_profit(self, max_cargo: i32) -> Vec<PairCalculatedDataSellBuy>;
+}
+
+impl DataVecExt for Vec<PairCalculatedDataSellBuy> {
+    fn take_maximizing_profit(self, max_cargo: i32) -> Vec<PairCalculatedDataSellBuy> {
+        use good_lp::{default_solver, variable, Expression, ProblemVariables, Solution, Variable};
+        let mut vars = ProblemVariables::new();
+        let mut var_refs = Vec::new();
+        for item in &self {
+            let var_def = variable().integer().min(0).max(item.recommend_buy);
+            var_refs.push(vars.add(var_def));
+        }
+
+        let goal = var_refs
+            .iter()
+            .zip(self.iter())
+            .map(
+                |(&var, item): (&Variable, &PairCalculatedDataSellBuy)| -> Expression {
+                    (item.sell_price - item.expenses) * var
+                },
+            )
+            .sum::<Expression>();
+
+        let space_constraint = var_refs
+            .iter()
+            .zip(self.iter())
+            .map(
+                |(&var, item): (&Variable, &PairCalculatedDataSellBuy)| -> Expression {
+                    (item.market.desc.volume.unwrap() as f64) * var
+                },
+            )
+            .sum::<Expression>()
+            .leq(max_cargo);
+
+        let solution = vars
+            .maximise(goal)
+            .using(default_solver)
+            .with(space_constraint)
+            .solve()
+            .unwrap();
+
+        var_refs.into_iter().zip(self.into_iter()).map(
+            |(var, mut item): (Variable, PairCalculatedDataSellBuy)| -> PairCalculatedDataSellBuy {
+                let optimal = solution.value(var);
+                item.recommend_buy = optimal as i32;
+                item
+            },
+        )
+        .filter(|x: &PairCalculatedDataSellBuy| x.recommend_buy > 0)
+        .collect::<Vec<_>>()
+    }
 }
 
 pub fn make_table_sell_buy<'a, 'b>(
@@ -200,6 +255,7 @@ pub fn make_table_sell_buy<'a, 'b>(
     rows
 }
 
+#[derive(Debug, Clone)]
 pub struct PairCalculatedDataSellBuy {
     pub market: SystemMarketsItemData,
     pub margin: f64,

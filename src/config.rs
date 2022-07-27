@@ -38,6 +38,7 @@ pub struct Config {
     pub refresh_timeout_hours: i64,
     pub min_profit: Option<f64>,
     pub include_groups: Option<Vec<String>>,
+    pub cargo_capacity: i32,
 }
 
 impl Config {
