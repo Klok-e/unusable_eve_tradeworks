@@ -125,7 +125,7 @@ pub fn prepare_sell_sell(
     let dst_weighted_price = weighted_price(config, &market_data.destination.history);
     let dest_sell_price =
         dst_lowest_sell_order.map_or(dst_weighted_price, |x| x.min(dst_weighted_price));
-    let max_buy_vol = (volume_dest * config.rcmnd_fill_days)
+    let max_buy_vol = (volume_dest * config.sell_sell.rcmnd_fill_days)
         .max(1.)
         .min(src_volume_on_market as f64)
         .floor() as i32;

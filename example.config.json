@@ -1,7 +1,5 @@
 {
   "days_average": 10,
-  "max_filled_for_days_cutoff": 2,
-  "rcmnd_fill_days": 3,
   "margin_cutoff": 0.05,
   "sales_tax": 0.05,
   "broker_fee_source": 0.03,
@@ -9,12 +7,7 @@
   "freight_cost_iskm3": 1500,
   "freight_cost_collateral_percent": 0.01,
   "items_take": 10,
-  "min_src_volume": 0,
-  "min_dst_volume": 0.1,
-  "min_dst_zkb_lost_volume": 1,
-  "zkb_download_pages": 20,
   "refresh_timeout_hours": 10,
-  "cargo_capacity": 50000,
   "source": {
     "is_citadel": false,
     "name": "Jita IV - Moon 4 - Caldari Navy Assembly Plant"
@@ -26,5 +19,18 @@
   "zkill_entity": {
     "id": 498125261,
     "tp": "Alliance"
+  },
+  "sell_sell": {
+    "rcmnd_fill_days": 3,
+    "max_filled_for_days_cutoff": 2,
+    "min_src_volume": 0,
+    "min_dst_volume": 0.1,
+    "sell_sell_zkb": {
+      "min_dst_zkb_lost_volume": 1,
+      "zkb_download_pages": 20
+    }
+  },
+  "sell_buy": {
+    "cargo_capacity": 50000
   }
 }

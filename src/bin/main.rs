@@ -343,7 +343,7 @@ async fn run() -> Result<()> {
                         Ok(km_service
                             .get_kill_item_frequencies(
                                 &config.zkill_entity,
-                                config.zkb_download_pages,
+                                config.sell_sell.sell_sell_zkb.zkb_download_pages,
                             )
                             .await?)
                     }

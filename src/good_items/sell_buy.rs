@@ -142,7 +142,7 @@ pub fn get_good_items_sell_buy(
         })
         .sorted_unstable_by_key(|x| NotNan::new(-x.best_rough_profit).unwrap())
         .collect::<Vec<_>>()
-        .take_maximizing_profit(config.cargo_capacity)
+        .take_maximizing_profit(config.sell_buy.cargo_capacity)
 }
 
 trait DataVecExt {

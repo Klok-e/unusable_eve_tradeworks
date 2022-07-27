@@ -114,15 +114,13 @@ impl Auth {
             panic!("Csrf token doesn't match!");
         }
 
-        let token_result = client
+        client
             .exchange_code(AuthorizationCode::new(code.to_string()))
             // Set the PKCE code verifier.
             .set_pkce_verifier(pkce_verifier)
             .request_async(async_http_client)
             .await
-            .unwrap();
-
-        token_result
+            .unwrap()
     }
 }
 
