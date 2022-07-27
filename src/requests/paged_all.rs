@@ -9,7 +9,7 @@ use rust_eveonline_esi::{
             GetMarketsRegionIdTypesSuccess, GetMarketsStructuresStructureIdSuccess,
         },
         routes_api::GetRouteOriginDestinationSuccess,
-        search_api::{GetCharactersCharacterIdSearchSuccess, GetSearchSuccess},
+        search_api::GetCharactersCharacterIdSearchSuccess,
         universe_api::{
             GetUniverseStationsStationIdSuccess, GetUniverseStructuresStructureIdSuccess,
             GetUniverseTypesTypeIdSuccess,
@@ -18,7 +18,7 @@ use rust_eveonline_esi::{
     models::{
         GetCharactersCharacterIdSearchOk, GetKillmailsKillmailIdKillmailHashOk,
         GetMarketsRegionIdHistory200Ok, GetMarketsRegionIdOrders200Ok,
-        GetMarketsStructuresStructureId200Ok, GetSearchOk, GetUniverseStationsStationIdOk,
+        GetMarketsStructuresStructureId200Ok, GetUniverseStationsStationIdOk,
         GetUniverseStructuresStructureIdOk, GetUniverseTypesTypeIdOk,
     },
 };
@@ -115,15 +115,7 @@ impl OnlyOk<GetCharactersCharacterIdSearchOk, GetCharactersCharacterIdSearchSucc
         }
     }
 }
-impl OnlyOk<GetSearchOk, GetSearchSuccess> for GetSearchSuccess {
-    fn into_ok(self) -> Result<GetSearchOk, GetSearchSuccess> {
-        if let GetSearchSuccess::Status200(ok) = self {
-            Ok(ok)
-        } else {
-            Err(self)
-        }
-    }
-}
+
 impl OnlyOk<GetUniverseStructuresStructureIdOk, GetUniverseStructuresStructureIdSuccess>
     for GetUniverseStructuresStructureIdSuccess
 {

@@ -9,7 +9,7 @@ use rust_eveonline_esi::apis::{
         GetMarketsRegionIdTypesError, GetMarketsStructuresStructureIdError,
     },
     routes_api::GetRouteOriginDestinationError,
-    search_api::{GetCharactersCharacterIdSearchError, GetSearchError},
+    search_api::GetCharactersCharacterIdSearchError,
     universe_api::GetUniverseTypesTypeIdError,
     ResponseContent,
 };
@@ -37,8 +37,6 @@ enum EsiApiErrorEnum {
     MarketGroups(#[from] apis::Error<GetMarketsGroupsError>),
     #[error("regional market")]
     MarketOrders(#[from] apis::Error<GetMarketsRegionIdOrdersError>),
-    #[error("search")]
-    Search(#[from] apis::Error<GetSearchError>),
     #[error("structure search")]
     StructSearch(#[from] apis::Error<GetCharactersCharacterIdSearchError>),
     #[error("structure market")]
@@ -70,19 +68,6 @@ impl From<apis::Error<GetMarketsGroupsError>> for EsiApiError {
 
 impl From<apis::Error<GetMarketsRegionIdOrdersError>> for EsiApiError {
     fn from(x: apis::Error<GetMarketsRegionIdOrdersError>) -> Self {
-        let code = match &x {
-            apis::Error::ResponseError(x) => x.status,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        };
-        EsiApiError {
-            internal: x.into(),
-            status: code,
-        }
-    }
-}
-
-impl From<apis::Error<GetSearchError>> for EsiApiError {
-    fn from(x: apis::Error<GetSearchError>) -> Self {
         let code = match &x {
             apis::Error::ResponseError(x) => x.status,
             _ => StatusCode::INTERNAL_SERVER_ERROR,

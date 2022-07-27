@@ -32,7 +32,7 @@ use rust_eveonline_esi::{
             GetMarketsRegionIdTypesParams, GetMarketsStructuresStructureIdParams,
         },
         routes_api::{self, GetRouteOriginDestinationParams},
-        search_api::{self, get_search, GetCharactersCharacterIdSearchParams, GetSearchParams},
+        search_api::{get_characters_character_id_search, GetCharactersCharacterIdSearchParams},
         universe_api::{
             self, GetUniverseConstellationsConstellationIdParams,
             GetUniverseConstellationsConstellationIdSuccess, GetUniverseStationsStationIdParams,
@@ -64,7 +64,7 @@ impl<'a> EsiRequestsService<'a> {
     ) -> Result<StationIdData> {
         // find system id
         let station_id = if station.is_citadel {
-            search_api::get_characters_character_id_search(
+            get_characters_character_id_search(
                 self.config,
                 GetCharactersCharacterIdSearchParams {
                     categories: vec!["structure".to_string()],
@@ -86,9 +86,11 @@ impl<'a> EsiRequestsService<'a> {
             .structure
             .unwrap()[0]
         } else {
-            get_search(
+            get_characters_character_id_search(
                 self.config,
-                GetSearchParams {
+                GetCharactersCharacterIdSearchParams {
+                    character_id,
+                    token: None,
                     categories: vec!["station".to_string()],
                     search: station.name.to_string(),
                     accept_language: None,
