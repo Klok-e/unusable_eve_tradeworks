@@ -311,6 +311,7 @@ async fn run() -> Result<()> {
             log::trace!("Sell buy path.");
             let good_items = get_good_items_sell_buy(pairs, &config, disable_filters);
             simple_list = good_items
+                .items
                 .iter()
                 .map(|x| SimpleDisplay {
                     name: x.market.desc.name.clone(),

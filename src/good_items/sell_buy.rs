@@ -14,7 +14,7 @@ pub fn get_good_items_sell_buy(
     pairs: Vec<SystemMarketsItemData>,
     config: &Config,
     disable_filters: bool,
-) -> Vec<PairCalculatedDataSellBuy> {
+) -> ProcessedSellBuyItems {
     pairs
         .into_iter()
         .filter_map(|x| {
@@ -56,9 +56,7 @@ pub fn get_good_items_sell_buy(
                         buy_order_fulfilled -= bought_volume;
 
                         let expenses = (curr_src_sell_order.price
-                            * (1. + config.broker_fee_source)
-                            + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
-                            + curr_src_sell_order.price * config.freight_cost_collateral_percent)
+                            * (1. + config.broker_fee_source))
                             * bought_volume as f64;
 
                         let sell_price =
@@ -95,26 +93,21 @@ pub fn get_good_items_sell_buy(
             // with different prices have you paid the same price for all of them
             let expenses = max_buy_price;
             let buy_with_broker_fee = expenses * (1. + config.broker_fee_source);
-            let fin_expenses = buy_with_broker_fee
-                + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
-                + buy_with_broker_fee * config.freight_cost_collateral_percent;
             let fin_sell_price = dest_sell_price * (1. - config.sales_tax);
 
-            let margin = (fin_sell_price - fin_expenses) / fin_expenses;
+            let margin = (fin_sell_price - buy_with_broker_fee) / buy_with_broker_fee;
 
-            let rough_profit = (fin_sell_price - fin_expenses) * recommend_buy_vol as f64;
+            let rough_profit = (fin_sell_price - buy_with_broker_fee) * recommend_buy_vol as f64;
 
             // also calculate avg buy price
             let best_expenses = avg_buy_price;
             let buy_with_broker_fee = best_expenses * (1. + config.broker_fee_source);
-            let fin_expenses = buy_with_broker_fee
-                + x.desc.volume.unwrap() as f64 * config.freight_cost_iskm3
-                + buy_with_broker_fee * config.freight_cost_collateral_percent;
             let fin_sell_price = dest_sell_price * (1. - config.sales_tax);
 
-            let best_margin = (fin_sell_price - fin_expenses) / fin_expenses;
+            let best_margin = (fin_sell_price - buy_with_broker_fee) / buy_with_broker_fee;
 
-            let best_rough_profit = (fin_sell_price - fin_expenses) * recommend_buy_vol as f64;
+            let best_rough_profit =
+                (fin_sell_price - buy_with_broker_fee) * recommend_buy_vol as f64;
 
             Some(PairCalculatedDataSellBuy {
                 market: x,
@@ -124,7 +117,7 @@ pub fn get_good_items_sell_buy(
                 best_rough_profit,
                 market_dest_volume: dst_mkt_volume,
                 recommend_buy: recommend_buy_vol,
-                expenses: fin_expenses,
+                expenses: buy_with_broker_fee,
                 sell_price: fin_sell_price,
                 src_buy_price: expenses,
                 dest_min_sell_price: dest_sell_price,
@@ -146,11 +139,11 @@ pub fn get_good_items_sell_buy(
 }
 
 trait DataVecExt {
-    fn take_maximizing_profit(self, max_cargo: i32) -> Vec<PairCalculatedDataSellBuy>;
+    fn take_maximizing_profit(self, max_cargo: i32) -> ProcessedSellBuyItems;
 }
 
 impl DataVecExt for Vec<PairCalculatedDataSellBuy> {
-    fn take_maximizing_profit(self, max_cargo: i32) -> Vec<PairCalculatedDataSellBuy> {
+    fn take_maximizing_profit(self, max_cargo: i32) -> ProcessedSellBuyItems {
         use good_lp::{default_solver, variable, Expression, ProblemVariables, Solution, Variable};
         let mut vars = ProblemVariables::new();
         let mut var_refs = Vec::new();
@@ -169,7 +162,7 @@ impl DataVecExt for Vec<PairCalculatedDataSellBuy> {
             )
             .sum::<Expression>();
 
-        let space_constraint = var_refs
+        let space = var_refs
             .iter()
             .zip(self.iter())
             .map(
@@ -177,17 +170,17 @@ impl DataVecExt for Vec<PairCalculatedDataSellBuy> {
                     (item.market.desc.volume.unwrap() as f64) * var
                 },
             )
-            .sum::<Expression>()
-            .leq(max_cargo);
+            .sum::<Expression>();
+        let space_constraint = space.clone().leq(max_cargo);
 
         let solution = vars
-            .maximise(goal)
+            .maximise(&goal)
             .using(default_solver)
             .with(space_constraint)
             .solve()
             .unwrap();
 
-        var_refs.into_iter().zip(self.into_iter()).map(
+        let recommended_items = var_refs.into_iter().zip(self.into_iter()).map(
             |(var, mut item): (Variable, PairCalculatedDataSellBuy)| -> PairCalculatedDataSellBuy {
                 let optimal = solution.value(var);
                 item.recommend_buy = optimal as i32;
@@ -195,12 +188,17 @@ impl DataVecExt for Vec<PairCalculatedDataSellBuy> {
             },
         )
         .filter(|x: &PairCalculatedDataSellBuy| x.recommend_buy > 0)
-        .collect::<Vec<_>>()
+        .collect::<Vec<_>>();
+        ProcessedSellBuyItems {
+            items: recommended_items,
+            sum_profit: solution.eval(&goal),
+            sum_volume: solution.eval(&space) as i32,
+        }
     }
 }
 
 pub fn make_table_sell_buy<'a, 'b>(
-    good_items: &'a [PairCalculatedDataSellBuy],
+    good_items: &'a ProcessedSellBuyItems,
     name_length: usize,
 ) -> Vec<Row<'b>> {
     let rows = std::iter::once(Row::new(vec![
@@ -219,7 +217,7 @@ pub fn make_table_sell_buy<'a, 'b>(
         TableCell::new("crfl prft"),
         TableCell::new("rcmnd vlm"),
     ]))
-    .chain(good_items.iter().map(|it| {
+    .chain(good_items.items.iter().map(|it| {
         let short_name =
             it.market.desc.name[..(name_length.min(it.market.desc.name.len()))].to_owned();
         Row::new(vec![
@@ -251,6 +249,14 @@ pub fn make_table_sell_buy<'a, 'b>(
             TableCell::new(format!("{}", it.recommend_buy)),
         ])
     }))
+    .chain(std::iter::once(Row::new(vec![
+        TableCell::new("total profit"),
+        TableCell::new_with_col_span(format!("{}", good_items.sum_profit), 13),
+    ])))
+    .chain(std::iter::once(Row::new(vec![
+        TableCell::new("total volume"),
+        TableCell::new_with_col_span(format!("{}", good_items.sum_volume), 13),
+    ])))
     .collect::<Vec<_>>();
     rows
 }
@@ -271,4 +277,9 @@ pub struct PairCalculatedDataSellBuy {
     pub market_src_volume: i32,
     best_rough_profit: f64,
     best_margin: f64,
+}
+pub struct ProcessedSellBuyItems {
+    pub items: Vec<PairCalculatedDataSellBuy>,
+    pub sum_profit: f64,
+    pub sum_volume: i32,
 }

@@ -4,8 +4,6 @@
   "sales_tax": 0.05,
   "broker_fee_source": 0.03,
   "broker_fee_destination": 0.01,
-  "freight_cost_iskm3": 1500,
-  "freight_cost_collateral_percent": 0.01,
   "items_take": 10,
   "refresh_timeout_hours": 10,
   "source": {
@@ -21,6 +19,8 @@
     "tp": "Alliance"
   },
   "sell_sell": {
+    "freight_cost_iskm3": 1500,
+    "freight_cost_collateral_percent": 0.01,
     "rcmnd_fill_days": 3,
     "max_filled_for_days_cutoff": 2,
     "min_src_volume": 0,

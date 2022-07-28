@@ -23,8 +23,6 @@ pub struct Config {
     pub sales_tax: f64,
     pub broker_fee_source: f64,
     pub broker_fee_destination: f64,
-    pub freight_cost_iskm3: f64,
-    pub freight_cost_collateral_percent: f64,
     pub items_take: usize,
     pub source: Station,
     pub destination: Station,
@@ -51,6 +49,8 @@ pub struct ConfigSellSell {
     pub min_src_volume: f64,
     pub min_dst_volume: f64,
     pub max_filled_for_days_cutoff: f64,
+    pub freight_cost_iskm3: f64,
+    pub freight_cost_collateral_percent: f64,
     pub sell_sell_zkb: ConfigSellSellZkb,
 }
 
