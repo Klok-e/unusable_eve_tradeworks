@@ -106,15 +106,11 @@ pub fn get_good_items_sell_buy(
 
             let best_margin = (fin_sell_price - buy_with_broker_fee) / buy_with_broker_fee;
 
-            let best_rough_profit =
-                (fin_sell_price - buy_with_broker_fee) * recommend_buy_vol as f64;
-
             Some(PairCalculatedDataSellBuy {
                 market: x,
                 margin,
                 best_margin,
                 rough_profit,
-                best_rough_profit,
                 market_dest_volume: dst_mkt_volume,
                 recommend_buy: recommend_buy_vol,
                 expenses: buy_with_broker_fee,
@@ -131,9 +127,9 @@ pub fn get_good_items_sell_buy(
             disable_filters
                 || config
                     .min_profit
-                    .map_or(true, |min_prft| x.best_rough_profit > min_prft)
+                    .map_or(true, |min_prft| x.rough_profit > min_prft)
         })
-        .sorted_unstable_by_key(|x| NotNan::new(-x.best_rough_profit).unwrap())
+        .sorted_unstable_by_key(|x| NotNan::new(-x.rough_profit).unwrap())
         .collect::<Vec<_>>()
         .take_maximizing_profit(config.sell_buy.cargo_capacity)
 }
@@ -162,16 +158,16 @@ impl DataVecExt for Vec<PairCalculatedDataSellBuy> {
             )
             .sum::<Expression>();
 
-        let space = var_refs
+        let space_constraint = var_refs
             .iter()
             .zip(self.iter())
             .map(
                 |(&var, item): (&Variable, &PairCalculatedDataSellBuy)| -> Expression {
-                    (item.market.desc.volume.unwrap() as f64) * var
+                    (item.market.desc.volume as f64) * var
                 },
             )
-            .sum::<Expression>();
-        let space_constraint = space.clone().leq(max_cargo);
+            .sum::<Expression>()
+            .leq(max_cargo);
 
         let solution = vars
             .maximise(&goal)
@@ -181,18 +177,38 @@ impl DataVecExt for Vec<PairCalculatedDataSellBuy> {
             .unwrap();
 
         let recommended_items = var_refs.into_iter().zip(self.into_iter()).map(
-            |(var, mut item): (Variable, PairCalculatedDataSellBuy)| -> PairCalculatedDataSellBuy {
+            |(var, item): (Variable, PairCalculatedDataSellBuy)| -> PairCalculatedDataSellBuyFinal {
                 let optimal = solution.value(var);
-                item.recommend_buy = optimal as i32;
-                item
+                let recommend_buy = optimal as i32;
+                let volume = (recommend_buy as f64 * item.market.desc.volume as f64) as i32;
+                PairCalculatedDataSellBuyFinal{
+                    market: item.market,
+                    margin: item.margin,
+                    rough_profit: item.rough_profit,
+                    market_dest_volume: item.market_dest_volume,
+                    recommend_buy,
+                    expenses: item.expenses,
+                    sell_price: item.sell_price,
+                    src_buy_price: item.src_buy_price,
+                    dest_min_sell_price: item.dest_min_sell_price,
+                    src_avgs: item.src_avgs,
+                    dst_avgs: item.dst_avgs,
+                    market_src_volume: item.market_src_volume,
+                    volume,
+                }
             },
         )
-        .filter(|x: &PairCalculatedDataSellBuy| x.recommend_buy > 0)
+        .filter(|x: &PairCalculatedDataSellBuyFinal| x.recommend_buy > 0)
         .collect::<Vec<_>>();
+
+        let volume = recommended_items
+            .iter()
+            .map(|x| x.market.desc.volume as f64 * x.recommend_buy as f64)
+            .sum::<f64>() as i32;
         ProcessedSellBuyItems {
             items: recommended_items,
             sum_profit: solution.eval(&goal),
-            sum_volume: solution.eval(&space) as i32,
+            sum_volume: volume,
         }
     }
 }
@@ -214,8 +230,8 @@ pub fn make_table_sell_buy<'a, 'b>(
         TableCell::new("mkt src"),
         TableCell::new("mkt dst"),
         TableCell::new("rough prft"),
-        TableCell::new("crfl prft"),
-        TableCell::new("rcmnd vlm"),
+        TableCell::new("rcmnd"),
+        TableCell::new("vlm"),
     ]))
     .chain(good_items.items.iter().map(|it| {
         let short_name =
@@ -239,14 +255,8 @@ pub fn make_table_sell_buy<'a, 'b>(
             TableCell::new(format!("{:.2}", it.market_src_volume)),
             TableCell::new(format!("{:.2}", it.market_dest_volume)),
             TableCell::new(format!("{:.2}", it.rough_profit)),
-            TableCell::new(
-                if (it.best_rough_profit - it.rough_profit) / it.rough_profit > 0.1 {
-                    format!("{:.2}", it.best_rough_profit - it.rough_profit)
-                } else {
-                    "".to_string()
-                },
-            ),
             TableCell::new(format!("{}", it.recommend_buy)),
+            TableCell::new(format!("{}", it.volume)),
         ])
     }))
     .chain(std::iter::once(Row::new(vec![
@@ -262,24 +272,41 @@ pub fn make_table_sell_buy<'a, 'b>(
 }
 
 #[derive(Debug, Clone)]
-pub struct PairCalculatedDataSellBuy {
-    pub market: SystemMarketsItemData,
-    pub margin: f64,
-    pub rough_profit: f64,
-    pub market_dest_volume: i32,
-    pub recommend_buy: i32,
-    pub expenses: f64,
-    pub sell_price: f64,
-    pub src_buy_price: f64,
-    pub dest_min_sell_price: f64,
-    pub src_avgs: Option<ItemTypeAveraged>,
-    pub dst_avgs: Option<ItemTypeAveraged>,
-    pub market_src_volume: i32,
-    best_rough_profit: f64,
+struct PairCalculatedDataSellBuy {
+    market: SystemMarketsItemData,
+    margin: f64,
+    rough_profit: f64,
+    market_dest_volume: i32,
+    recommend_buy: i32,
+    expenses: f64,
+    sell_price: f64,
+    src_buy_price: f64,
+    dest_min_sell_price: f64,
+    src_avgs: Option<ItemTypeAveraged>,
+    dst_avgs: Option<ItemTypeAveraged>,
+    market_src_volume: i32,
     best_margin: f64,
 }
+
+#[derive(Debug, Clone)]
+pub struct PairCalculatedDataSellBuyFinal {
+    pub market: SystemMarketsItemData,
+    margin: f64,
+    rough_profit: f64,
+    market_dest_volume: i32,
+    pub recommend_buy: i32,
+    expenses: f64,
+    sell_price: f64,
+    src_buy_price: f64,
+    pub dest_min_sell_price: f64,
+    src_avgs: Option<ItemTypeAveraged>,
+    dst_avgs: Option<ItemTypeAveraged>,
+    market_src_volume: i32,
+    volume: i32,
+}
+
 pub struct ProcessedSellBuyItems {
-    pub items: Vec<PairCalculatedDataSellBuy>,
+    pub items: Vec<PairCalculatedDataSellBuyFinal>,
     pub sum_profit: f64,
     pub sum_volume: i32,
 }

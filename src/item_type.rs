@@ -96,12 +96,11 @@ pub struct TypeDescription {
     pub market_group_id: Option<i32>,
     pub mass: Option<f32>,
     pub name: String,
-    pub packaged_volume: Option<f32>,
     pub portion_size: Option<i32>,
     pub published: bool,
     pub radius: Option<f32>,
     pub type_id: i32,
-    pub volume: Option<f32>,
+    pub volume: f32,
 }
 
 impl From<GetUniverseTypesTypeIdOk> for TypeDescription {
@@ -115,12 +114,11 @@ impl From<GetUniverseTypesTypeIdOk> for TypeDescription {
             market_group_id: x.market_group_id,
             mass: x.mass,
             name: x.name,
-            packaged_volume: x.packaged_volume,
             portion_size: x.portion_size,
             published: x.published,
             radius: x.radius,
             type_id: x.type_id,
-            volume: x.volume,
+            volume: x.packaged_volume.or(x.volume).unwrap(),
         }
     }
 }

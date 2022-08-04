@@ -139,7 +139,7 @@ pub fn prepare_sell_sell(
     );
     let buy_price = buy_from_src_price * (1. + config.broker_fee_source);
     let expenses = buy_price
-        + market_data.desc.volume.unwrap() as f64 * config.sell_sell.freight_cost_iskm3
+        + market_data.desc.volume as f64 * config.sell_sell.freight_cost_iskm3
         + buy_price * config.sell_sell.freight_cost_collateral_percent;
     let sell_price_with_taxes =
         dest_sell_price * (1. - config.broker_fee_destination - config.sales_tax);
