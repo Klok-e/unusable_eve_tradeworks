@@ -50,11 +50,14 @@ async fn run() -> Result<()> {
 
     let cli_args = cli::matches();
 
-    let quiet = cli_args.is_present(cli::QUIET);
-    let file_loud = cli_args.is_present(cli::FILE_LOUD);
+    let quiet = cli_args.get_flag(cli::QUIET);
+    let file_loud = cli_args.get_flag(cli::FILE_LOUD);
     logger::setup_logger(quiet, file_loud)?;
 
-    let config_file_name = cli_args.value_of(cli::CONFIG).unwrap_or("config.json");
+    let config_file_name = cli_args
+        .get_one::<String>(cli::CONFIG)
+        .cloned()
+        .unwrap_or("config.json".to_owned());
     let config = Config::from_file_json(config_file_name)?;
 
     let program_config = AuthConfig::from_file("auth.json");
@@ -116,8 +119,8 @@ async fn run() -> Result<()> {
         .parse()
         .unwrap();
 
-    let force_refresh = cli_args.is_present(cli::FORCE_REFRESH);
-    let force_no_refresh = cli_args.is_present(cli::FORCE_NO_REFRESH);
+    let force_refresh = cli_args.get_flag(cli::FORCE_REFRESH);
+    let force_no_refresh = cli_args.get_flag(cli::FORCE_NO_REFRESH);
 
     let mut pairs: Vec<SystemMarketsItemData> = {
         let config = &config;
@@ -271,7 +274,7 @@ async fn run() -> Result<()> {
 
     let mut disable_filters = false;
     if let Some(v) = cli_args
-        .value_of(cli::DEBUG_ITEM_ID)
+        .get_one::<String>(cli::DEBUG_ITEM_ID)
         .and_then(|x| x.parse::<i32>().ok())
     {
         pairs.retain(|x| x.desc.type_id == v);
@@ -280,7 +283,7 @@ async fn run() -> Result<()> {
 
     let simple_list: Vec<_>;
     let rows = {
-        let cli_in = cli_args.value_of(cli::NAME_LENGTH);
+        let cli_in = cli_args.get_one::<String>(cli::NAME_LENGTH);
         let name_len = if let Some(v) = cli_in.and_then(|x| x.parse::<usize>().ok()) {
             v
         } else {
@@ -292,9 +295,9 @@ async fn run() -> Result<()> {
             consts::ITEM_NAME_LEN.parse().unwrap()
         };
 
-        let sell_sell = cli_args.is_present(cli::SELL_SELL);
-        let sell_sell_zkb = cli_args.is_present(cli::SELL_SELL_ZKB);
-        let sell_buy = cli_args.is_present(cli::SELL_BUY);
+        let sell_sell = cli_args.get_flag(cli::SELL_SELL);
+        let sell_sell_zkb = cli_args.get_flag(cli::SELL_SELL_ZKB);
+        let sell_buy = cli_args.get_flag(cli::SELL_BUY);
         if sell_sell || (!sell_buy && !sell_sell_zkb) {
             log::trace!("Sell sell path.");
             let good_items = get_good_items_sell_sell(pairs, &config, disable_filters);
@@ -368,7 +371,7 @@ async fn run() -> Result<()> {
     let table = TableBuilder::new().rows(rows).build();
     println!("{}", table.render());
 
-    if cli_args.is_present(cli::DISPLAY_SIMPLE_LIST) {
+    if cli_args.get_flag(cli::DISPLAY_SIMPLE_LIST) {
         let rows = simple_list
             .iter()
             .map(|it| {
@@ -388,7 +391,7 @@ async fn run() -> Result<()> {
             .build();
         println!("Item names:\n{}", table.render());
     }
-    if cli_args.is_present(cli::DISPLAY_SIMPLE_LIST_PRICE) {
+    if cli_args.get_flag(cli::DISPLAY_SIMPLE_LIST_PRICE) {
         let rows = simple_list
             .iter()
             .map(|it| {
