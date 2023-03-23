@@ -33,14 +33,16 @@ where
                 }
 
                 // common errors for ccp servers
-                Err(EsiApiError {
-                    status:
-                        status @ (StatusCode::BAD_GATEWAY
-                        | StatusCode::SERVICE_UNAVAILABLE
-                        | StatusCode::GATEWAY_TIMEOUT),
-                    ..
-                }) => {
-                    log::warn!("[{}] Error: {}. Retrying...", caller, status);
+                Err(
+                    err @ EsiApiError {
+                        status:
+                            StatusCode::BAD_GATEWAY
+                            | StatusCode::SERVICE_UNAVAILABLE
+                            | StatusCode::GATEWAY_TIMEOUT,
+                        ..
+                    },
+                ) => {
+                    log::warn!("[{}] Error: {}. Retrying...", caller, err);
                     Ok(Retry::Retry)
                 }
 
