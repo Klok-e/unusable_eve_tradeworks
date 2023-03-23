@@ -39,7 +39,7 @@ where
                 let val = (sorted[sorted.len() / 2 - 1] + sorted[sorted.len() / 2]) / 2.;
                 Some(val)
             } else {
-                Some(sorted[(sorted.len() / 2)])
+                Some(sorted[sorted.len() / 2])
             }
         } else {
             None

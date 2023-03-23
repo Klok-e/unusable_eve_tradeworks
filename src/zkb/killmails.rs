@@ -32,7 +32,7 @@ impl<'a> KillmailService<'a> {
         });
 
         let km_freqs: Vec<Killmail> = stream::iter(frequencies)
-            .map(|x| async { x.await })
+            .map(|x| x)
             .buffer_unordered(BUFFER_UNORDERED)
             .collect::<Vec<_>>()
             .await

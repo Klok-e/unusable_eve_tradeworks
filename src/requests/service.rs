@@ -553,10 +553,7 @@ impl<'a> EsiRequestsService<'a> {
         let hists = stream::iter(item_types)
             .map(|&item_type| {
                 let station_orders = &station_orders;
-                async move {
-                    self.get_item_type_history(station, item_type, station_orders)
-                        .await
-                }
+                self.get_item_type_history(station, item_type, station_orders)
             })
             .buffer_unordered(BUFFER_UNORDERED);
         Ok(hists

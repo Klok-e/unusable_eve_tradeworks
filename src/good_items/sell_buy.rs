@@ -213,8 +213,8 @@ impl DataVecExt for Vec<PairCalculatedDataSellBuy> {
     }
 }
 
-pub fn make_table_sell_buy<'a, 'b>(
-    good_items: &'a ProcessedSellBuyItems,
+pub fn make_table_sell_buy<'b>(
+    good_items: &ProcessedSellBuyItems,
     name_length: usize,
 ) -> Vec<Row<'b>> {
     let rows = std::iter::once(Row::new(vec![

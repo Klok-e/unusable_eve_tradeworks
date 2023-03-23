@@ -71,8 +71,8 @@ pub fn get_good_items_sell_sell(
         .collect::<Vec<_>>()
 }
 
-pub fn make_table_sell_sell<'a, 'b>(
-    good_items: &'a [PairCalculatedDataSellSell],
+pub fn make_table_sell_sell<'b>(
+    good_items: &[PairCalculatedDataSellSell],
     name_length: usize,
 ) -> Vec<Row<'b>> {
     let rows = std::iter::once(Row::new(vec![
