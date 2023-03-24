@@ -9,7 +9,6 @@ use rust_eveonline_esi::apis::configuration::Configuration;
 use term_table::{row::Row, table_cell::TableCell, TableBuilder, TableStyle};
 use tokio::join;
 
-use serde::{Deserialize, Serialize};
 use unusable_eve_tradeworks_lib::{
     auth::Auth,
     cached_data::{self},
@@ -28,17 +27,6 @@ use unusable_eve_tradeworks_lib::{
     requests::service::EsiRequestsService,
     zkb::{killmails::KillmailService, zkb_requests::ZkbRequestsService},
 };
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CharacterInfo {
-    pub scp: Vec<String>,
-    pub jti: String,
-    pub kid: String,
-    pub sub: String,
-    pub azp: String,
-    pub tenant: String,
-    pub tier: String,
-}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -105,13 +93,8 @@ async fn run() -> Result<()> {
     )?;
     let data_service = DatadumpService::new(db);
 
-    // TODO: dangerous plese don't use in production
-    let character_info = jsonwebtoken::dangerous_insecure_decode::<CharacterInfo>(
-        auth.token.access_token().secret(),
-    )
-    .unwrap()
-    .claims;
-    let character_id = character_info
+    let character_id = auth
+        .character_info
         .sub
         .split(':')
         .nth(2)

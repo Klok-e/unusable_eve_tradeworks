@@ -4,6 +4,8 @@ use crate::{
 };
 
 use chrono::{DateTime, Utc};
+
+use jsonwebtoken::{DecodingKey, Validation};
 use oauth2::{
     basic::{BasicClient, BasicTokenType},
     reqwest::async_http_client,
@@ -13,10 +15,29 @@ use oauth2::{
 use reqwest::{self, Url};
 use serde::{Deserialize, Serialize};
 
+const AUTHORIZE_ISSUER: &str = "https://login.eveonline.com/v2/oauth/authorize";
+const TOKEN_ISSUER: &str = "https://login.eveonline.com/v2/oauth/token";
+const LOCALHOST_CALLBACK: &str = "http://localhost:8022/callback";
+const SSO_META_DATA_URL: &str =
+    "https://login.eveonline.com/.well-known/oauth-authorization-server";
+const JWK_ALGORITHM: &str = "RS256";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterInfo {
+    pub scp: Vec<String>,
+    pub jti: String,
+    pub kid: String,
+    pub sub: String,
+    pub azp: String,
+    pub tenant: String,
+    pub tier: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Auth {
     pub token: StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>,
     pub expiration_date: DateTime<Utc>,
+    pub character_info: CharacterInfo,
 }
 
 impl Auth {
@@ -26,7 +47,9 @@ impl Auth {
             let token = Self::request_new(config).await;
             let expiration_date =
                 Utc::now() + chrono::Duration::from_std(token.expires_in().unwrap()).unwrap();
+
             Ok(Auth {
+                character_info: validate_token(&token).await,
                 token,
                 expiration_date,
             })
@@ -46,6 +69,7 @@ impl Auth {
             let expiration_date =
                 Utc::now() + chrono::Duration::from_std(token.expires_in().unwrap()).unwrap();
             data = Auth {
+                character_info: validate_token(&token).await,
                 token,
                 expiration_date,
             };
@@ -137,12 +161,78 @@ fn create_client(config: &AuthConfig) -> OauthClient {
     BasicClient::new(
         ClientId::new(config.client_id.clone()),
         None,
-        AuthUrl::new("https://login.eveonline.com/v2/oauth/authorize".to_string()).unwrap(),
-        Some(TokenUrl::new("https://login.eveonline.com/v2/oauth/token".to_string()).unwrap()),
+        AuthUrl::new(AUTHORIZE_ISSUER.to_string()).unwrap(),
+        Some(TokenUrl::new(TOKEN_ISSUER.to_string()).unwrap()),
     )
     .set_auth_type(oauth2::AuthType::RequestBody)
-    .set_redirect_uri(RedirectUrl::new("http://localhost:8022/callback".to_string()).unwrap())
+    .set_redirect_uri(RedirectUrl::new(LOCALHOST_CALLBACK.to_string()).unwrap())
 }
+
+async fn validate_token(
+    token: &StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>,
+) -> CharacterInfo {
+    let metadata: SsoMetadata = reqwest::get(SSO_META_DATA_URL)
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let jwks: SsoJwkKeys = reqwest::get(metadata.jwks_uri)
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+
+    let jwk_set = jwks.keys.iter().find(|x| x.alg == JWK_ALGORITHM).unwrap();
+
+    let character_info = jsonwebtoken::decode::<CharacterInfo>(
+        token.access_token().secret(),
+        &DecodingKey::from_rsa_components(jwk_set.n.as_ref().unwrap(), jwk_set.e.as_ref().unwrap())
+            .unwrap(),
+        &Validation::new(jsonwebtoken::Algorithm::RS256),
+    )
+    .unwrap()
+    .claims;
+
+    character_info
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SsoMetadata {
+    pub issuer: String,
+    pub authorization_endpoint: String,
+    pub token_endpoint: String,
+    pub response_types_supported: Vec<String>,
+    pub jwks_uri: String,
+    pub revocation_endpoint: String,
+    pub revocation_endpoint_auth_methods_supported: Vec<String>,
+    pub token_endpoint_auth_methods_supported: Vec<String>,
+    pub token_endpoint_auth_signing_alg_values_supported: Vec<String>,
+    pub code_challenge_methods_supported: Vec<String>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SsoJwkKeys {
+    pub keys: Vec<SsoKey>,
+    #[serde(rename = "SkipUnresolvedJsonWebKeys")]
+    pub skip_unresolved_json_web_keys: bool,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SsoKey {
+    pub alg: String,
+    pub e: Option<String>,
+    pub kid: String,
+    pub kty: String,
+    pub n: Option<String>,
+    #[serde(rename = "use")]
+    pub use_field: String,
+    pub crv: Option<String>,
+    pub x: Option<String>,
+    pub y: Option<String>,
+}
+
 #[derive(Serialize)]
 struct AuthTokenParams {
     pub grant_type: String,
