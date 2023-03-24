@@ -1,6 +1,6 @@
 use good_lp::SolverModel;
 use itertools::Itertools;
-use num_format::{ToFormattedString, Locale};
+use num_format::{Locale, ToFormattedString};
 use ordered_float::NotNan;
 use term_table::{row::Row, table_cell::TableCell};
 
@@ -262,11 +262,14 @@ pub fn make_table_sell_buy<'b>(
     }))
     .chain(std::iter::once(Row::new(vec![
         TableCell::new("total profit"),
-        TableCell::new_with_col_span(format!("{}", (good_items.sum_profit.round() as i64).to_formatted_string(&Locale::fr)), 13),
+        TableCell::new_with_col_span(
+            (good_items.sum_profit.round() as i64).to_formatted_string(&Locale::fr),
+            13,
+        ),
     ])))
     .chain(std::iter::once(Row::new(vec![
         TableCell::new("total volume"),
-        TableCell::new_with_col_span(format!("{}", good_items.sum_volume.to_formatted_string(&Locale::fr)), 13),
+        TableCell::new_with_col_span(good_items.sum_volume.to_formatted_string(&Locale::fr), 13),
     ])))
     .collect::<Vec<_>>();
     rows
