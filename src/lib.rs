@@ -26,6 +26,7 @@ pub struct StationIdData {
 pub struct Station {
     pub is_citadel: bool,
     pub name: String,
+    pub broker_fee: f64,
 }
 #[derive(Clone, Copy)]
 pub struct StationId {

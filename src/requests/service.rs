@@ -409,12 +409,12 @@ impl<'a> EsiRequestsService<'a> {
         Ok(orders_in_station)
     }
 
-    pub async fn history(
+    pub async fn all_item_data(
         &self,
         item_types: &[i32],
         station: StationIdData,
     ) -> Result<Vec<ItemType>> {
-        let mut data = self.download_history(item_types, station).await?;
+        let mut data = self.download_item_data(item_types, station).await?;
 
         // fill blanks
         for item in data.iter_mut() {
@@ -543,7 +543,7 @@ impl<'a> EsiRequestsService<'a> {
         Ok(res)
     }
 
-    async fn download_history(
+    async fn download_item_data(
         &self,
         item_types: &[i32],
         station: StationIdData,

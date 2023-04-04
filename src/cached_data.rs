@@ -91,9 +91,17 @@ impl CachedStuff {
                     log::info!("Path {:?} loaded", path);
                     return Ok(deser.data);
                 }
+                None => {
+                    log::info!("Path {:?} loaded", path);
+                    return Ok(deser.data);
+                }
                 _ => {}
             }
         }
+        if were_depends_updated {
+            log::info!("Path {:?} deps were updated", path);
+        }
+
         self.caches_updated.insert(path_str, true);
         let cont = gen_and_save(&path, gen, format).await?;
         Ok(cont.data)

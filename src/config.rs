@@ -16,16 +16,32 @@ impl AuthConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
+    pub route: RouteConfig,
+    pub common: CommonConfig,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RouteConfig {
+    pub source: Station,
+    pub destination: Station,
+}
+
+impl RouteConfig {
+    pub fn from_file_json<P: AsRef<Path>>(path: P) -> crate::error::Result<Self> {
+        let str = std::fs::read_to_string(path)?;
+        let config: RouteConfig = serde_json::from_str(str.as_ref())?;
+
+        Ok(config)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CommonConfig {
     pub days_average: usize,
     pub margin_cutoff: f64,
     pub sales_tax: f64,
-    pub broker_fee_source: f64,
-    pub broker_fee_destination: f64,
     pub items_take: usize,
-    pub source: Station,
-    pub destination: Station,
     pub zkill_entity: ZkillEntity,
     pub refresh_timeout_hours: i64,
     pub min_profit: Option<f64>,
@@ -34,10 +50,12 @@ pub struct Config {
     pub sell_buy: ConfigSellBuy,
 }
 
-impl Config {
+impl CommonConfig {
     pub fn from_file_json<P: AsRef<Path>>(path: P) -> crate::error::Result<Self> {
-        let str = std::fs::read_to_string(path)?;
-        let config: Config = serde_json::from_str(str.as_ref())?;
+        let str = std::fs::read_to_string(path.as_ref())?;
+        let config: Self = serde_json::from_str(str.as_ref())?;
+        let str = serde_json::to_string_pretty(&config)?;
+        std::fs::write(path, str)?;
 
         Ok(config)
     }

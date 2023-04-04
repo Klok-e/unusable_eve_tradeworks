@@ -49,25 +49,27 @@ pub fn get_good_items_sell_sell(
 
             Some(PairCalculatedDataSellSell { common })
         })
-        .filter(|x| disable_filters || x.margin > config.margin_cutoff)
+        .filter(|x| disable_filters || x.margin > config.common.margin_cutoff)
         .filter(|x| {
             disable_filters
-                || x.src_avgs.map(|x| x.volume).unwrap_or(0f64) > config.sell_sell.min_src_volume
-                    && x.dst_avgs.volume > config.sell_sell.min_dst_volume
+                || x.src_avgs.map(|x| x.volume).unwrap_or(0f64)
+                    > config.common.sell_sell.min_src_volume
+                    && x.dst_avgs.volume > config.common.sell_sell.min_dst_volume
                     && config
+                        .common
                         .min_profit
                         .map_or(true, |min_prft| x.rough_profit > min_prft)
         })
         .filter(|x| {
             disable_filters
                 || if let Some(filled_for_days) = x.filled_for_days {
-                    filled_for_days < config.sell_sell.max_filled_for_days_cutoff
+                    filled_for_days < config.common.sell_sell.max_filled_for_days_cutoff
                 } else {
                     true
                 }
         })
         .sorted_unstable_by_key(|x| NotNan::new(-x.rough_profit).unwrap())
-        .take(config.items_take)
+        .take(config.common.items_take)
         .collect::<Vec<_>>()
 }
 

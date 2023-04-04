@@ -57,11 +57,11 @@ pub fn get_good_items_sell_buy(
                         buy_order_fulfilled -= bought_volume;
 
                         let expenses = (curr_src_sell_order.price
-                            * (1. + config.broker_fee_source))
+                            * (1. + config.route.source.broker_fee))
                             * bought_volume as f64;
 
                         let sell_price =
-                            bought_volume as f64 * buy_order.price * (1. - config.sales_tax);
+                            bought_volume as f64 * buy_order.price * (1. - config.common.sales_tax);
 
                         if expenses >= sell_price {
                             break;
@@ -93,8 +93,8 @@ pub fn get_good_items_sell_buy(
             // multibuy can only buy at a fixed price, so all buys from multiple sell orders
             // with different prices have you paid the same price for all of them
             let expenses = max_buy_price;
-            let buy_with_broker_fee = expenses * (1. + config.broker_fee_source);
-            let fin_sell_price = dest_sell_price * (1. - config.sales_tax);
+            let buy_with_broker_fee = expenses * (1. + config.route.source.broker_fee);
+            let fin_sell_price = dest_sell_price * (1. - config.common.sales_tax);
 
             let margin = (fin_sell_price - buy_with_broker_fee) / buy_with_broker_fee;
 
@@ -102,8 +102,8 @@ pub fn get_good_items_sell_buy(
 
             // also calculate avg buy price
             let best_expenses = avg_buy_price;
-            let buy_with_broker_fee = best_expenses * (1. + config.broker_fee_source);
-            let fin_sell_price = dest_sell_price * (1. - config.sales_tax);
+            let buy_with_broker_fee = best_expenses * (1. + config.route.source.broker_fee);
+            let fin_sell_price = dest_sell_price * (1. - config.common.sales_tax);
 
             let best_margin = (fin_sell_price - buy_with_broker_fee) / buy_with_broker_fee;
 
@@ -123,16 +123,17 @@ pub fn get_good_items_sell_buy(
                 dst_avgs,
             })
         })
-        .filter(|x| disable_filters || x.best_margin > config.margin_cutoff)
+        .filter(|x| disable_filters || x.best_margin > config.common.margin_cutoff)
         .filter(|x| {
             disable_filters
                 || config
+                    .common
                     .min_profit
                     .map_or(true, |min_prft| x.rough_profit > min_prft)
         })
         .sorted_unstable_by_key(|x| NotNan::new(-x.rough_profit).unwrap())
         .collect::<Vec<_>>()
-        .take_maximizing_profit(config.sell_buy.cargo_capacity)
+        .take_maximizing_profit(config.common.sell_buy.cargo_capacity)
 }
 
 trait DataVecExt {

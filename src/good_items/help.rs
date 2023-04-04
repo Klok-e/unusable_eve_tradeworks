@@ -49,7 +49,7 @@ pub fn averages(config: &Config, history: &[ItemHistoryDay]) -> Option<ItemTypeA
     let last_n_days = history
         .iter()
         .rev()
-        .take(config.days_average)
+        .take(config.common.days_average)
         .collect::<Vec<_>>();
 
     let avg_price = last_n_days
@@ -77,7 +77,7 @@ pub fn weighted_price(config: &Config, history: &[ItemHistoryDay]) -> f64 {
     let last_n_days = history
         .iter()
         .rev()
-        .take(config.days_average)
+        .take(config.common.days_average)
         .collect::<Vec<_>>();
 
     let sum_volume = last_n_days.iter().map(|x| x.volume).sum::<i64>() as f64;
@@ -125,7 +125,7 @@ pub fn prepare_sell_sell(
     let dst_weighted_price = weighted_price(config, &market_data.destination.history);
     let dest_sell_price =
         dst_lowest_sell_order.map_or(dst_weighted_price, |x| x.min(dst_weighted_price));
-    let max_buy_vol = (volume_dest * config.sell_sell.rcmnd_fill_days)
+    let max_buy_vol = (volume_dest * config.common.sell_sell.rcmnd_fill_days)
         .max(1.)
         .min(src_volume_on_market as f64)
         .floor() as i32;
@@ -133,16 +133,16 @@ pub fn prepare_sell_sell(
         market_data.source.orders.as_slice(),
         max_buy_vol,
         dest_sell_price,
-        config.broker_fee_source,
-        config.broker_fee_destination,
-        config.sales_tax,
+        config.route.source.broker_fee,
+        config.route.destination.broker_fee,
+        config.common.sales_tax,
     );
-    let buy_price = buy_from_src_price * (1. + config.broker_fee_source);
+    let buy_price = buy_from_src_price * (1. + config.route.source.broker_fee);
     let expenses = buy_price
-        + market_data.desc.volume as f64 * config.sell_sell.freight_cost_iskm3
-        + buy_price * config.sell_sell.freight_cost_collateral_percent;
+        + market_data.desc.volume as f64 * config.common.sell_sell.freight_cost_iskm3
+        + buy_price * config.common.sell_sell.freight_cost_collateral_percent;
     let sell_price_with_taxes =
-        dest_sell_price * (1. - config.broker_fee_destination - config.sales_tax);
+        dest_sell_price * (1. - config.route.destination.broker_fee - config.common.sales_tax);
     let margin = (sell_price_with_taxes - expenses) / expenses;
     let rough_profit = (sell_price_with_taxes - expenses) * buy_from_src_volume as f64;
     let filled_for_days =

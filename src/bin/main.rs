@@ -13,7 +13,7 @@ use unusable_eve_tradeworks_lib::{
     auth::Auth,
     cached_data::CachedStuff,
     cli,
-    config::{AuthConfig, Config},
+    config::{AuthConfig, CommonConfig, Config, RouteConfig},
     consts::{self, BUFFER_UNORDERED},
     datadump_service::DatadumpService,
     error,
@@ -37,6 +37,7 @@ const CACHE_AUTH: &str = "cache/auth";
 const CACHE_DATADUMP: &str = "cache/datadump.json";
 const CACHE_ALL_TYPES: &&str = &"cache/all_types.json";
 const CACHE_ALL_TYPE_DESC: &&str = &"cache/all_type_descriptions.rmp";
+const CONFIG_COMMON: &&str = &"config.common.json";
 
 async fn run() -> Result<(), anyhow::Error> {
     std::fs::create_dir_all("cache/")?;
@@ -51,7 +52,10 @@ async fn run() -> Result<(), anyhow::Error> {
         .get_one::<String>(cli::CONFIG)
         .cloned()
         .unwrap_or("config.json".to_owned());
-    let config = Config::from_file_json(config_file_name)?;
+    let config = Config {
+        route: RouteConfig::from_file_json(config_file_name)?,
+        common: CommonConfig::from_file_json(CONFIG_COMMON)?,
+    };
 
     let mut cache = CachedStuff::new();
 
@@ -114,17 +118,15 @@ async fn run() -> Result<(), anyhow::Error> {
     let force_refresh = cli_args.get_flag(cli::FORCE_REFRESH);
     let force_no_refresh = cli_args.get_flag(cli::FORCE_NO_REFRESH);
 
-    let mut pairs: Vec<SystemMarketsItemData> = {
-        compute_pairs(
-            &config,
-            &esi_requests,
-            character_id,
-            &mut cache,
-            force_refresh,
-            data_service,
-        )
-        .await?
-    };
+    let mut pairs: Vec<SystemMarketsItemData> = compute_pairs(
+        &config,
+        &esi_requests,
+        character_id,
+        &mut cache,
+        force_refresh,
+        data_service,
+    )
+    .await?;
 
     let mut disable_filters = false;
     if let Some(v) = cli_args
@@ -135,7 +137,7 @@ async fn run() -> Result<(), anyhow::Error> {
         disable_filters = true;
     }
 
-    let simple_list: Vec<_>;
+    let mut simple_list: Vec<_> = Vec::new();
     let rows = {
         let cli_in = cli_args.get_one::<String>(cli::NAME_LENGTH);
         let name_len = if let Some(v) = cli_in.and_then(|x| x.parse::<usize>().ok()) {
@@ -154,74 +156,24 @@ async fn run() -> Result<(), anyhow::Error> {
         let sell_buy = cli_args.get_flag(cli::SELL_BUY);
         if sell_sell || (!sell_buy && !sell_sell_zkb) {
             log::trace!("Sell sell path.");
-            let good_items = get_good_items_sell_sell(pairs, &config, disable_filters);
-            simple_list = good_items
-                .iter()
-                .map(|x| SimpleDisplay {
-                    name: x.market.desc.name.clone(),
-                    recommend_buy: x.recommend_buy,
-                    sell_price: x.dest_min_sell_price,
-                })
-                .collect();
-            make_table_sell_sell(&good_items, name_len)
+            compute_sell_sell(pairs, &config, disable_filters, &mut simple_list, name_len)
         } else if sell_buy {
             log::trace!("Sell buy path.");
-            let good_items = get_good_items_sell_buy(pairs, &config, disable_filters);
-            simple_list = good_items
-                .items
-                .iter()
-                .map(|x| SimpleDisplay {
-                    name: x.market.desc.name.clone(),
-                    recommend_buy: x.recommend_buy,
-                    sell_price: x.dest_min_sell_price,
-                })
-                .collect();
-            make_table_sell_buy(&good_items, name_len)
+            compute_sell_buy(pairs, &config, disable_filters, &mut simple_list, name_len)
         } else {
             log::trace!("Sell sell zkb path.");
-            let cache_zkb_entity = format!(
-                "cache/zkb_losses.{}.{}.rmp",
-                config.zkill_entity.tp.zkill_filter_string(),
-                config.zkill_entity.id
-            );
-            let kms = cache
-                .load_or_create_async(
-                    cache_zkb_entity,
-                    vec![CACHE_AUTH],
-                    force_refresh,
-                    if force_no_refresh {
-                        None
-                    } else {
-                        Some(Duration::hours(24))
-                    },
-                    || {
-                        let esi_requests = &esi_requests;
-                        let client = &esi_config.client;
-                        let config = &config;
-                        async move {
-                            let zkb = ZkbRequestsService::new(client);
-                            let km_service = KillmailService::new(&zkb, esi_requests);
-                            Ok(km_service
-                                .get_kill_item_frequencies(
-                                    &config.zkill_entity,
-                                    config.sell_sell.sell_sell_zkb.zkb_download_pages,
-                                )
-                                .await?)
-                        }
-                    },
-                )
-                .await?;
-
-            let good_items = get_good_items_sell_sell_zkb(pairs, kms, &config, disable_filters);
-            simple_list = good_items
-                .iter()
-                .map(|x| SimpleDisplay {
-                    name: x.market.desc.name.clone(),
-                    recommend_buy: x.recommend_buy,
-                    sell_price: x.dest_min_sell_price,
-                })
-                .collect();
-            make_table_sell_sell_zkb(&good_items, name_len)
+            compute_sell_sell_zkb(
+                config,
+                cache,
+                force_no_refresh,
+                esi_requests,
+                &esi_config,
+                pairs,
+                disable_filters,
+                &mut simple_list,
+                name_len,
+            )
+            .await?
         }
     };
 
@@ -272,6 +224,100 @@ async fn run() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
+fn compute_sell_sell<'a>(
+    pairs: Vec<SystemMarketsItemData>,
+    config: &Config,
+    disable_filters: bool,
+    simple_list: &mut Vec<SimpleDisplay>,
+    name_len: usize,
+) -> Vec<Row<'a>> {
+    let good_items = get_good_items_sell_sell(pairs, config, disable_filters);
+    *simple_list = good_items
+        .iter()
+        .map(|x| SimpleDisplay {
+            name: x.market.desc.name.clone(),
+            recommend_buy: x.recommend_buy,
+            sell_price: x.dest_min_sell_price,
+        })
+        .collect();
+    make_table_sell_sell(&good_items, name_len)
+}
+
+fn compute_sell_buy<'a>(
+    pairs: Vec<SystemMarketsItemData>,
+    config: &Config,
+    disable_filters: bool,
+    simple_list: &mut Vec<SimpleDisplay>,
+    name_len: usize,
+) -> Vec<Row<'a>> {
+    let good_items = get_good_items_sell_buy(pairs, config, disable_filters);
+    *simple_list = good_items
+        .items
+        .iter()
+        .map(|x| SimpleDisplay {
+            name: x.market.desc.name.clone(),
+            recommend_buy: x.recommend_buy,
+            sell_price: x.dest_min_sell_price,
+        })
+        .collect();
+    make_table_sell_buy(&good_items, name_len)
+}
+
+async fn compute_sell_sell_zkb<'a>(
+    config: Config,
+    mut cache: CachedStuff,
+    force_no_refresh: bool,
+    esi_requests: EsiRequestsService<'a>,
+    esi_config: &Configuration,
+    pairs: Vec<SystemMarketsItemData>,
+    disable_filters: bool,
+    simple_list: &mut Vec<SimpleDisplay>,
+    name_len: usize,
+) -> Result<Vec<Row<'a>>, anyhow::Error> {
+    let cache_zkb_entity = format!(
+        "cache/zkb_losses.{}.{}.rmp",
+        config.common.zkill_entity.tp.zkill_filter_string(),
+        config.common.zkill_entity.id
+    );
+    let kms = cache
+        .load_or_create_async(
+            cache_zkb_entity,
+            vec![CACHE_AUTH],
+            false,
+            if force_no_refresh {
+                None
+            } else {
+                Some(Duration::hours(24))
+            },
+            || {
+                let esi_requests = &esi_requests;
+                let client = &esi_config.client;
+                let config = &config;
+                async move {
+                    let zkb = ZkbRequestsService::new(client);
+                    let km_service = KillmailService::new(&zkb, esi_requests);
+                    Ok(km_service
+                        .get_kill_item_frequencies(
+                            &config.common.zkill_entity,
+                            config.common.sell_sell.sell_sell_zkb.zkb_download_pages,
+                        )
+                        .await?)
+                }
+            },
+        )
+        .await?;
+    let good_items = get_good_items_sell_sell_zkb(pairs, kms, &config, disable_filters);
+    *simple_list = good_items
+        .iter()
+        .map(|x| SimpleDisplay {
+            name: x.market.desc.name.clone(),
+            recommend_buy: x.recommend_buy,
+            sell_price: x.dest_min_sell_price,
+        })
+        .collect();
+    Ok(make_table_sell_sell_zkb(&good_items, name_len))
+}
+
 async fn compute_pairs<'a>(
     config: &Config,
     esi_requests: &EsiRequestsService<'a>,
@@ -283,18 +329,18 @@ async fn compute_pairs<'a>(
     let config = config;
     let esi_requests = esi_requests;
     let source_region = esi_requests
-        .find_region_id_station(config.source.clone(), character_id)
+        .find_region_id_station(config.route.source.clone(), character_id)
         .await
         .unwrap();
     let dest_region = esi_requests
-        .find_region_id_station(config.destination.clone(), character_id)
+        .find_region_id_station(config.route.destination.clone(), character_id)
         .await
         .unwrap();
     let all_types = cache
         .load_or_create_json_async(
             CACHE_ALL_TYPES,
             vec![CACHE_AUTH],
-            force_refresh,
+            false,
             Some(Duration::days(7)),
             || async {
                 let all_types = esi_requests.get_all_item_types(source_region.region_id);
@@ -313,7 +359,7 @@ async fn compute_pairs<'a>(
         .load_or_create_async(
             CACHE_ALL_TYPE_DESC,
             vec![CACHE_ALL_TYPES],
-            force_refresh,
+            false,
             Some(Duration::days(7)),
             || async {
                 let res = stream::iter(all_types.clone())
@@ -337,31 +383,35 @@ async fn compute_pairs<'a>(
             },
         )
         .await?;
-    let cache_source_hist = format!("cache/{}.rmp", config.source.name);
-    let source_history = cache
+    let cache_source_hist = format!("cache/{}.rmp", config.route.source.name);
+    let source_item_data = cache
         .load_or_create_async(
             cache_source_hist,
             vec![CACHE_ALL_TYPES],
             force_refresh,
-            Some(Duration::hours(config.refresh_timeout_hours)),
-            || async { Ok(esi_requests.history(&all_types, source_region).await?) },
+            Some(Duration::hours(config.common.refresh_timeout_hours)),
+            || async {
+                Ok(esi_requests
+                    .all_item_data(&all_types, source_region)
+                    .await?)
+            },
         )
         .await?;
-    let cache_dest_hist = format!("cache/{}.rmp", config.destination.name);
-    let dest_history = cache
+    let cache_dest_hist = format!("cache/{}.rmp", config.route.destination.name);
+    let dest_item_data = cache
         .load_or_create_async(
             cache_dest_hist,
             vec![CACHE_ALL_TYPES],
             force_refresh,
-            Some(Duration::hours(config.refresh_timeout_hours)),
-            || async { Ok(esi_requests.history(&all_types, dest_region).await?) },
+            Some(Duration::hours(config.common.refresh_timeout_hours)),
+            || async { Ok(esi_requests.all_item_data(&all_types, dest_region).await?) },
         )
         .await?;
-    let source_types_average = source_history
+    let source_types_average = source_item_data
         .into_iter()
         .map(|x| (x.id, x))
         .collect::<HashMap<_, _>>();
-    let mut dest_types_average = dest_history
+    let mut dest_types_average = dest_item_data
         .into_iter()
         .map(|x| (x.id, x))
         .collect::<HashMap<_, _>>();
@@ -379,6 +429,7 @@ async fn compute_pairs<'a>(
         })
     });
     let group_ids = config
+        .common
         .include_groups
         .as_ref()
         .map(|x| {
