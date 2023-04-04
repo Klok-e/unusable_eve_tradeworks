@@ -89,6 +89,44 @@ pub fn weighted_price(config: &Config, history: &[ItemHistoryDay]) -> f64 {
         / sum_volume
 }
 
+pub fn match_buy_orders_profit(
+    orders: impl Iterator<Item = Order>,
+    mut quantity: i32,
+    price_expense: f64,
+    sales_tax: f64,
+) -> (f64, i32) {
+    let mut sum_sell_to_buy_price = 0.;
+    let mut recommend_bought_volume = 0;
+    'outer: for buy_order in orders
+        .filter(|x| x.is_buy_order)
+        .sorted_by_key(|x| NotNan::new(-x.price).unwrap())
+    {
+        let mut buy_order_fulfilled = buy_order.volume_remain;
+        while buy_order_fulfilled > 0 {
+            let bought_volume = buy_order_fulfilled.min(quantity);
+            buy_order_fulfilled -= bought_volume;
+
+            let expenses = price_expense * bought_volume as f64;
+
+            let sell_price = bought_volume as f64 * buy_order.price * (1. - sales_tax);
+
+            if expenses >= sell_price {
+                break;
+            }
+
+            quantity -= bought_volume;
+            sum_sell_to_buy_price += buy_order.price * bought_volume as f64;
+            recommend_bought_volume += bought_volume;
+
+            if quantity == 0 {
+                break 'outer;
+            }
+        }
+    }
+
+    (sum_sell_to_buy_price, recommend_bought_volume)
+}
+
 pub struct PairCalculatedDataSellSellCommon {
     pub market: SystemMarketsItemData,
     pub margin: f64,

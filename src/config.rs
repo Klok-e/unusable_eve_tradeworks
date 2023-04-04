@@ -50,6 +50,7 @@ pub struct CommonConfig {
     pub include_groups: Option<Vec<String>>,
     pub sell_sell: ConfigSellSell,
     pub sell_buy: ConfigSellBuy,
+    pub sell_reprocess: ConfigSellReprocess,
     pub stations: Vec<Station>,
 }
 
@@ -84,4 +85,9 @@ pub struct ConfigSellSellZkb {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConfigSellBuy {
     pub cargo_capacity: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ConfigSellReprocess {
+    pub repro_portion: f64,
 }

@@ -44,4 +44,40 @@ impl DatadumpService {
 
         Ok(groups)
     }
+
+    pub fn get_reprocess_items(&self, item_id: i32) -> Result<ReprocessItemInfo> {
+        let mut statement = self.conn.prepare(
+            "SELECT 
+                        materialTypeID, quantity 
+                    FROM 
+                        invTypeMaterials itm 
+                    WHERE 
+                        typeID = ?",
+        )?;
+        let groups = statement.query([item_id])?;
+        let groups = groups
+            .mapped(|x| {
+                Ok(ReprocessInfo {
+                    item_id: x.get(0)?,
+                    quantity: x.get(1)?,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(ReprocessItemInfo {
+            item_id,
+            reprocessed_into: groups,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct ReprocessItemInfo {
+    pub reprocessed_into: Vec<ReprocessInfo>,
+    pub item_id: i32,
+}
+
+#[derive(Debug)]
+pub struct ReprocessInfo {
+    pub item_id: i32,
+    pub quantity: i32,
 }

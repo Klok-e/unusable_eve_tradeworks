@@ -20,6 +20,7 @@ use unusable_eve_tradeworks_lib::{
     error,
     good_items::{
         sell_buy::{get_good_items_sell_buy, make_table_sell_buy},
+        sell_reprocess::{get_good_items_sell_reprocess, make_table_sell_reprocess},
         sell_sell::{get_good_items_sell_sell, make_table_sell_sell},
         sell_sell_zkb::{get_good_items_sell_sell_zkb, make_table_sell_sell_zkb},
     },
@@ -134,16 +135,28 @@ async fn run() -> Result<(), anyhow::Error> {
         character_id,
         &mut cache,
         force_refresh,
-        data_service,
+        &data_service,
     )
     .await?;
 
+    let reprocess_flag = cli_args.get_flag(cli::REPROCESS);
     let mut disable_filters = false;
     if let Some(v) = cli_args
         .get_one::<String>(cli::DEBUG_ITEM_ID)
         .and_then(|x| x.parse::<i32>().ok())
     {
-        pairs.retain(|x| x.desc.type_id == v);
+        let reprocess = if reprocess_flag {
+            data_service
+                .get_reprocess_items(v)?
+                .reprocessed_into
+                .into_iter()
+                .map(|x| x.item_id)
+                .collect::<Vec<_>>()
+        } else {
+            vec![]
+        };
+
+        pairs.retain(|x| x.desc.type_id == v || reprocess.contains(&x.desc.type_id));
         disable_filters = true;
     }
 
@@ -163,14 +176,11 @@ async fn run() -> Result<(), anyhow::Error> {
 
         let sell_sell = cli_args.get_flag(cli::SELL_SELL);
         let sell_sell_zkb = cli_args.get_flag(cli::SELL_SELL_ZKB);
-        let sell_buy = cli_args.get_flag(cli::SELL_BUY);
-        if sell_sell || (!sell_buy && !sell_sell_zkb) {
+
+        if sell_sell {
             log::trace!("Sell sell path.");
             compute_sell_sell(pairs, &config, disable_filters, &mut simple_list, name_len)
-        } else if sell_buy {
-            log::trace!("Sell buy path.");
-            compute_sell_buy(pairs, &config, disable_filters, &mut simple_list, name_len)?
-        } else {
+        } else if sell_sell_zkb {
             log::trace!("Sell sell zkb path.");
             compute_sell_sell_zkb(
                 config,
@@ -184,6 +194,38 @@ async fn run() -> Result<(), anyhow::Error> {
                 name_len,
             )
             .await?
+        } else if reprocess_flag {
+            log::trace!("Reprocess path.");
+            let pairs_clone = if let Some(v) = cli_args
+                .get_one::<String>(cli::DEBUG_ITEM_ID)
+                .and_then(|x| x.parse::<i32>().ok())
+            {
+                let mut clone = pairs.clone();
+                clone.retain(|x| x.desc.type_id == v);
+                clone
+            } else {
+                pairs.clone()
+            };
+            let good_items = get_good_items_sell_reprocess(
+                pairs_clone,
+                pairs,
+                &config,
+                disable_filters,
+                &data_service,
+            )?;
+            simple_list = good_items
+                .items
+                .iter()
+                .map(|x| SimpleDisplay {
+                    name: x.market.desc.name.clone(),
+                    recommend_buy: x.recommend_buy,
+                    sell_price: x.dest_min_sell_price,
+                })
+                .collect();
+            make_table_sell_reprocess(&good_items, name_len)
+        } else {
+            log::trace!("Sell buy path.");
+            compute_sell_buy(pairs, &config, disable_filters, &mut simple_list, name_len)?
         }
     };
 
@@ -342,7 +384,7 @@ async fn compute_pairs<'a>(
     character_id: i32,
     cache: &mut CachedStuff,
     force_refresh: bool,
-    data_service: DatadumpService,
+    data_service: &DatadumpService,
 ) -> Result<Vec<SystemMarketsItemData>, anyhow::Error> {
     let config = config;
     let esi_requests = esi_requests;
