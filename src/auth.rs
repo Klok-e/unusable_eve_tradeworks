@@ -1,7 +1,4 @@
-use crate::{
-    cached_data::{self, CachedStuff},
-    config::AuthConfig,
-};
+use crate::{cached_data::CachedStuff, config::AuthConfig};
 
 use chrono::{DateTime, Utc};
 

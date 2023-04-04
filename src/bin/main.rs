@@ -11,7 +11,7 @@ use tokio::join;
 
 use unusable_eve_tradeworks_lib::{
     auth::Auth,
-    cached_data::{self, CachedStuff},
+    cached_data::CachedStuff,
     cli,
     config::{AuthConfig, Config},
     consts::{self, BUFFER_UNORDERED},
