@@ -1,75 +1,107 @@
-use std::{future::Future, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    future::Future,
+    path::Path,
+};
 
 use super::error::Result;
 use chrono::{DateTime, Utc};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-pub async fn load_or_create_async<T, F, FO>(
-    path: impl AsRef<Path>,
-    refresh: bool,
-    timeout: Option<chrono::Duration>,
-    gen: F,
-) -> Result<T>
-where
-    F: FnOnce() -> FO,
-    FO: Future<Output = Result<T>>,
-    T: Serialize + DeserializeOwned,
-{
-    load_data_or_create_async(path, DataFormat::Bin, refresh, timeout, gen).await
+#[derive(Debug, Default)]
+pub struct CachedStuff {
+    caches_updated: HashMap<String, bool>,
 }
 
-pub async fn load_or_create_json_async<T, F, FO>(
-    path: impl AsRef<Path>,
-    refresh: bool,
-    timeout: Option<chrono::Duration>,
-    gen: F,
-) -> Result<T>
-where
-    F: FnOnce() -> FO,
-    FO: Future<Output = Result<T>>,
-    T: Serialize + DeserializeOwned,
-{
-    load_data_or_create_async(path, DataFormat::Json, refresh, timeout, gen).await
-}
+impl CachedStuff {
+    pub fn new() -> Self {
+        Default::default()
+    }
 
-async fn load_data_or_create_async<T, F, FO>(
-    path: impl AsRef<Path>,
-    format: DataFormat,
-    refresh: bool,
-    timeout: Option<chrono::Duration>,
-    gen: F,
-) -> Result<T>
-where
-    F: FnOnce() -> FO,
-    FO: Future<Output = Result<T>>,
-    T: Serialize + DeserializeOwned,
-{
-    let cont = if path.as_ref().exists() && !refresh {
-        let str = std::fs::read(path.as_ref()).unwrap();
-        let deser: Container<T> = match format {
-            DataFormat::Json => serde_json::from_slice(str.as_slice()).unwrap(),
-            DataFormat::Bin => rmp_serde::from_read(str.as_slice()).unwrap(),
-        };
-        match timeout {
-            Some(timeout) if deser.time + timeout < Utc::now() => {
-                log::debug!(
-                    "Save time ({}) + timeout ({}) = {} < {}",
-                    deser.time,
-                    timeout,
-                    deser.time + timeout,
-                    Utc::now()
-                );
-                gen_and_save(&path, gen, format).await?
-            }
-            _ => {
-                log::info!("Path {:?} loaded", path.as_ref());
-                deser
+    pub async fn load_or_create_async<T, F, FO>(
+        &mut self,
+        path: impl AsRef<Path>,
+        depends: Vec<&str>,
+        must_refresh: bool,
+        timeout: Option<chrono::Duration>,
+        gen: F,
+    ) -> Result<T>
+    where
+        F: FnOnce() -> FO,
+        FO: Future<Output = Result<T>>,
+        T: Serialize + DeserializeOwned,
+    {
+        self.load_data_or_create_async(
+            path.as_ref(),
+            depends,
+            DataFormat::Bin,
+            must_refresh,
+            timeout,
+            gen,
+        )
+        .await
+    }
+
+    pub async fn load_or_create_json_async<T, F, FO>(
+        &mut self,
+        path: impl AsRef<Path>,
+        depends: Vec<&str>,
+        must_refresh: bool,
+        timeout: Option<chrono::Duration>,
+        gen: F,
+    ) -> Result<T>
+    where
+        F: FnOnce() -> FO,
+        FO: Future<Output = Result<T>>,
+        T: Serialize + DeserializeOwned,
+    {
+        self.load_data_or_create_async(
+            path.as_ref(),
+            depends,
+            DataFormat::Json,
+            must_refresh,
+            timeout,
+            gen,
+        )
+        .await
+    }
+
+    async fn load_data_or_create_async<T, F, FO>(
+        &mut self,
+        path: &Path,
+        depends: Vec<&str>,
+        format: DataFormat,
+        must_refresh: bool,
+        timeout: Option<chrono::Duration>,
+        gen: F,
+    ) -> Result<T>
+    where
+        F: FnOnce() -> FO,
+        FO: Future<Output = Result<T>>,
+        T: Serialize + DeserializeOwned,
+    {
+        let path_str = path.to_str().unwrap().to_owned();
+        self.caches_updated.insert(path_str.clone(), false);
+
+        let were_depends_updated = depends.iter().any(|&x| self.caches_updated[x]);
+        if path.exists() && !were_depends_updated && !must_refresh {
+            let str = std::fs::read(path)?;
+            let deser: Container<T> = match format {
+                DataFormat::Json => serde_json::from_slice(str.as_slice())?,
+                DataFormat::Bin => rmp_serde::from_read(str.as_slice()).unwrap(),
+            };
+            match timeout {
+                Some(timeout) if deser.time + timeout > Utc::now() => {
+                    log::info!("Path {:?} loaded", path);
+                    return Ok(deser.data);
+                }
+                _ => {}
             }
         }
-    } else {
-        gen_and_save(&path, gen, format).await?
-    };
-    Ok(cont.data)
+        self.caches_updated.insert(path_str, true);
+        let cont = gen_and_save(&path, gen, format).await?;
+        Ok(cont.data)
+    }
 }
 
 async fn gen_and_save<T, F, FO>(

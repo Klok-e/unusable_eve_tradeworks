@@ -1,5 +1,5 @@
 use crate::{
-    cached_data::{self},
+    cached_data::{self, CachedStuff},
     config::AuthConfig,
 };
 
@@ -41,21 +41,25 @@ pub struct Auth {
 }
 
 impl Auth {
-    pub async fn load_or_request_token(config: &AuthConfig) -> Self {
-        let path = "cache/auth";
-        let mut data = cached_data::load_or_create_json_async(path, false, None, || async {
-            let token = Self::request_new(config).await;
-            let expiration_date =
-                Utc::now() + chrono::Duration::from_std(token.expires_in().unwrap()).unwrap();
+    pub async fn load_or_request_token(
+        config: &AuthConfig,
+        cache: &mut CachedStuff,
+        path: &str,
+    ) -> Self {
+        let mut data = cache
+            .load_or_create_json_async(path, vec![], false, None, || async {
+                let token = Self::request_new(config).await;
+                let expiration_date =
+                    Utc::now() + chrono::Duration::from_std(token.expires_in().unwrap()).unwrap();
 
-            Ok(Auth {
-                character_info: validate_token(&token).await,
-                token,
-                expiration_date,
+                Ok(Auth {
+                    character_info: validate_token(&token).await,
+                    token,
+                    expiration_date,
+                })
             })
-        })
-        .await
-        .unwrap();
+            .await
+            .unwrap();
 
         // if expired use refresh token
         if data.expiration_date < Utc::now() {
@@ -74,12 +78,13 @@ impl Auth {
                 expiration_date,
             };
 
-            cached_data::load_or_create_json_async(path, true, None, || {
-                let data = data.clone();
-                async { Ok(data) }
-            })
-            .await
-            .unwrap();
+            cache
+                .load_or_create_json_async(path, vec![], true, None, || {
+                    let data = data.clone();
+                    async { Ok(data) }
+                })
+                .await
+                .unwrap();
         }
 
         data
