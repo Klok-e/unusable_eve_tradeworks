@@ -87,7 +87,7 @@ async fn run() -> Result<(), anyhow::Error> {
     let path_to_datadump = cache
         .load_or_create_json_async(
             CACHE_DATADUMP,
-            vec![CACHE_AUTH],
+            vec![],
             false,
             Some(Duration::days(14)),
             || async {
@@ -300,7 +300,7 @@ async fn compute_sell_sell_zkb<'a>(
     let kms = cache
         .load_or_create_async(
             cache_zkb_entity,
-            vec![CACHE_AUTH],
+            vec![],
             false,
             if force_no_refresh {
                 None
@@ -357,7 +357,7 @@ async fn compute_pairs<'a>(
     let all_types = cache
         .load_or_create_json_async(
             CACHE_ALL_TYPES,
-            vec![CACHE_AUTH],
+            vec![],
             false,
             Some(Duration::days(7)),
             || async {
