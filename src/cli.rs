@@ -14,10 +14,13 @@ pub const FORCE_NO_REFRESH: &str = "force-no-refresh";
 pub const NAME_LENGTH: &str = "name-length";
 pub const QUIET: &str = "quiet";
 pub const FILE_LOUD: &str = "file-loud";
+pub const SOURCE_NAME: &str = "source-name";
+pub const DEST_NAME: &str = "destination-name";
 
 pub fn matches() -> ArgMatches {
     Command::new("Eve Tradeworks")
-        .arg(Arg::new(CONFIG).short('c').long("config").num_args(1))
+        .arg(Arg::new(SOURCE_NAME).required(true))
+        .arg(Arg::new(DEST_NAME).required(true))
         .arg(
             Arg::new(SELL_SELL)
                 .short('s')

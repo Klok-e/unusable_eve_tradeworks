@@ -1,5 +1,6 @@
 use std::{collections::HashMap, io::Read};
 
+use anyhow::anyhow;
 use chrono::Duration;
 use futures::{stream, StreamExt};
 
@@ -12,7 +13,7 @@ use tokio::join;
 use unusable_eve_tradeworks_lib::{
     auth::Auth,
     cached_data::CachedStuff,
-    cli,
+    cli::{self, DEST_NAME, SOURCE_NAME},
     config::{AuthConfig, CommonConfig, Config, RouteConfig},
     consts::{self, BUFFER_UNORDERED},
     datadump_service::DatadumpService,
@@ -26,6 +27,7 @@ use unusable_eve_tradeworks_lib::{
     logger,
     requests::service::EsiRequestsService,
     zkb::{killmails::KillmailService, zkb_requests::ZkbRequestsService},
+    Station,
 };
 
 #[tokio::main]
@@ -48,14 +50,22 @@ async fn run() -> Result<(), anyhow::Error> {
     let file_loud = cli_args.get_flag(cli::FILE_LOUD);
     logger::setup_logger(quiet, file_loud)?;
 
-    let config_file_name = cli_args
-        .get_one::<String>(cli::CONFIG)
-        .cloned()
-        .unwrap_or("config.json".to_owned());
+    let source = cli_args.get_one::<String>(SOURCE_NAME).unwrap();
+    let dest = cli_args.get_one::<String>(DEST_NAME).unwrap();
+    let common = CommonConfig::from_file_json(CONFIG_COMMON)?;
     let config = Config {
-        route: RouteConfig::from_file_json(config_file_name)?,
-        common: CommonConfig::from_file_json(CONFIG_COMMON)?,
+        route: RouteConfig {
+            source: find_station(&common.stations, source)?,
+            destination: find_station(&common.stations, dest)?,
+        },
+        common,
     };
+
+    log::info!(
+        "Calculating route {} ---> {}",
+        config.route.source.name,
+        config.route.destination.name
+    );
 
     let mut cache = CachedStuff::new();
 
@@ -159,7 +169,7 @@ async fn run() -> Result<(), anyhow::Error> {
             compute_sell_sell(pairs, &config, disable_filters, &mut simple_list, name_len)
         } else if sell_buy {
             log::trace!("Sell buy path.");
-            compute_sell_buy(pairs, &config, disable_filters, &mut simple_list, name_len)
+            compute_sell_buy(pairs, &config, disable_filters, &mut simple_list, name_len)?
         } else {
             log::trace!("Sell sell zkb path.");
             compute_sell_sell_zkb(
@@ -224,6 +234,14 @@ async fn run() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
+fn find_station(stations: &Vec<Station>, source: &String) -> Result<Station, anyhow::Error> {
+    Ok(stations
+        .iter()
+        .find(|x| x.short.as_ref().unwrap_or(&x.name) == source)
+        .ok_or(anyhow!("Can't find {}", source))?
+        .clone())
+}
+
 fn compute_sell_sell<'a>(
     pairs: Vec<SystemMarketsItemData>,
     config: &Config,
@@ -249,8 +267,8 @@ fn compute_sell_buy<'a>(
     disable_filters: bool,
     simple_list: &mut Vec<SimpleDisplay>,
     name_len: usize,
-) -> Vec<Row<'a>> {
-    let good_items = get_good_items_sell_buy(pairs, config, disable_filters);
+) -> anyhow::Result<Vec<Row<'a>>> {
+    let good_items = get_good_items_sell_buy(pairs, config, disable_filters)?;
     *simple_list = good_items
         .items
         .iter()
@@ -260,7 +278,7 @@ fn compute_sell_buy<'a>(
             sell_price: x.dest_min_sell_price,
         })
         .collect();
-    make_table_sell_buy(&good_items, name_len)
+    Ok(make_table_sell_buy(&good_items, name_len))
 }
 
 async fn compute_sell_sell_zkb<'a>(

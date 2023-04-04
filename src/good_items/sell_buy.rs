@@ -15,7 +15,7 @@ pub fn get_good_items_sell_buy(
     pairs: Vec<SystemMarketsItemData>,
     config: &Config,
     disable_filters: bool,
-) -> ProcessedSellBuyItems {
+) -> Result<ProcessedSellBuyItems, anyhow::Error> {
     pairs
         .into_iter()
         .filter_map(|x| {
@@ -137,11 +137,15 @@ pub fn get_good_items_sell_buy(
 }
 
 trait DataVecExt {
-    fn take_maximizing_profit(self, max_cargo: i32) -> ProcessedSellBuyItems;
+    fn take_maximizing_profit(self, max_cargo: i32)
+        -> Result<ProcessedSellBuyItems, anyhow::Error>;
 }
 
 impl DataVecExt for Vec<PairCalculatedDataSellBuy> {
-    fn take_maximizing_profit(self, max_cargo: i32) -> ProcessedSellBuyItems {
+    fn take_maximizing_profit(
+        self,
+        max_cargo: i32,
+    ) -> Result<ProcessedSellBuyItems, anyhow::Error> {
         use good_lp::{default_solver, variable, Expression, ProblemVariables, Solution, Variable};
         let mut vars = ProblemVariables::new();
         let mut var_refs = Vec::new();
@@ -175,8 +179,7 @@ impl DataVecExt for Vec<PairCalculatedDataSellBuy> {
             .maximise(&goal)
             .using(default_solver)
             .with(space_constraint)
-            .solve()
-            .unwrap();
+            .solve()?;
 
         let recommended_items = var_refs.into_iter().zip(self.into_iter()).map(
             |(var, item): (Variable, PairCalculatedDataSellBuy)| -> PairCalculatedDataSellBuyFinal {
@@ -207,11 +210,11 @@ impl DataVecExt for Vec<PairCalculatedDataSellBuy> {
             .iter()
             .map(|x| x.market.desc.volume as f64 * x.recommend_buy as f64)
             .sum::<f64>() as i32;
-        ProcessedSellBuyItems {
+        Ok(ProcessedSellBuyItems {
             items: recommended_items,
             sum_profit: solution.eval(&goal),
             sum_volume: volume,
-        }
+        })
     }
 }
 

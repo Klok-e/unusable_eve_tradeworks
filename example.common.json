@@ -1,0 +1,54 @@
+{
+  "days_average": 20,
+  "margin_cutoff": 0.02,
+  "sales_tax": 0.036,
+  "items_take": 20,
+  "zkill_entity": {
+    "id": 498125261,
+    "tp": "Alliance"
+  },
+  "refresh_timeout_hours": 1,
+  "min_profit": 100000.0,
+  "include_groups": null,
+  "sell_sell": {
+    "rcmnd_fill_days": 0.1,
+    "min_src_volume": 0.0,
+    "min_dst_volume": 1.0,
+    "max_filled_for_days_cutoff": 50.0,
+    "freight_cost_iskm3": 600.0,
+    "freight_cost_collateral_percent": 0.015,
+    "sell_sell_zkb": {
+      "min_dst_zkb_lost_volume": 1.0,
+      "zkb_download_pages": 20
+    }
+  },
+  "sell_buy": {
+    "cargo_capacity": 60000
+  },
+  "stations": [
+    {
+      "is_citadel": false,
+      "name": "Jita IV - Moon 4 - Caldari Navy Assembly Plant",
+      "short": "jita",
+      "broker_fee": 0.0136
+    },
+    {
+      "is_citadel": true,
+      "name": "BKG-Q2 - Trit Star",
+      "short": "bkg",
+      "broker_fee": 0.01
+    },
+    {
+      "is_citadel": true,
+      "name": "4-HWWF - WinterCo. Central Station",
+      "short": null,
+      "broker_fee": 0.01
+    },
+    {
+      "is_citadel": true,
+      "name": "UMI-KK - War of Interesting Times",
+      "short": null,
+      "broker_fee": 0.01
+    }
+  ]
+}

@@ -29,8 +29,10 @@ pub struct RouteConfig {
 
 impl RouteConfig {
     pub fn from_file_json<P: AsRef<Path>>(path: P) -> crate::error::Result<Self> {
-        let str = std::fs::read_to_string(path)?;
+        let str = std::fs::read_to_string(path.as_ref())?;
         let config: RouteConfig = serde_json::from_str(str.as_ref())?;
+        let str = serde_json::to_string_pretty(&config)?;
+        std::fs::write(path, str)?;
 
         Ok(config)
     }
@@ -48,6 +50,7 @@ pub struct CommonConfig {
     pub include_groups: Option<Vec<String>>,
     pub sell_sell: ConfigSellSell,
     pub sell_buy: ConfigSellBuy,
+    pub stations: Vec<Station>,
 }
 
 impl CommonConfig {
