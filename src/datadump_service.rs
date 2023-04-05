@@ -57,7 +57,6 @@ impl DatadumpService {
         Ok(ReprocessItemInfo {
             item_id,
             reprocessed_into: reprocess_into,
-            quantity: self.get_reprocess_quantity(item_id).unwrap_or(1),
         })
     }
 
@@ -83,33 +82,31 @@ impl DatadumpService {
         Ok(groups)
     }
 
-    pub fn get_reprocess_quantity(&self, item_id: i32) -> anyhow::Result<i64> {
-        let lock = self.conn.lock().unwrap();
-        let mut statement = lock.prepare(
-            "SELECT quantity
-                    FROM 
-                        industryActivityProducts iap 
-                    WHERE 
-                        productTypeID = ?",
-        )?;
-        let groups = statement.query([item_id])?;
-        let groups = groups
-            .mapped(|x| x.get(0))
-            .next()
-            .transpose()?
-            .ok_or_else(|| {
-                anyhow::anyhow!("get_reprocess_quantity: No rows returned for {item_id}")
-            })?;
-        Ok(groups)
-    }
+    // pub fn get_reprocess_quantity(&self, item_id: i32) -> anyhow::Result<i64> {
+    //     let lock = self.conn.lock().unwrap();
+    //     let mut statement = lock.prepare(
+    //         "SELECT quantity
+    //                 FROM
+    //                     industryActivityProducts iap
+    //                 WHERE
+    //                     productTypeID = ?",
+    //     )?;
+    //     let groups = statement.query([item_id])?;
+    //     let groups = groups
+    //         .mapped(|x| x.get(0))
+    //         .next()
+    //         .transpose()?
+    //         .ok_or_else(|| {
+    //             anyhow::anyhow!("get_reprocess_quantity: No rows returned for {item_id}")
+    //         })?;
+    //     Ok(groups)
+    // }
 }
 
 #[derive(Debug)]
 pub struct ReprocessItemInfo {
     pub reprocessed_into: Vec<ReprocessInfo>,
     pub item_id: i32,
-    /// Minimum quantity which can be reprocessed
-    pub quantity: i64,
 }
 
 #[derive(Debug)]

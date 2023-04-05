@@ -52,7 +52,7 @@ pub fn get_good_items_sell_reprocess(
             src_avgs: item.src_avgs,
             dst_avgs: item.dst_avgs,
             market_src_volume: item.market_src_volume,
-            volume: 0,
+            portion_size: item.portion_size,
         })
         .take(config.common.items_take)
         .collect::<Vec<_>>();
@@ -126,6 +126,7 @@ fn process_item_pair(
         market_src_volume: src_mkt_volume,
         src_avgs,
         dst_avgs,
+        portion_size: x.desc.portion_size.unwrap(),
     })
 }
 
@@ -148,9 +149,10 @@ fn calculate_prices_volumes(
     let mut sum_buy_price = 0.;
     let mut max_buy_price = 0.;
 
-    let mut count = 0;
+    let min_reprocess_quantity = x.desc.portion_size.unwrap();
+
     'outer: loop {
-        let total_buy_quantity = recommend_buy_volume + reprocess.quantity;
+        let total_buy_quantity = recommend_buy_volume + min_reprocess_quantity;
         let (buy_price, quantity) =
             match_buy_from_sell_orders(source_sell_orders.iter(), total_buy_quantity);
         if quantity != total_buy_quantity {
@@ -173,7 +175,8 @@ fn calculate_prices_volumes(
                 .sorted_by_key(|x| NotNan::new(-x.price).unwrap());
             let (sum_received, matched) = match_buy_orders_profit(
                 reprocessed_item_buy_orders,
-                ((total_buy_quantity * reprocessed_item.quantity) as f64
+                (total_buy_quantity as f64 / min_reprocess_quantity as f64
+                    * reprocessed_item.quantity as f64
                     * config.common.sell_reprocess.repro_portion) as i64,
                 0.,
                 0.,
@@ -195,16 +198,10 @@ fn calculate_prices_volumes(
             break 'outer;
         }
 
-        recommend_buy_volume += reprocess.quantity;
+        recommend_buy_volume += min_reprocess_quantity;
         sum_sell_price = item_reproc_sell;
         sum_buy_price = buy_price * recommend_buy_volume as f64;
         max_buy_price = buy_price;
-
-        count += 1;
-        if count > 100000 {
-            log::warn!("{count} iterations!");
-            break;
-        }
     }
 
     if recommend_buy_volume == 0 {
@@ -237,6 +234,7 @@ pub fn make_table_sell_reprocess<'b>(
         TableCell::new("mkt dst"),
         TableCell::new("rough prft"),
         TableCell::new("rcmnd"),
+        TableCell::new("prtn sz"),
     ]))
     .chain(good_items.items.iter().map(|it| {
         let short_name =
@@ -261,18 +259,19 @@ pub fn make_table_sell_reprocess<'b>(
             TableCell::new(format!("{:.2}", it.market_dest_volume)),
             TableCell::new(format!("{:.2}", it.rough_profit)),
             TableCell::new(format!("{}", it.recommend_buy)),
+            TableCell::new(format!("{}", it.portion_size)),
         ])
     }))
     .chain(std::iter::once(Row::new(vec![
         TableCell::new("total profit"),
         TableCell::new_with_col_span(
             (good_items.sum_profit.round() as i64).to_formatted_string(&Locale::fr),
-            12,
+            13,
         ),
     ])))
     .chain(std::iter::once(Row::new(vec![
         TableCell::new("total volume"),
-        TableCell::new_with_col_span(good_items.sum_volume.to_formatted_string(&Locale::fr), 12),
+        TableCell::new_with_col_span(good_items.sum_volume.to_formatted_string(&Locale::fr), 13),
     ])))
     .collect::<Vec<_>>();
     rows
@@ -293,6 +292,7 @@ struct PairCalculatedDataSellReprocess {
     dst_avgs: Option<ItemTypeAveraged>,
     market_src_volume: i64,
     best_margin: f64,
+    portion_size: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -309,7 +309,7 @@ pub struct PairCalculatedDataSellReprocessFinal {
     src_avgs: Option<ItemTypeAveraged>,
     dst_avgs: Option<ItemTypeAveraged>,
     market_src_volume: i64,
-    volume: i32,
+    portion_size: i64,
 }
 
 pub struct ProcessedSellBuyItems {
