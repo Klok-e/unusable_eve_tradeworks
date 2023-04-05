@@ -537,6 +537,6 @@ async fn compute_pairs<'a>(
 
 pub struct SimpleDisplay {
     pub name: String,
-    pub recommend_buy: i32,
+    pub recommend_buy: i64,
     pub sell_price: f64,
 }

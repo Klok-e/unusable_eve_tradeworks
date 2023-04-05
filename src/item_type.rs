@@ -28,8 +28,8 @@ pub struct Order {
     pub order_id: i64,
     pub price: f64,
     pub type_id: i32,
-    pub volume_remain: i32,
-    pub volume_total: i32,
+    pub volume_remain: i64,
+    pub volume_total: i64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Copy, Clone)]

@@ -25,6 +25,9 @@
   "sell_buy": {
     "cargo_capacity": 60000
   },
+  "sell_reprocess": {
+    "repro_portion": 0.5
+  },
   "stations": [
     {
       "is_citadel": false,
@@ -41,13 +44,13 @@
     {
       "is_citadel": true,
       "name": "4-HWWF - WinterCo. Central Station",
-      "short": null,
+      "short": "4hww",
       "broker_fee": 0.01
     },
     {
       "is_citadel": true,
       "name": "UMI-KK - War of Interesting Times",
-      "short": null,
+      "short": "umi",
       "broker_fee": 0.01
     }
   ]

@@ -10,12 +10,12 @@ use crate::{
 
 pub fn best_buy_volume_from_sell_to_sell(
     x: &[Order],
-    recommend_buy_vol: i32,
+    recommend_buy_vol: i64,
     sell_price: f64,
     buy_broker_fee: f64,
     sell_broker_fee: f64,
     sell_tax: f64,
-) -> (f64, i32) {
+) -> (f64, i64) {
     let mut recommend_bought_volume = 0;
     let mut max_price = 0.;
     for order in x
@@ -91,31 +91,59 @@ pub fn weighted_price(config: &Config, history: &[ItemHistoryDay]) -> f64 {
 
 pub fn match_buy_orders_profit(
     orders: impl Iterator<Item = Order>,
-    mut quantity: i32,
+    mut quantity: i64,
     price_expense: f64,
     sales_tax: f64,
-) -> (f64, i32) {
+) -> (f64, i64) {
     let mut sum_sell_to_buy_price = 0.;
-    let mut recommend_bought_volume = 0;
+    let mut recommend_sold_volume = 0;
     'outer: for buy_order in orders
         .filter(|x| x.is_buy_order)
         .sorted_by_key(|x| NotNan::new(-x.price).unwrap())
     {
         let mut buy_order_fulfilled = buy_order.volume_remain;
         while buy_order_fulfilled > 0 {
-            let bought_volume = buy_order_fulfilled.min(quantity);
-            buy_order_fulfilled -= bought_volume;
+            let sold_volume = buy_order_fulfilled.min(quantity);
+            buy_order_fulfilled -= sold_volume;
 
-            let expenses = price_expense * bought_volume as f64;
+            let expenses = price_expense * sold_volume as f64;
 
-            let sell_price = bought_volume as f64 * buy_order.price * (1. - sales_tax);
+            let sell_sum_price = sold_volume as f64 * buy_order.price * (1. - sales_tax);
 
-            if expenses >= sell_price {
+            if expenses >= sell_sum_price {
                 break;
             }
 
+            quantity -= sold_volume;
+            sum_sell_to_buy_price += buy_order.price * sold_volume as f64;
+            recommend_sold_volume += sold_volume;
+
+            if quantity == 0 {
+                break 'outer;
+            }
+        }
+    }
+
+    (sum_sell_to_buy_price, recommend_sold_volume)
+}
+
+pub fn match_buy_from_sell_orders<'a>(
+    orders: impl Iterator<Item = &'a Order>,
+    mut quantity: i64,
+) -> (f64, i64) {
+    let mut max_price = 0.;
+    let mut recommend_bought_volume = 0;
+    'outer: for sell_order in orders
+        .filter(|x| !x.is_buy_order)
+        .sorted_by_key(|x| NotNan::new(x.price).unwrap())
+    {
+        let mut sell_order_fulfilled = sell_order.volume_remain;
+        while sell_order_fulfilled > 0 {
+            let bought_volume = sell_order_fulfilled.min(quantity);
+            sell_order_fulfilled -= bought_volume;
+
             quantity -= bought_volume;
-            sum_sell_to_buy_price += buy_order.price * bought_volume as f64;
+            max_price = sell_order.price.max(max_price);
             recommend_bought_volume += bought_volume;
 
             if quantity == 0 {
@@ -124,15 +152,15 @@ pub fn match_buy_orders_profit(
         }
     }
 
-    (sum_sell_to_buy_price, recommend_bought_volume)
+    (max_price, recommend_bought_volume)
 }
 
 pub struct PairCalculatedDataSellSellCommon {
     pub market: SystemMarketsItemData,
     pub margin: f64,
     pub rough_profit: f64,
-    pub market_dest_volume: i32,
-    pub recommend_buy: i32,
+    pub market_dest_volume: i64,
+    pub recommend_buy: i64,
     pub expenses: f64,
     pub sell_price: f64,
     pub filled_for_days: Option<f64>,
@@ -140,16 +168,16 @@ pub struct PairCalculatedDataSellSellCommon {
     pub dest_min_sell_price: f64,
     pub src_avgs: Option<ItemTypeAveraged>,
     pub dst_avgs: ItemTypeAveraged,
-    pub market_src_volume: i32,
+    pub market_src_volume: i64,
 }
 
 pub fn prepare_sell_sell(
     config: &Config,
     market_data: SystemMarketsItemData,
     volume_dest: f64,
-    src_volume_on_market: i32,
+    src_volume_on_market: i64,
     src_avgs: Option<ItemTypeAveraged>,
-    dst_volume_on_market: i32,
+    dst_volume_on_market: i64,
     dst_avgs: ItemTypeAveraged,
 ) -> PairCalculatedDataSellSellCommon {
     let dst_lowest_sell_order = market_data
@@ -166,7 +194,7 @@ pub fn prepare_sell_sell(
     let max_buy_vol = (volume_dest * config.common.sell_sell.rcmnd_fill_days)
         .max(1.)
         .min(src_volume_on_market as f64)
-        .floor() as i32;
+        .floor() as i64;
     let (buy_from_src_price, buy_from_src_volume) = best_buy_volume_from_sell_to_sell(
         market_data.source.orders.as_slice(),
         max_buy_vol,

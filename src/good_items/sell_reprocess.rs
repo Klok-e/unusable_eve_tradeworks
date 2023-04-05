@@ -1,8 +1,8 @@
-use std::collections::HashMap;
-
 use itertools::Itertools;
 use num_format::{Locale, ToFormattedString};
 use ordered_float::NotNan;
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
+use std::collections::HashMap;
 use term_table::{row::Row, table_cell::TableCell};
 
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
     order_ext::OrderIterExt,
 };
 
-use super::help::{averages, match_buy_orders_profit};
+use super::help::{averages, match_buy_from_sell_orders, match_buy_orders_profit};
 
 pub fn get_good_items_sell_reprocess(
     pairs: Vec<SystemMarketsItemData>,
@@ -26,7 +26,7 @@ pub fn get_good_items_sell_reprocess(
         .map(|x| (x.desc.type_id, x))
         .collect::<HashMap<_, _>>();
     let recommended_items = pairs
-        .iter()
+        .par_iter()
         .filter_map(|x| process_item_pair(datadump, x, config, &items_map))
         .filter(|x| disable_filters || x.best_margin > config.common.margin_cutoff)
         .filter(|x| {
@@ -36,6 +36,8 @@ pub fn get_good_items_sell_reprocess(
                     .min_profit
                     .map_or(true, |min_prft| x.rough_profit > min_prft)
         })
+        .collect::<Vec<_>>()
+        .into_iter()
         .sorted_unstable_by_key(|x| NotNan::new(-x.rough_profit).unwrap())
         .map(|item| PairCalculatedDataSellReprocessFinal {
             market: item.market,
@@ -85,7 +87,7 @@ fn process_item_pair(
     let src_mkt_volume = src_mkt_orders.iter().sell_order_volume();
 
     let dst_mkt_orders = x.destination.orders.clone();
-    let dst_mkt_volume: i32 = dst_mkt_orders.iter().sell_order_volume();
+    let dst_mkt_volume = dst_mkt_orders.iter().sell_order_volume();
 
     let src_avgs = averages(config, &x.source.history);
     let dst_avgs = averages(config, &x.destination.history);
@@ -132,73 +134,88 @@ fn calculate_prices_volumes(
     config: &Config,
     reprocess: &ReprocessItemInfo,
     items_map: &HashMap<i32, &SystemMarketsItemData>,
-) -> Option<(i32, f64, f64, f64)> {
+) -> Option<(i64, f64, f64, f64)> {
     let source_sell_orders = x
         .source
         .orders
         .iter()
         .cloned()
         .filter(|x| !x.is_buy_order)
-        .sorted_by_key(|x| NotNan::new(x.price).unwrap());
-    let mut recommend_bought_volume = 0;
+        .sorted_by_key(|x| NotNan::new(x.price).unwrap())
+        .collect::<Vec<_>>();
+    let mut recommend_buy_volume = 0;
     let mut sum_sell_price = 0.;
-    let mut max_buy_price: f64 = 0.;
     let mut sum_buy_price = 0.;
-    'outer: for sell_order in source_sell_orders {
-        for _ in 0..sell_order.volume_remain {
-            let mut item_reproc_sell = 0.;
-            for reprocessed_item in &reprocess.reprocessed_into {
-                // some items can't be sold but can be retrieved by reprocessing
-                // example: Mangled Sansha Data Analyzer
-                if !items_map.contains_key(&reprocessed_item.item_id) {
-                    return None;
-                }
-                let reprocessed_item_buy_orders = items_map[&reprocessed_item.item_id]
-                    .destination
-                    .orders
-                    .iter()
-                    .cloned()
-                    .filter(|x| x.is_buy_order)
-                    .sorted_by_key(|x| NotNan::new(-x.price).unwrap());
-                let (sum_received, matched) = match_buy_orders_profit(
-                    reprocessed_item_buy_orders,
-                    (reprocessed_item.quantity as f64 * config.common.sell_reprocess.repro_portion)
-                        as i32,
-                    0.,
-                    0.,
-                );
-                if matched == 0 {
-                    break;
-                }
+    let mut max_buy_price = 0.;
 
-                item_reproc_sell += sum_received;
+    let mut count = 0;
+    'outer: loop {
+        let total_buy_quantity = recommend_buy_volume + reprocess.quantity;
+        let (buy_price, quantity) =
+            match_buy_from_sell_orders(source_sell_orders.iter(), total_buy_quantity);
+        if quantity != total_buy_quantity {
+            break 'outer;
+        }
+
+        let mut item_reproc_sell = 0.;
+        for reprocessed_item in &reprocess.reprocessed_into {
+            // some items can't be sold but can be retrieved by reprocessing
+            // example: Mangled Sansha Data Analyzer
+            if !items_map.contains_key(&reprocessed_item.item_id) {
+                return None;
+            }
+            let reprocessed_item_buy_orders = items_map[&reprocessed_item.item_id]
+                .destination
+                .orders
+                .iter()
+                .cloned()
+                .filter(|x| x.is_buy_order)
+                .sorted_by_key(|x| NotNan::new(-x.price).unwrap());
+            let (sum_received, matched) = match_buy_orders_profit(
+                reprocessed_item_buy_orders,
+                ((total_buy_quantity * reprocessed_item.quantity) as f64
+                    * config.common.sell_reprocess.repro_portion) as i64,
+                0.,
+                0.,
+            );
+            if matched == 0 {
+                break;
             }
 
-            let expenses = max_buy_price.max(sell_order.price)
-                * (recommend_bought_volume + 1) as f64
-                * (1. + config.route.source.broker_fee);
-            let profit = item_reproc_sell
-                * (1. - config.common.sales_tax)
-                * (1. - config.route.destination.broker_fee);
-            if expenses >= profit {
-                break 'outer;
-            }
+            item_reproc_sell += sum_received;
+        }
 
-            recommend_bought_volume += 1;
-            max_buy_price = max_buy_price.max(sell_order.price);
-            sum_sell_price += item_reproc_sell;
-            sum_buy_price += max_buy_price * recommend_bought_volume as f64;
+        let expenses =
+            buy_price * (total_buy_quantity) as f64 * (1. + config.route.source.broker_fee);
+        let profit = item_reproc_sell
+            * (1. - config.common.sales_tax)
+            * (1. - config.route.destination.broker_fee);
+
+        if expenses >= profit {
+            break 'outer;
+        }
+
+        recommend_buy_volume += reprocess.quantity;
+        sum_sell_price = item_reproc_sell;
+        sum_buy_price = buy_price * recommend_buy_volume as f64;
+        max_buy_price = buy_price;
+
+        count += 1;
+        if count > 100000 {
+            log::warn!("{count} iterations!");
+            break;
         }
     }
-    if recommend_bought_volume == 0 {
+
+    if recommend_buy_volume == 0 {
         return None;
     }
 
     Some((
-        recommend_bought_volume,
-        sum_sell_price / recommend_bought_volume as f64,
+        recommend_buy_volume,
+        sum_sell_price / recommend_buy_volume as f64,
         max_buy_price,
-        sum_buy_price / recommend_bought_volume as f64,
+        sum_buy_price / recommend_buy_volume as f64,
     ))
 }
 
@@ -266,15 +283,15 @@ struct PairCalculatedDataSellReprocess {
     market: SystemMarketsItemData,
     margin: f64,
     rough_profit: f64,
-    market_dest_volume: i32,
-    recommend_buy: i32,
+    market_dest_volume: i64,
+    recommend_buy: i64,
     expenses: f64,
     sell_price: f64,
     src_buy_price: f64,
     dest_min_sell_price: f64,
     src_avgs: Option<ItemTypeAveraged>,
     dst_avgs: Option<ItemTypeAveraged>,
-    market_src_volume: i32,
+    market_src_volume: i64,
     best_margin: f64,
 }
 
@@ -283,15 +300,15 @@ pub struct PairCalculatedDataSellReprocessFinal {
     pub market: SystemMarketsItemData,
     margin: f64,
     rough_profit: f64,
-    market_dest_volume: i32,
-    pub recommend_buy: i32,
+    market_dest_volume: i64,
+    pub recommend_buy: i64,
     expenses: f64,
     sell_price: f64,
     src_buy_price: f64,
     pub dest_min_sell_price: f64,
     src_avgs: Option<ItemTypeAveraged>,
     dst_avgs: Option<ItemTypeAveraged>,
-    market_src_volume: i32,
+    market_src_volume: i64,
     volume: i32,
 }
 

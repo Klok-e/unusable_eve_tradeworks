@@ -23,7 +23,7 @@ pub fn get_good_items_sell_buy(
             let src_mkt_volume = src_mkt_orders.iter().sell_order_volume();
 
             let dst_mkt_orders = x.destination.orders.clone();
-            let dst_mkt_volume: i32 = dst_mkt_orders.iter().sell_order_volume();
+            let dst_mkt_volume = dst_mkt_orders.iter().sell_order_volume();
 
             let src_avgs = averages(config, &x.source.history);
             let dst_avgs = averages(config, &x.destination.history);
@@ -150,7 +150,7 @@ impl DataVecExt for Vec<PairCalculatedDataSellBuy> {
         let mut vars = ProblemVariables::new();
         let mut var_refs = Vec::new();
         for item in &self {
-            let var_def = variable().integer().min(0).max(item.recommend_buy);
+            let var_def = variable().integer().min(0).max(item.recommend_buy as i32);
             var_refs.push(vars.add(var_def));
         }
 
@@ -184,8 +184,8 @@ impl DataVecExt for Vec<PairCalculatedDataSellBuy> {
         let recommended_items = var_refs.into_iter().zip(self.into_iter()).map(
             |(var, item): (Variable, PairCalculatedDataSellBuy)| -> PairCalculatedDataSellBuyFinal {
                 let optimal = solution.value(var);
-                let recommend_buy = optimal as i32;
-                let volume = (recommend_buy as f64 * item.market.desc.volume as f64) as i32;
+                let recommend_buy = optimal as i64;
+                let volume = (recommend_buy as f64 * item.market.desc.volume as f64) as i64;
                 PairCalculatedDataSellBuyFinal{
                     market: item.market,
                     margin: item.margin,
@@ -284,15 +284,15 @@ struct PairCalculatedDataSellBuy {
     market: SystemMarketsItemData,
     margin: f64,
     rough_profit: f64,
-    market_dest_volume: i32,
-    recommend_buy: i32,
+    market_dest_volume: i64,
+    recommend_buy: i64,
     expenses: f64,
     sell_price: f64,
     src_buy_price: f64,
     dest_min_sell_price: f64,
     src_avgs: Option<ItemTypeAveraged>,
     dst_avgs: Option<ItemTypeAveraged>,
-    market_src_volume: i32,
+    market_src_volume: i64,
     best_margin: f64,
 }
 
@@ -301,16 +301,16 @@ pub struct PairCalculatedDataSellBuyFinal {
     pub market: SystemMarketsItemData,
     margin: f64,
     rough_profit: f64,
-    market_dest_volume: i32,
-    pub recommend_buy: i32,
+    market_dest_volume: i64,
+    pub recommend_buy: i64,
     expenses: f64,
     sell_price: f64,
     src_buy_price: f64,
     pub dest_min_sell_price: f64,
     src_avgs: Option<ItemTypeAveraged>,
     dst_avgs: Option<ItemTypeAveraged>,
-    market_src_volume: i32,
-    volume: i32,
+    market_src_volume: i64,
+    volume: i64,
 }
 
 pub struct ProcessedSellBuyItems {

@@ -357,8 +357,8 @@ impl<'a> EsiRequestsService<'a> {
                 order_id: it.0.order_id,
                 price: it.0.price,
                 type_id: it.0.type_id,
-                volume_remain: it.0.volume_remain,
-                volume_total: it.0.volume_total,
+                volume_remain: it.0.volume_remain as i64,
+                volume_total: it.0.volume_total as i64,
             })
             .collect::<Vec<_>>();
 
@@ -392,8 +392,8 @@ impl<'a> EsiRequestsService<'a> {
                 order_id: it.order_id,
                 price: it.price,
                 type_id: it.type_id,
-                volume_remain: it.volume_remain,
-                volume_total: it.volume_total,
+                volume_remain: it.volume_remain as i64,
+                volume_total: it.volume_total as i64,
             })
             .collect::<Vec<_>>();
             log::info!("All citadel orders loaded.");

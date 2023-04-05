@@ -18,7 +18,7 @@ pub fn get_good_items_sell_sell(
             let src_volume_on_market = src_mkt_orders.iter().sell_order_volume();
 
             let dst_mkt_orders = x.destination.orders.clone();
-            let dst_volume_on_market: i32 = dst_mkt_orders.iter().sell_order_volume();
+            let dst_volume_on_market = dst_mkt_orders.iter().sell_order_volume();
 
             let src_avgs = averages(config, &x.source.history).or_else(|| {
                 log::debug!(
