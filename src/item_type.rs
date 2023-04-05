@@ -82,6 +82,7 @@ pub struct SystemMarketsItem {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemMarketsItemData {
     pub desc: TypeDescription,
+    pub adjusted_price: Option<f64>,
     pub source: MarketData,
     pub destination: MarketData,
 }

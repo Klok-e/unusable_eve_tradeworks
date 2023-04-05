@@ -5,8 +5,9 @@ use rust_eveonline_esi::apis::{
     self,
     killmails_api::GetKillmailsKillmailIdKillmailHashError,
     market_api::{
-        GetMarketsGroupsError, GetMarketsRegionIdHistoryError, GetMarketsRegionIdOrdersError,
-        GetMarketsRegionIdTypesError, GetMarketsStructuresStructureIdError,
+        GetMarketsGroupsError, GetMarketsPricesError, GetMarketsRegionIdHistoryError,
+        GetMarketsRegionIdOrdersError, GetMarketsRegionIdTypesError,
+        GetMarketsStructuresStructureIdError,
     },
     routes_api::GetRouteOriginDestinationError,
     search_api::GetCharactersCharacterIdSearchError,
@@ -51,6 +52,21 @@ enum EsiApiErrorEnum {
     UniverseTypesTypeId(#[from] apis::Error<GetUniverseTypesTypeIdError>),
     #[error("market history")]
     MarketHistory(#[from] apis::Error<GetMarketsRegionIdHistoryError>),
+    #[error("market prices")]
+    MarketsPrices(#[from] apis::Error<GetMarketsPricesError>),
+}
+
+impl From<apis::Error<GetMarketsPricesError>> for EsiApiError {
+    fn from(x: apis::Error<GetMarketsPricesError>) -> Self {
+        let code = match &x {
+            apis::Error::ResponseError(x) => x.status,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        EsiApiError {
+            internal: x.into(),
+            status: code,
+        }
+    }
 }
 
 impl From<apis::Error<GetMarketsGroupsError>> for EsiApiError {

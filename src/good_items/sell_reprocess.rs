@@ -28,7 +28,7 @@ pub fn get_good_items_sell_reprocess(
     let recommended_items = pairs
         .par_iter()
         .filter_map(|x| process_item_pair(datadump, x, config, &items_map))
-        .filter(|x| disable_filters || x.best_margin > config.common.margin_cutoff)
+        .filter(|x| disable_filters || x.margin > config.common.margin_cutoff)
         .filter(|x| {
             disable_filters
                 || config
@@ -46,7 +46,7 @@ pub fn get_good_items_sell_reprocess(
             market_dest_volume: item.market_dest_volume,
             recommend_buy: item.recommend_buy,
             expenses: item.expenses,
-            sell_price: item.sell_price,
+            profit: item.profit,
             src_buy_price: item.src_buy_price,
             dest_min_sell_price: item.dest_min_sell_price,
             src_avgs: item.src_avgs,
@@ -92,36 +92,30 @@ fn process_item_pair(
     let src_avgs = averages(config, &x.source.history);
     let dst_avgs = averages(config, &x.destination.history);
 
-    let (recommend_buy_vol, dest_sell_price, max_buy_price, avg_buy_price) =
-        calculate_prices_volumes(x, config, &reprocess, items_map)?;
+    let (
+        recommend_buy_vol,
+        dest_sell_price,
+        max_buy_price,
+        _avg_buy_price,
+        expenses_total,
+        profit_total,
+    ) = calculate_prices_volumes(x, config, &reprocess, items_map)?;
 
     // multibuy can only buy at a fixed price, so all buys from multiple sell orders
     // with different prices have you paid the same price for all of them
-    let expenses = max_buy_price;
-    let buy_with_broker_fee = expenses * (1. + config.route.source.broker_fee);
-    let fin_sell_price = dest_sell_price * (1. - config.common.sales_tax);
+    let margin = (profit_total - expenses_total) / expenses_total;
 
-    let margin = (fin_sell_price - buy_with_broker_fee) / buy_with_broker_fee;
-
-    let rough_profit = (fin_sell_price - buy_with_broker_fee) * recommend_buy_vol as f64;
-
-    // also calculate avg buy price
-    let best_expenses = avg_buy_price;
-    let buy_with_broker_fee = best_expenses * (1. + config.route.source.broker_fee);
-    let fin_sell_price = dest_sell_price * (1. - config.common.sales_tax);
-
-    let best_margin = (fin_sell_price - buy_with_broker_fee) / buy_with_broker_fee;
+    let rough_profit = profit_total - expenses_total;
 
     Some(PairCalculatedDataSellReprocess {
         market: x.clone(),
         margin,
-        best_margin,
         rough_profit,
         market_dest_volume: dst_mkt_volume,
         recommend_buy: recommend_buy_vol,
-        expenses: buy_with_broker_fee,
-        sell_price: fin_sell_price,
-        src_buy_price: expenses,
+        expenses: expenses_total,
+        profit: profit_total,
+        src_buy_price: max_buy_price,
         dest_min_sell_price: dest_sell_price,
         market_src_volume: src_mkt_volume,
         src_avgs,
@@ -135,7 +129,7 @@ fn calculate_prices_volumes(
     config: &Config,
     reprocess: &ReprocessItemInfo,
     items_map: &HashMap<i32, &SystemMarketsItemData>,
-) -> Option<(i64, f64, f64, f64)> {
+) -> Option<(i64, f64, f64, f64, f64, f64)> {
     let source_sell_orders = x
         .source
         .orders
@@ -148,32 +142,37 @@ fn calculate_prices_volumes(
     let mut sum_sell_price = 0.;
     let mut sum_buy_price = 0.;
     let mut max_buy_price = 0.;
+    let mut expenses = 0.;
+    let mut profit = 0.;
 
     let min_reprocess_quantity = x.desc.portion_size.unwrap();
 
-    'outer: loop {
+    loop {
         let total_buy_quantity = recommend_buy_volume + min_reprocess_quantity;
         let (buy_price, quantity) =
             match_buy_from_sell_orders(source_sell_orders.iter(), total_buy_quantity);
         if quantity != total_buy_quantity {
-            break 'outer;
+            break;
         }
 
         let mut item_reproc_sell = 0.;
+        let mut item_reproc_sum_adjusted_price = 0.;
         for reprocessed_item in &reprocess.reprocessed_into {
             // some items can't be sold but can be retrieved by reprocessing
             // example: Mangled Sansha Data Analyzer
             if !items_map.contains_key(&reprocessed_item.item_id) {
                 return None;
             }
-            let reprocessed_item_buy_orders = items_map[&reprocessed_item.item_id]
+            let system_markets_item_data = &items_map[&reprocessed_item.item_id];
+            let adjusted_price = system_markets_item_data.adjusted_price.unwrap_or(0.);
+            let reprocessed_item_buy_orders = system_markets_item_data
                 .destination
                 .orders
                 .iter()
                 .cloned()
                 .filter(|x| x.is_buy_order)
                 .sorted_by_key(|x| NotNan::new(-x.price).unwrap());
-            let (sum_received, _) = match_buy_orders_profit(
+            let (sum_received, matched) = match_buy_orders_profit(
                 reprocessed_item_buy_orders,
                 (total_buy_quantity as f64 / min_reprocess_quantity as f64
                     * reprocessed_item.quantity as f64
@@ -183,17 +182,22 @@ fn calculate_prices_volumes(
             );
 
             item_reproc_sell += sum_received;
+            item_reproc_sum_adjusted_price += adjusted_price * matched as f64;
         }
 
-        let expenses =
-            buy_price * (total_buy_quantity) as f64 * (1. + config.route.source.broker_fee);
-        let profit = item_reproc_sell
+        let new_expenses =
+            buy_price * (total_buy_quantity) as f64 * (1. + config.route.source.broker_fee)
+                + (item_reproc_sum_adjusted_price * config.common.sell_reprocess.repro_tax);
+        let new_profit = item_reproc_sell
             * (1. - config.common.sales_tax)
             * (1. - config.route.destination.broker_fee);
 
-        if expenses >= profit {
-            break 'outer;
+        if new_expenses >= new_profit {
+            break;
         }
+
+        expenses = new_expenses;
+        profit = new_profit;
 
         recommend_buy_volume += min_reprocess_quantity;
         sum_sell_price = item_reproc_sell;
@@ -210,6 +214,8 @@ fn calculate_prices_volumes(
         sum_sell_price / recommend_buy_volume as f64,
         max_buy_price,
         sum_buy_price / recommend_buy_volume as f64,
+        expenses,
+        profit,
     ))
 }
 
@@ -223,7 +229,7 @@ pub fn make_table_sell_reprocess<'b>(
         TableCell::new("src prc"),
         TableCell::new("dst prc"),
         TableCell::new("expenses"),
-        TableCell::new("sell prc"),
+        TableCell::new("profit"),
         TableCell::new("margin"),
         TableCell::new("vlm src"),
         TableCell::new("vlm dst"),
@@ -242,7 +248,7 @@ pub fn make_table_sell_reprocess<'b>(
             TableCell::new(format!("{:.2}", it.src_buy_price)),
             TableCell::new(format!("{:.2}", it.dest_min_sell_price)),
             TableCell::new(format!("{:.2}", it.expenses)),
-            TableCell::new(format!("{:.2}", it.sell_price)),
+            TableCell::new(format!("{:.2}", it.profit)),
             TableCell::new(format!("{:.2}", it.margin)),
             TableCell::new(format!(
                 "{:.2}",
@@ -282,13 +288,12 @@ struct PairCalculatedDataSellReprocess {
     market_dest_volume: i64,
     recommend_buy: i64,
     expenses: f64,
-    sell_price: f64,
+    profit: f64,
     src_buy_price: f64,
     dest_min_sell_price: f64,
     src_avgs: Option<ItemTypeAveraged>,
     dst_avgs: Option<ItemTypeAveraged>,
     market_src_volume: i64,
-    best_margin: f64,
     portion_size: i64,
 }
 
@@ -300,7 +305,7 @@ pub struct PairCalculatedDataSellReprocessFinal {
     market_dest_volume: i64,
     pub recommend_buy: i64,
     expenses: f64,
-    sell_price: f64,
+    profit: f64,
     src_buy_price: f64,
     pub dest_min_sell_price: f64,
     src_avgs: Option<ItemTypeAveraged>,

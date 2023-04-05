@@ -28,8 +28,8 @@ use rust_eveonline_esi::{
         configuration::Configuration,
         killmails_api::{self, GetKillmailsKillmailIdKillmailHashParams},
         market_api::{
-            self, GetMarketsRegionIdOrdersParams, GetMarketsRegionIdTypesParams,
-            GetMarketsStructuresStructureIdParams,
+            self, GetMarketsPricesParams, GetMarketsRegionIdOrdersParams,
+            GetMarketsRegionIdTypesParams, GetMarketsStructuresStructureIdParams,
         },
         routes_api::{self, GetRouteOriginDestinationParams},
         search_api::{get_characters_character_id_search, GetCharactersCharacterIdSearchParams},
@@ -42,8 +42,8 @@ use rust_eveonline_esi::{
     },
     models::{
         get_markets_region_id_orders_200_ok, GetKillmailsKillmailIdKillmailHashItem,
-        GetKillmailsKillmailIdKillmailHashItemsItem, GetMarketsRegionIdHistory200Ok,
-        GetMarketsRegionIdOrders200Ok, GetUniverseTypesTypeIdOk,
+        GetKillmailsKillmailIdKillmailHashItemsItem, GetMarketsPrices200Ok,
+        GetMarketsRegionIdHistory200Ok, GetMarketsRegionIdOrders200Ok, GetUniverseTypesTypeIdOk,
     },
 };
 
@@ -198,7 +198,8 @@ impl<'a> EsiRequestsService<'a> {
             region_id: region,
         })
     }
-    pub async fn get_item_stuff(&self, id: i32) -> Result<Option<GetUniverseTypesTypeIdOk>> {
+
+    pub async fn get_item_description(&self, id: i32) -> Result<Option<GetUniverseTypesTypeIdOk>> {
         let res = retry::retry_smart(|| async {
             let res = universe_api::get_universe_types_type_id(
                 self.config,
@@ -208,6 +209,25 @@ impl<'a> EsiRequestsService<'a> {
                     datasource: None,
                     if_none_match: None,
                     language: None,
+                },
+            )
+            .await?
+            .entity
+            .unwrap();
+            Ok(Retry::Success(res.into_ok().unwrap()))
+        })
+        .await?;
+
+        Ok(res)
+    }
+
+    pub async fn get_ajusted_prices(&self) -> anyhow::Result<Option<Vec<GetMarketsPrices200Ok>>> {
+        let res = retry::retry_smart(|| async {
+            let res = market_api::get_markets_prices(
+                self.config,
+                GetMarketsPricesParams {
+                    datasource: None,
+                    if_none_match: None,
                 },
             )
             .await?

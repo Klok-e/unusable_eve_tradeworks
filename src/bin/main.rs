@@ -40,6 +40,7 @@ const CACHE_AUTH: &str = "cache/auth";
 const CACHE_DATADUMP: &str = "cache/datadump.json";
 const CACHE_ALL_TYPES: &&str = &"cache/all_types.json";
 const CACHE_ALL_TYPE_DESC: &&str = &"cache/all_type_descriptions.rmp";
+const CACHE_ALL_TYPE_PRICES: &&str = &"cache/all_type_prices.rmp";
 const CONFIG_COMMON: &&str = &"config.common.json";
 
 async fn run() -> Result<(), anyhow::Error> {
@@ -385,7 +386,7 @@ async fn compute_pairs<'a>(
     cache: &mut CachedStuff,
     force_refresh: bool,
     data_service: &DatadumpService,
-) -> Result<Vec<SystemMarketsItemData>, anyhow::Error> {
+) -> anyhow::Result<Vec<SystemMarketsItemData>> {
     let config = config;
     let esi_requests = esi_requests;
     let source_region = esi_requests
@@ -426,7 +427,7 @@ async fn compute_pairs<'a>(
                     .map(|id| {
                         let esi_requests = &esi_requests;
                         async move {
-                            let req_res = esi_requests.get_item_stuff(id).await?;
+                            let req_res = esi_requests.get_item_description(id).await?;
 
                             Ok((id, req_res.map(|x| x.into())))
                         }
@@ -440,6 +441,21 @@ async fn compute_pairs<'a>(
                     .collect();
 
                 Ok(res)
+            },
+        )
+        .await?;
+    let all_type_prices: HashMap<i32, f64> = cache
+        .load_or_create_async(
+            CACHE_ALL_TYPE_PRICES,
+            vec![CACHE_ALL_TYPES],
+            false,
+            Some(Duration::days(1)),
+            || async {
+                let prices = esi_requests.get_ajusted_prices().await?.unwrap();
+                Ok(prices
+                    .into_iter()
+                    .map(|x| (x.type_id, x.adjusted_price.unwrap()))
+                    .collect())
             },
         )
         .await?;
@@ -530,6 +546,7 @@ async fn compute_pairs<'a>(
                 desc: req_res,
                 source: it.source,
                 destination: it.destination,
+                adjusted_price: all_type_prices.get(&it.id).copied(),
             })
         })
         .collect::<Vec<_>>())

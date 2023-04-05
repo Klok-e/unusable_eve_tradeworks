@@ -5,8 +5,9 @@ use rust_eveonline_esi::{
     apis::{
         killmails_api::GetKillmailsKillmailIdKillmailHashSuccess,
         market_api::{
-            GetMarketsRegionIdHistorySuccess, GetMarketsRegionIdOrdersSuccess,
-            GetMarketsRegionIdTypesSuccess, GetMarketsStructuresStructureIdSuccess,
+            GetMarketsPricesSuccess, GetMarketsRegionIdHistorySuccess,
+            GetMarketsRegionIdOrdersSuccess, GetMarketsRegionIdTypesSuccess,
+            GetMarketsStructuresStructureIdSuccess,
         },
         routes_api::GetRouteOriginDestinationSuccess,
         search_api::GetCharactersCharacterIdSearchSuccess,
@@ -17,7 +18,7 @@ use rust_eveonline_esi::{
     },
     models::{
         GetCharactersCharacterIdSearchOk, GetKillmailsKillmailIdKillmailHashOk,
-        GetMarketsRegionIdHistory200Ok, GetMarketsRegionIdOrders200Ok,
+        GetMarketsPrices200Ok, GetMarketsRegionIdHistory200Ok, GetMarketsRegionIdOrders200Ok,
         GetMarketsStructuresStructureId200Ok, GetUniverseStationsStationIdOk,
         GetUniverseStructuresStructureIdOk, GetUniverseTypesTypeIdOk,
     },
@@ -187,6 +188,16 @@ impl OnlyOk<GetKillmailsKillmailIdKillmailHashOk, GetKillmailsKillmailIdKillmail
 impl OnlyOk<Vec<i32>, GetRouteOriginDestinationSuccess> for GetRouteOriginDestinationSuccess {
     fn into_ok(self) -> Result<Vec<i32>, GetRouteOriginDestinationSuccess> {
         if let GetRouteOriginDestinationSuccess::Status200(ok) = self {
+            Ok(ok)
+        } else {
+            Err(self)
+        }
+    }
+}
+
+impl OnlyOk<Vec<GetMarketsPrices200Ok>, GetMarketsPricesSuccess> for GetMarketsPricesSuccess {
+    fn into_ok(self) -> Result<Vec<GetMarketsPrices200Ok>, GetMarketsPricesSuccess> {
+        if let GetMarketsPricesSuccess::Status200(ok) = self {
             Ok(ok)
         } else {
             Err(self)

@@ -90,4 +90,5 @@ pub struct ConfigSellBuy {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConfigSellReprocess {
     pub repro_portion: f64,
+    pub repro_tax: f64,
 }

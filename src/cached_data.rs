@@ -1,6 +1,6 @@
 use std::{collections::HashMap, future::Future, path::Path};
 
-use super::error::Result;
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
