@@ -173,7 +173,7 @@ fn calculate_prices_volumes(
                 .cloned()
                 .filter(|x| x.is_buy_order)
                 .sorted_by_key(|x| NotNan::new(-x.price).unwrap());
-            let (sum_received, matched) = match_buy_orders_profit(
+            let (sum_received, _) = match_buy_orders_profit(
                 reprocessed_item_buy_orders,
                 (total_buy_quantity as f64 / min_reprocess_quantity as f64
                     * reprocessed_item.quantity as f64
@@ -181,9 +181,6 @@ fn calculate_prices_volumes(
                 0.,
                 0.,
             );
-            if matched == 0 {
-                break;
-            }
 
             item_reproc_sell += sum_received;
         }
