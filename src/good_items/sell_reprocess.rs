@@ -53,6 +53,7 @@ pub fn get_good_items_sell_reprocess(
             dst_avgs: item.dst_avgs,
             market_src_volume: item.market_src_volume,
             portion_size: item.portion_size,
+            reprocess_volume: item.reprocess_volume,
         })
         .take(config.common.items_take)
         .collect::<Vec<_>>();
@@ -60,6 +61,10 @@ pub fn get_good_items_sell_reprocess(
     let volume = recommended_items
         .iter()
         .map(|x| x.market.desc.volume as f64 * x.recommend_buy as f64)
+        .sum::<f64>() as i32;
+    let reprocess_volume = recommended_items
+        .iter()
+        .map(|x| x.reprocess_volume)
         .sum::<f64>() as i32;
     let profit = recommended_items
         .iter()
@@ -69,6 +74,7 @@ pub fn get_good_items_sell_reprocess(
         items: recommended_items,
         sum_profit: profit,
         sum_volume: volume,
+        reprocess_volume,
     })
 }
 
@@ -99,6 +105,7 @@ fn process_item_pair(
         _avg_buy_price,
         expenses_total,
         profit_total,
+        result_volume,
     ) = calculate_prices_volumes(x, config, &reprocess, items_map)?;
 
     // multibuy can only buy at a fixed price, so all buys from multiple sell orders
@@ -121,6 +128,7 @@ fn process_item_pair(
         src_avgs,
         dst_avgs,
         portion_size: x.desc.portion_size.unwrap(),
+        reprocess_volume: result_volume,
     })
 }
 
@@ -129,7 +137,7 @@ fn calculate_prices_volumes(
     config: &Config,
     reprocess: &ReprocessItemInfo,
     items_map: &HashMap<i32, &SystemMarketsItemData>,
-) -> Option<(i64, f64, f64, f64, f64, f64)> {
+) -> Option<(i64, f64, f64, f64, f64, f64, f64)> {
     let source_sell_orders = x
         .source
         .orders
@@ -144,6 +152,7 @@ fn calculate_prices_volumes(
     let mut max_buy_price = 0.;
     let mut expenses = 0.;
     let mut profit = 0.;
+    let mut volume = 0.;
 
     let min_reprocess_quantity = x.desc.portion_size.unwrap();
 
@@ -157,6 +166,7 @@ fn calculate_prices_volumes(
 
         let mut item_reproc_sell = 0.;
         let mut item_reproc_sum_adjusted_price = 0.;
+        let mut new_repro_volume = 0.;
         for reprocessed_item in &reprocess.reprocessed_into {
             // some items can't be sold but can be retrieved by reprocessing
             // example: Mangled Sansha Data Analyzer
@@ -183,6 +193,7 @@ fn calculate_prices_volumes(
 
             item_reproc_sell += sum_received;
             item_reproc_sum_adjusted_price += adjusted_price * matched as f64;
+            new_repro_volume += system_markets_item_data.desc.volume as f64 * matched as f64;
         }
 
         let new_expenses =
@@ -198,6 +209,7 @@ fn calculate_prices_volumes(
 
         expenses = new_expenses;
         profit = new_profit;
+        volume = new_repro_volume;
 
         recommend_buy_volume += min_reprocess_quantity;
         sum_sell_price = item_reproc_sell;
@@ -216,6 +228,7 @@ fn calculate_prices_volumes(
         sum_buy_price / recommend_buy_volume as f64,
         expenses,
         profit,
+        volume,
     ))
 }
 
@@ -276,6 +289,13 @@ pub fn make_table_sell_reprocess<'b>(
         TableCell::new("total volume"),
         TableCell::new_with_col_span(good_items.sum_volume.to_formatted_string(&Locale::fr), 13),
     ])))
+    .chain(std::iter::once(Row::new(vec![
+        TableCell::new("reprocess volume"),
+        TableCell::new_with_col_span(
+            good_items.reprocess_volume.to_formatted_string(&Locale::fr),
+            13,
+        ),
+    ])))
     .collect::<Vec<_>>();
     rows
 }
@@ -295,6 +315,7 @@ struct PairCalculatedDataSellReprocess {
     dst_avgs: Option<ItemTypeAveraged>,
     market_src_volume: i64,
     portion_size: i64,
+    reprocess_volume: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -312,10 +333,12 @@ pub struct PairCalculatedDataSellReprocessFinal {
     dst_avgs: Option<ItemTypeAveraged>,
     market_src_volume: i64,
     portion_size: i64,
+    reprocess_volume: f64,
 }
 
 pub struct ProcessedSellBuyItems {
     pub items: Vec<PairCalculatedDataSellReprocessFinal>,
     pub sum_profit: f64,
     pub sum_volume: i32,
+    pub reprocess_volume: i32,
 }
