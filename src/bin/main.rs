@@ -277,7 +277,7 @@ async fn run() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn find_station(stations: &Vec<Station>, source: &String) -> Result<Station, anyhow::Error> {
+fn find_station(stations: &[Station], source: &String) -> Result<Station, anyhow::Error> {
     Ok(stations
         .iter()
         .find(|x| x.short.as_ref().unwrap_or(&x.name) == source)

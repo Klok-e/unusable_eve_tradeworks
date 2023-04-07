@@ -426,6 +426,10 @@ impl<'a> EsiRequestsService<'a> {
         orders_in_station.sort_unstable_by_key(|x| x.order_id);
         orders_in_station.dedup_by_key(|x| x.order_id);
 
+        // some buy orders can have minimal buy amount
+        // skip these
+        orders_in_station.retain(|x| x.min_volume == 1);
+
         Ok(orders_in_station)
     }
 
