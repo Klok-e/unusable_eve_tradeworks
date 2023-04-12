@@ -1,6 +1,6 @@
 {
   "days_average": 20,
-  "margin_cutoff": 0.02,
+  "margin_cutoff": 0.01,
   "sales_tax": 0.036,
   "items_take": 20,
   "zkill_entity": {
@@ -26,14 +26,15 @@
     "cargo_capacity": 60000
   },
   "sell_reprocess": {
-    "repro_portion": 0.5
+    "repro_portion": 0.5,
+    "repro_tax": 0.02
   },
   "stations": [
     {
       "is_citadel": false,
       "name": "Jita IV - Moon 4 - Caldari Navy Assembly Plant",
       "short": "jita",
-      "broker_fee": 0.0136
+      "broker_fee": 0.015
     },
     {
       "is_citadel": true,
