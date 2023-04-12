@@ -25,17 +25,19 @@ impl DatadumpService {
     }
 
     pub fn get_child_groups_parent(&self, parent_id: i32) -> Result<Vec<i32>> {
-        let connection = self.conn.lock().unwrap();
-        let mut statement = connection.prepare(
-            "SELECT 
+        let groups = {
+            let connection = self.conn.lock().unwrap();
+            let mut statement = connection.prepare(
+                "SELECT 
                         marketGroupID 
                     FROM 
                         invMarketGroups 
                     WHERE 
                         parentGroupID = ?",
-        )?;
-        let groups = statement.query([parent_id])?;
-        let groups = groups.mapped(|x| x.get(0)).collect::<Result<Vec<_>>>()?;
+            )?;
+            let groups = statement.query([parent_id])?;
+            groups.mapped(|x| x.get(0)).collect::<Result<Vec<_>>>()?
+        };
 
         let groups = groups
             .iter()
@@ -81,26 +83,6 @@ impl DatadumpService {
             .collect::<Result<Vec<_>>>()?;
         Ok(groups)
     }
-
-    // pub fn get_reprocess_quantity(&self, item_id: i32) -> anyhow::Result<i64> {
-    //     let lock = self.conn.lock().unwrap();
-    //     let mut statement = lock.prepare(
-    //         "SELECT quantity
-    //                 FROM
-    //                     industryActivityProducts iap
-    //                 WHERE
-    //                     productTypeID = ?",
-    //     )?;
-    //     let groups = statement.query([item_id])?;
-    //     let groups = groups
-    //         .mapped(|x| x.get(0))
-    //         .next()
-    //         .transpose()?
-    //         .ok_or_else(|| {
-    //             anyhow::anyhow!("get_reprocess_quantity: No rows returned for {item_id}")
-    //         })?;
-    //     Ok(groups)
-    // }
 }
 
 #[derive(Debug)]

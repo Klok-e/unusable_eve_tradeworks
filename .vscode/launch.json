@@ -20,10 +20,8 @@
                 }
             },
             "args": [
-                "-e",
-                "--debug-item",
-                "22229",
-                "jita",
+                "-b",
+                "4hww",
                 "jita"
             ],
             "cwd": "${workspaceFolder}"
