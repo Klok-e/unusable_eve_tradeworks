@@ -98,20 +98,14 @@ pub fn get_good_items_sell_buy(
 
             let margin = (fin_sell_price - buy_with_broker_fee) / buy_with_broker_fee;
 
-            let rough_profit = (fin_sell_price - buy_with_broker_fee) * recommend_buy_vol as f64;
-
             // also calculate avg buy price
             let best_expenses = avg_buy_price;
             let buy_with_broker_fee = best_expenses * (1. + config.route.source.broker_fee);
             let fin_sell_price = dest_sell_price * (1. - config.common.sales_tax);
 
-            let best_margin = (fin_sell_price - buy_with_broker_fee) / buy_with_broker_fee;
-
             Some(PairCalculatedDataSellBuy {
                 market: x,
                 margin,
-                best_margin,
-                rough_profit,
                 market_dest_volume: dst_mkt_volume,
                 recommend_buy: recommend_buy_vol,
                 expenses: buy_with_broker_fee,
@@ -123,15 +117,7 @@ pub fn get_good_items_sell_buy(
                 dst_avgs,
             })
         })
-        .filter(|x| disable_filters || x.best_margin > config.common.margin_cutoff)
-        .filter(|x| {
-            disable_filters
-                || config
-                    .common
-                    .min_profit
-                    .map_or(true, |min_prft| x.rough_profit > min_prft)
-        })
-        .sorted_unstable_by_key(|x| NotNan::new(-x.rough_profit).unwrap())
+        .filter(|x| disable_filters || x.margin > config.common.margin_cutoff)
         .collect::<Vec<_>>()
         .take_maximizing_profit(config.common.sell_buy.cargo_capacity)
 }
@@ -189,7 +175,7 @@ impl DataVecExt for Vec<PairCalculatedDataSellBuy> {
                 PairCalculatedDataSellBuyFinal{
                     market: item.market,
                     margin: item.margin,
-                    rough_profit: item.rough_profit,
+                    rough_profit: (item.sell_price - item.expenses) * recommend_buy as f64,
                     market_dest_volume: item.market_dest_volume,
                     recommend_buy,
                     expenses: item.expenses,
@@ -204,6 +190,7 @@ impl DataVecExt for Vec<PairCalculatedDataSellBuy> {
             },
         )
         .filter(|x: &PairCalculatedDataSellBuyFinal| x.recommend_buy > 0)
+        .sorted_unstable_by_key(|x| NotNan::new(-x.rough_profit).unwrap())
         .collect::<Vec<_>>();
 
         let volume = recommended_items
@@ -283,7 +270,6 @@ pub fn make_table_sell_buy<'b>(
 struct PairCalculatedDataSellBuy {
     market: SystemMarketsItemData,
     margin: f64,
-    rough_profit: f64,
     market_dest_volume: i64,
     recommend_buy: i64,
     expenses: f64,
@@ -293,7 +279,6 @@ struct PairCalculatedDataSellBuy {
     src_avgs: Option<ItemTypeAveraged>,
     dst_avgs: Option<ItemTypeAveraged>,
     market_src_volume: i64,
-    best_margin: f64,
 }
 
 #[derive(Debug, Clone)]
