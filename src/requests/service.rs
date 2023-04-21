@@ -200,7 +200,7 @@ impl<'a> EsiRequestsService<'a> {
     }
 
     pub async fn get_item_description(&self, id: i32) -> Result<Option<GetUniverseTypesTypeIdOk>> {
-        let res = retry::retry_smart(|| async {
+        let res = retry::retry_smart::<_, _, _, EsiApiError>(|| async {
             let res = universe_api::get_universe_types_type_id(
                 self.config,
                 GetUniverseTypesTypeIdParams {
@@ -222,7 +222,7 @@ impl<'a> EsiRequestsService<'a> {
     }
 
     pub async fn get_ajusted_prices(&self) -> anyhow::Result<Option<Vec<GetMarketsPrices200Ok>>> {
-        let res = retry::retry_smart(|| async {
+        let res = retry::retry_smart::<_, _, _, EsiApiError>(|| async {
             let res = market_api::get_markets_prices(
                 self.config,
                 GetMarketsPricesParams {
@@ -281,7 +281,7 @@ impl<'a> EsiRequestsService<'a> {
                                 x.system_id
                             );
                             let dist =
-                                retry::retry_smart(
+                                retry::retry_smart::<_,_,_,EsiApiError>(
                                     || async {
                                         let res = routes_api::get_route_origin_destination(
                                             self.config,
@@ -597,7 +597,7 @@ impl<'a> EsiRequestsService<'a> {
         killmail_id: i32,
         hash: String,
     ) -> Result<Option<Killmail>> {
-        let km = retry::retry_smart(|| async {
+        let km = retry::retry_smart::<_, _, _, EsiApiError>(|| async {
             let res = killmails_api::get_killmails_killmail_id_killmail_hash(
                 self.config,
                 GetKillmailsKillmailIdKillmailHashParams {
