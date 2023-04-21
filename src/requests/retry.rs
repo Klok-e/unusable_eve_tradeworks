@@ -18,12 +18,21 @@ where
 {
     let caller = std::panic::Location::caller();
     async move {
-        let res = retry_simple(|| async {
+        let mut retries = 0;
+        loop {
             let out = func().await;
             match out {
-                Ok(Retry::Success(x)) => Ok(Retry::Success(x)),
-                Ok(Retry::Retry) => Ok(Retry::Retry),
-
+                Ok(Retry::Success(x)) => break Ok(Some(x)),
+                Ok(Retry::Retry) => {
+                    if retries > RETRIES {
+                        break Ok(None);
+                    } else {
+                        retries += 1;
+                        let delay = get_exponential_backoff(retries, RETRY_DELAY, MAX_RETRY_DELAY);
+                        tokio::time::sleep(Duration::from_secs_f32(delay)).await;
+                        continue;
+                    }
+                }
                 // error limited
                 Err(ref e) if e.is_error_limited() => {
                     log::warn!(
@@ -32,45 +41,14 @@ where
                         e
                     );
                     tokio::time::sleep(Duration::from_secs(ERROR_LIMITED_RETRY_DELAY)).await;
-                    Ok(Retry::Retry)
                 }
-
                 // common errors for ccp servers
                 Err(ref err) if err.should_retry() => {
                     log::warn!("[{}] Error: {}. Retrying...", caller, err);
-                    Ok(Retry::Retry)
                 }
-
-                Err(e) => Err(e),
+                Err(e) => break Err(e),
             }
-        })
-        .await?;
-        Ok(res)
-    }
-}
-
-pub async fn retry_simple<T, Fut, F, E>(func: F) -> std::result::Result<Option<T>, E>
-where
-    Fut: Future<Output = std::result::Result<Retry<T>, E>>,
-    F: Fn() -> Fut,
-{
-    let mut retries = 0;
-    loop {
-        let out = func().await?;
-        break Ok(match out {
-            Retry::Retry => {
-                if retries > RETRIES {
-                    None
-                } else {
-                    retries += 1;
-                    // don't make too many retries sequentially
-                    let delay = get_exponential_backoff(retries, RETRY_DELAY, MAX_RETRY_DELAY);
-                    tokio::time::sleep(Duration::from_secs_f32(delay)).await;
-                    continue;
-                }
-            }
-            Retry::Success(v) => Some(v),
-        });
+        }
     }
 }
 
@@ -99,5 +77,22 @@ impl RetryableError for EsiApiError {
 
     fn is_error_limited(&self) -> bool {
         self.status == StatusCode::from_u16(420).expect("Invalid status code")
+    }
+}
+
+impl RetryableError for reqwest::Error {
+    fn should_retry(&self) -> bool {
+        matches!(
+            self.status(),
+            Some(
+                StatusCode::BAD_GATEWAY
+                    | StatusCode::SERVICE_UNAVAILABLE
+                    | StatusCode::GATEWAY_TIMEOUT
+            )
+        )
+    }
+
+    fn is_error_limited(&self) -> bool {
+        self.status() == Some(StatusCode::from_u16(420).expect("Invalid status code"))
     }
 }

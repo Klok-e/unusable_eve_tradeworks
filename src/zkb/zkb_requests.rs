@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::requests::retry::{retry_simple, Retry};
+use crate::requests::retry::{retry_smart, Retry};
 
 pub struct ZkbRequestsService<'a> {
     client: &'a reqwest::Client,
@@ -45,7 +45,7 @@ impl<'a> ZkbRequestsService<'a> {
         let mut kills = KillList::new();
         log::info!("Getting killmails...");
         for pg in 1..=pages {
-            let mut kills_page = retry_simple(|| async {
+            let mut kills_page = retry_smart(|| async {
                 let url = format!(
                     "https://zkillboard.com/api/losses/{}/{}/page/{}/",
                     entity_type.zkill_filter_string(),
