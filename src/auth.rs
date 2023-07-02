@@ -45,15 +45,7 @@ impl Auth {
     ) -> Self {
         let mut data = cache
             .load_or_create_json_async(path, vec![], false, None, || async {
-                let token = Self::request_new(config).await;
-                let expiration_date =
-                    Utc::now() + chrono::Duration::from_std(token.expires_in().unwrap()).unwrap();
-
-                Ok(Auth {
-                    character_info: validate_token(&token).await,
-                    token,
-                    expiration_date,
-                })
+                Ok(create_auth(Self::request_new(config).await).await)
             })
             .await
             .unwrap();
@@ -61,19 +53,16 @@ impl Auth {
         // if expired use refresh token
         if data.expiration_date < Utc::now() {
             let client = create_client(config);
-            let token = client
+            let token = match client
                 .exchange_refresh_token(data.token.refresh_token().unwrap())
                 .request_async(async_http_client)
                 .await
-                .unwrap();
-
-            let expiration_date =
-                Utc::now() + chrono::Duration::from_std(token.expires_in().unwrap()).unwrap();
-            data = Auth {
-                character_info: validate_token(&token).await,
-                token,
-                expiration_date,
+            {
+                Ok(t) => t,
+                Err(_) => Self::request_new(config).await,
             };
+
+            data = create_auth(token).await;
 
             cache
                 .load_or_create_json_async(path, vec![], true, None, || {
@@ -147,6 +136,16 @@ impl Auth {
             .request_async(async_http_client)
             .await
             .unwrap()
+    }
+}
+
+async fn create_auth(token: StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>) -> Auth {
+    let expiration_date =
+        Utc::now() + chrono::Duration::from_std(token.expires_in().unwrap()).unwrap();
+    Auth {
+        character_info: validate_token(&token).await,
+        token,
+        expiration_date,
     }
 }
 
