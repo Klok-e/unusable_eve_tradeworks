@@ -28,8 +28,9 @@ use rust_eveonline_esi::{
         configuration::Configuration,
         killmails_api::{self, GetKillmailsKillmailIdKillmailHashParams},
         market_api::{
-            self, GetMarketsPricesParams, GetMarketsRegionIdOrdersParams,
-            GetMarketsRegionIdTypesParams, GetMarketsStructuresStructureIdParams,
+            self, GetMarketsPricesParams, GetMarketsRegionIdHistoryParams,
+            GetMarketsRegionIdOrdersParams, GetMarketsRegionIdTypesParams,
+            GetMarketsStructuresStructureIdParams,
         },
         routes_api::{self, GetRouteOriginDestinationParams},
         search_api::{get_characters_character_id_search, GetCharactersCharacterIdSearchParams},
@@ -43,7 +44,7 @@ use rust_eveonline_esi::{
     models::{
         get_markets_region_id_orders_200_ok, GetKillmailsKillmailIdKillmailHashItem,
         GetKillmailsKillmailIdKillmailHashItemsItem, GetMarketsPrices200Ok,
-        GetMarketsRegionIdHistory200Ok, GetMarketsRegionIdOrders200Ok, GetUniverseTypesTypeIdOk,
+        GetMarketsRegionIdOrders200Ok, GetUniverseTypesTypeIdOk,
     },
 };
 
@@ -504,30 +505,28 @@ impl<'a> EsiRequestsService<'a> {
     }
     async fn get_item_type_history(
         &self,
-        _station: StationIdData,
+        station: StationIdData,
         item_type: i32,
         station_orders: &Mutex<HashMap<i32, Vec<Order>>>,
     ) -> Result<Option<ItemType>> {
         let res: Option<ItemType> = retry::retry_smart(|| async {
-            // TODO: endpoint is disabled https://github.com/esi/esi-issues/issues/1338#issuecomment-1310205130
-            // let hist_for_type: Result<_> = (|| async {
-            //     Ok(market_api::get_markets_region_id_history(
-            //         self.config,
-            //         GetMarketsRegionIdHistoryParams {
-            //             region_id: station.region_id,
-            //             type_id: item_type,
-            //             datasource: None,
-            //             if_none_match: None,
-            //         },
-            //     )
-            //     .await?
-            //     .entity
-            //     .unwrap()
-            //     .into_ok()
-            //     .unwrap())
-            // })()
-            // .await;
-            let hist_for_type: Result<Vec<GetMarketsRegionIdHistory200Ok>> = Ok(vec![]);
+            let hist_for_type: Result<_> = (|| async {
+                Ok(market_api::get_markets_region_id_history(
+                    self.config,
+                    GetMarketsRegionIdHistoryParams {
+                        region_id: station.region_id,
+                        type_id: item_type,
+                        datasource: None,
+                        if_none_match: None,
+                    },
+                )
+                .await?
+                .entity
+                .unwrap()
+                .into_ok()
+                .unwrap())
+            })()
+            .await;
 
             // turn all 404 errors into empty vecs
             let hist_for_type = match hist_for_type {
