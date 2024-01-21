@@ -87,29 +87,23 @@ async fn run() -> Result<(), anyhow::Error> {
     let esi_requests = EsiRequestsService::new(&esi_config);
 
     let path_to_datadump = cache
-        .load_or_create_json_async(
-            CACHE_DATADUMP,
-            vec![],
-            false,
-            Some(Duration::days(14)),
-            || async {
-                let client = &esi_config.client;
-                let res = client
-                    .get("https://www.fuzzwork.co.uk/dump/sqlite-latest.sqlite.bz2")
-                    .send()
-                    .await?;
-                let bytes = res.bytes().await?.to_vec();
+        .load_or_create_json_async(CACHE_DATADUMP, vec![], Some(Duration::days(14)), || async {
+            let client = &esi_config.client;
+            let res = client
+                .get("https://www.fuzzwork.co.uk/dump/sqlite-latest.sqlite.bz2")
+                .send()
+                .await?;
+            let bytes = res.bytes().await?.to_vec();
 
-                // decompress
-                let mut decompressor = bzip2::read::BzDecoder::new(bytes.as_slice());
-                let mut contents = Vec::new();
-                decompressor.read_to_end(&mut contents).unwrap();
+            // decompress
+            let mut decompressor = bzip2::read::BzDecoder::new(bytes.as_slice());
+            let mut contents = Vec::new();
+            decompressor.read_to_end(&mut contents).unwrap();
 
-                let path = "cache/datadump.db".to_string();
-                std::fs::write(&path, contents)?;
-                Ok(path)
-            },
-        )
+            let path = "cache/datadump.db".to_string();
+            std::fs::write(&path, contents)?;
+            Ok(path)
+        })
         .await?;
 
     let db = rusqlite::Connection::open_with_flags(
@@ -127,7 +121,7 @@ async fn run() -> Result<(), anyhow::Error> {
         .parse()
         .unwrap();
 
-    let force_refresh = cli_args.get_flag(cli::FORCE_REFRESH);
+    // let force_refresh = cli_args.get_flag(cli::FORCE_REFRESH);
     let force_no_refresh = cli_args.get_flag(cli::FORCE_NO_REFRESH);
 
     let mut pairs: Vec<SystemMarketsItemData> = compute_pairs(
@@ -135,7 +129,6 @@ async fn run() -> Result<(), anyhow::Error> {
         &esi_requests,
         character_id,
         &mut cache,
-        force_refresh,
         &data_service,
     )
     .await?;
@@ -344,7 +337,6 @@ async fn compute_sell_sell_zkb<'a>(
         .load_or_create_async(
             cache_zkb_entity,
             vec![],
-            false,
             if force_no_refresh {
                 None
             } else {
@@ -384,7 +376,6 @@ async fn compute_pairs<'a>(
     esi_requests: &EsiRequestsService<'a>,
     character_id: i32,
     cache: &mut CachedStuff,
-    force_refresh: bool,
     data_service: &DatadumpService,
 ) -> anyhow::Result<Vec<SystemMarketsItemData>> {
     let config = config;
@@ -398,29 +389,22 @@ async fn compute_pairs<'a>(
         .await
         .unwrap();
     let all_types = cache
-        .load_or_create_json_async(
-            CACHE_ALL_TYPES,
-            vec![],
-            false,
-            Some(Duration::days(7)),
-            || async {
-                let all_types = esi_requests.get_all_item_types(source_region.region_id);
-                let all_types_dest = esi_requests.get_all_item_types(dest_region.region_id);
-                let (all_types, all_types_dest) = join!(all_types, all_types_dest);
-                let (mut all_types, all_types_dest) = (all_types?, all_types_dest?);
+        .load_or_create_json_async(CACHE_ALL_TYPES, vec![], Some(Duration::days(7)), || async {
+            let all_types = esi_requests.get_all_item_types(source_region.region_id);
+            let all_types_dest = esi_requests.get_all_item_types(dest_region.region_id);
+            let (all_types, all_types_dest) = join!(all_types, all_types_dest);
+            let (mut all_types, all_types_dest) = (all_types?, all_types_dest?);
 
-                all_types.extend(all_types_dest);
-                all_types.sort_unstable();
-                all_types.dedup();
-                Ok(all_types)
-            },
-        )
+            all_types.extend(all_types_dest);
+            all_types.sort_unstable();
+            all_types.dedup();
+            Ok(all_types)
+        })
         .await?;
     let all_type_descriptions: HashMap<i32, Option<TypeDescription>> = cache
         .load_or_create_async(
             CACHE_ALL_TYPE_DESC,
             vec![CACHE_ALL_TYPES],
-            false,
             Some(Duration::days(7)),
             || async {
                 let res = stream::iter(all_types.clone())
@@ -448,7 +432,6 @@ async fn compute_pairs<'a>(
         .load_or_create_async(
             CACHE_ALL_TYPE_PRICES,
             vec![CACHE_ALL_TYPES],
-            false,
             Some(Duration::days(1)),
             || async {
                 let prices = esi_requests.get_ajusted_prices().await?.unwrap();
@@ -464,7 +447,6 @@ async fn compute_pairs<'a>(
         .load_or_create_async(
             cache_source_hist,
             vec![CACHE_ALL_TYPES],
-            force_refresh,
             Some(Duration::hours(config.common.refresh_timeout_hours)),
             || async {
                 Ok(esi_requests
@@ -478,7 +460,6 @@ async fn compute_pairs<'a>(
         .load_or_create_async(
             cache_dest_hist,
             vec![CACHE_ALL_TYPES],
-            force_refresh,
             Some(Duration::hours(config.common.refresh_timeout_hours)),
             || async { Ok(esi_requests.all_item_data(&all_types, dest_region).await?) },
         )

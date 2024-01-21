@@ -18,7 +18,6 @@ impl CachedStuff {
         &mut self,
         path: impl AsRef<Path>,
         depends: Vec<&str>,
-        must_refresh: bool,
         timeout: Option<chrono::Duration>,
         gen: F,
     ) -> Result<T>
@@ -27,22 +26,14 @@ impl CachedStuff {
         FO: Future<Output = Result<T>>,
         T: Serialize + DeserializeOwned,
     {
-        self.load_data_or_create_async(
-            path.as_ref(),
-            depends,
-            DataFormat::Bin,
-            must_refresh,
-            timeout,
-            gen,
-        )
-        .await
+        self.load_data_or_create_async(path.as_ref(), depends, DataFormat::Bin, timeout, gen)
+            .await
     }
 
     pub async fn load_or_create_json_async<T, F, FO>(
         &mut self,
         path: impl AsRef<Path>,
         depends: Vec<&str>,
-        must_refresh: bool,
         timeout: Option<chrono::Duration>,
         gen: F,
     ) -> Result<T>
@@ -51,15 +42,8 @@ impl CachedStuff {
         FO: Future<Output = Result<T>>,
         T: Serialize + DeserializeOwned,
     {
-        self.load_data_or_create_async(
-            path.as_ref(),
-            depends,
-            DataFormat::Json,
-            must_refresh,
-            timeout,
-            gen,
-        )
-        .await
+        self.load_data_or_create_async(path.as_ref(), depends, DataFormat::Json, timeout, gen)
+            .await
     }
 
     async fn load_data_or_create_async<T, F, FO>(
@@ -67,7 +51,6 @@ impl CachedStuff {
         path: &Path,
         depends: Vec<&str>,
         format: DataFormat,
-        must_refresh: bool,
         timeout: Option<chrono::Duration>,
         gen: F,
     ) -> Result<T>
@@ -76,63 +59,85 @@ impl CachedStuff {
         FO: Future<Output = Result<T>>,
         T: Serialize + DeserializeOwned,
     {
-        let path_str = path.to_str().unwrap().to_owned();
-        self.caches_updated.insert(path_str.clone(), false);
-
-        let were_depends_updated = depends.iter().any(|&x| self.caches_updated[x]);
-        if path.exists() && !were_depends_updated && !must_refresh {
+        let were_depends_updated = depends
+            .iter()
+            .any(|&x| *self.caches_updated.get(x).unwrap_or(&false));
+        if path.exists() && !were_depends_updated {
             let str = std::fs::read(path)?;
-            let deser: Container<T> = match format {
-                DataFormat::Json => serde_json::from_slice(str.as_slice())?,
-                DataFormat::Bin => rmp_serde::from_read(str.as_slice()).unwrap(),
+            let deser: Result<Container<T>> = match format {
+                DataFormat::Json => serde_json::from_slice(str.as_slice()).map_err(Into::into),
+                DataFormat::Bin => rmp_serde::from_read(str.as_slice()).map_err(Into::into),
             };
-            match timeout {
-                Some(timeout) if deser.time + timeout > Utc::now() => {
-                    log::info!("Path {:?} loaded", path);
-                    return Ok(deser.data);
+            match deser {
+                Ok(deser) => match timeout {
+                    Some(timeout) if deser.time + timeout > Utc::now() => {
+                        log::info!("Path {:?} loaded", path);
+                        return Ok(deser.data);
+                    }
+                    None => {
+                        log::info!("Path {:?} loaded", path);
+                        return Ok(deser.data);
+                    }
+                    _ => {}
+                },
+                Err(err) => {
+                    log::info!("Couldn't deserialize cached value: {err}");
                 }
-                None => {
-                    log::info!("Path {:?} loaded", path);
-                    return Ok(deser.data);
-                }
-                _ => {}
             }
         }
         if were_depends_updated {
             log::info!("Path {:?} deps were updated", path);
         }
 
-        self.caches_updated.insert(path_str, true);
-        let cont = gen_and_save(&path, gen, format).await?;
+        let cont = self.gen_and_save(&path, gen, format).await?;
         Ok(cont.data)
     }
-}
 
-async fn gen_and_save<T, F, FO>(
-    path: &impl AsRef<Path>,
-    gen: F,
-    format: DataFormat,
-) -> Result<Container<T>>
-where
-    F: FnOnce() -> FO,
-    FO: Future<Output = Result<T>>,
-    T: Serialize,
-{
-    log::info!("Generating path {:?}", path.as_ref());
-    let generated = gen().await?;
-    let generated = Container {
-        data: generated,
-        time: Utc::now(),
-    };
-    let s = match format {
-        DataFormat::Json => serde_json::to_vec(&generated).unwrap(),
-        DataFormat::Bin => rmp_serde::to_vec(&generated).unwrap(),
-    };
-    let mut comp = path.as_ref().to_path_buf();
-    comp.pop();
-    std::fs::create_dir_all(comp).unwrap();
-    std::fs::write(path.as_ref(), s).unwrap();
-    Ok(generated)
+    async fn gen_and_save<T, F, FO>(
+        &mut self,
+        path: &impl AsRef<Path>,
+        gen: F,
+        format: DataFormat,
+    ) -> Result<Container<T>>
+    where
+        F: FnOnce() -> FO,
+        FO: Future<Output = Result<T>>,
+        T: Serialize,
+    {
+        log::info!("Generating path {:?}", path.as_ref());
+        let generated = gen().await?;
+        let generated = self.save(generated, format, path);
+        Ok(generated)
+    }
+
+    pub fn save_json<T>(&mut self, generated: T, path: &impl AsRef<Path>) -> T
+    where
+        T: Serialize,
+    {
+        self.save(generated, DataFormat::Json, path).data
+    }
+
+    fn save<T>(&mut self, generated: T, format: DataFormat, path: &impl AsRef<Path>) -> Container<T>
+    where
+        T: Serialize,
+    {
+        self.caches_updated
+            .insert(path.as_ref().to_str().unwrap().to_string(), true);
+
+        let generated = Container {
+            data: generated,
+            time: Utc::now(),
+        };
+        let s = match format {
+            DataFormat::Json => serde_json::to_vec(&generated).unwrap(),
+            DataFormat::Bin => rmp_serde::to_vec(&generated).unwrap(),
+        };
+        let mut comp = path.as_ref().to_path_buf();
+        comp.pop();
+        std::fs::create_dir_all(comp).unwrap();
+        std::fs::write(path.as_ref(), s).unwrap();
+        generated
+    }
 }
 
 enum DataFormat {

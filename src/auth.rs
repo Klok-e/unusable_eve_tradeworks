@@ -1,3 +1,6 @@
+mod models;
+
+use self::models::{SsoJwkKeys, SsoMetadata};
 use crate::{cached_data::CachedStuff, config::AuthConfig};
 
 use chrono::{DateTime, Utc};
@@ -12,23 +15,16 @@ use oauth2::{
 use reqwest::{self, Url};
 use serde::{Deserialize, Serialize};
 
+use self::models::CharacterInfo;
+
 const AUTHORIZE_ISSUER: &str = "https://login.eveonline.com/v2/oauth/authorize";
 const TOKEN_ISSUER: &str = "https://login.eveonline.com/v2/oauth/token";
 const LOCALHOST_CALLBACK: &str = "http://localhost:8022/callback";
 const SSO_META_DATA_URL: &str =
     "https://login.eveonline.com/.well-known/oauth-authorization-server";
 const JWK_ALGORITHM: &str = "RS256";
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CharacterInfo {
-    pub scp: Vec<String>,
-    pub jti: String,
-    pub kid: String,
-    pub sub: String,
-    pub azp: String,
-    pub tenant: String,
-    pub tier: String,
-}
+const JWK_ISSUERS: &[&str] = &["login.eveonline.com", "https://login.eveonline.com"];
+const JWK_AUDIENCE: &str = "EVE Online";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Auth {
@@ -44,99 +40,105 @@ impl Auth {
         path: &str,
     ) -> Self {
         let mut data = cache
-            .load_or_create_json_async(path, vec![], false, None, || async {
-                Ok(create_auth(Self::request_new(config).await).await)
+            .load_or_create_json_async(&path, vec![], None, || async {
+                Ok(create_auth(request_new_token(config).await).await)
             })
             .await
-            .unwrap();
+            .expect("Json load failed");
 
-        // if expired use refresh token
-        if data.expiration_date < Utc::now() {
-            let client = create_client(config);
-            let token = match client
-                .exchange_refresh_token(data.token.refresh_token().unwrap())
-                .request_async(async_http_client)
-                .await
-            {
-                Ok(t) => t,
-                Err(_) => Self::request_new(config).await,
-            };
-
-            data = create_auth(token).await;
-
-            cache
-                .load_or_create_json_async(path, vec![], true, None, || {
-                    let data = data.clone();
-                    async { Ok(data) }
-                })
-                .await
-                .unwrap();
+        if is_token_expired(&data) {
+            data = refresh_token(config, data, cache, path).await;
         }
 
         data
     }
+}
 
-    async fn request_new(
-        config: &AuthConfig,
-    ) -> StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType> {
-        let scopes = vec![
-            "esi-markets.structure_markets.v1",
-            "esi-search.search_structures.v1",
-            "esi-universe.read_structures.v1",
-        ];
+async fn refresh_token(
+    config: &AuthConfig,
+    mut data: Auth,
+    cache: &mut CachedStuff,
+    path: &str,
+) -> Auth {
+    let client = create_client(config);
+    let token = match client
+        .exchange_refresh_token(data.token.refresh_token().unwrap())
+        .request_async(async_http_client)
+        .await
+    {
+        Ok(t) => t,
+        Err(_) => request_new_token(config).await,
+    };
 
-        let client = create_client(config);
+    data = create_auth(token).await;
 
-        let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
+    cache.save_json(data, &path)
+}
 
-        // Generate the full authorization URL.
-        let (auth_url, csrf_token) = client
-            .authorize_url(CsrfToken::new_random)
-            .add_scopes(scopes.into_iter().map(|s| Scope::new(s.to_string())))
-            .set_pkce_challenge(pkce_challenge)
-            .url();
+fn is_token_expired(data: &Auth) -> bool {
+    data.expiration_date < Utc::now()
+}
 
-        println!("Go to this url:");
-        println!("{}", auth_url);
+async fn request_new_token(
+    config: &AuthConfig,
+) -> StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType> {
+    let scopes = vec![
+        "esi-markets.structure_markets.v1",
+        "esi-search.search_structures.v1",
+        "esi-universe.read_structures.v1",
+    ];
 
-        let mut str = None;
+    let client = create_client(config);
 
-        let server = tiny_http::Server::http("localhost:8022").unwrap();
-        if let Some(request) = server.incoming_requests().next() {
-            log::debug!(
-                "received request. method: {:?}, url: {:?}, headers: {:?}",
-                request.method(),
-                request.url(),
-                request.headers()
-            );
+    let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
 
-            str = Some(request.url().to_string());
-            let response = tiny_http::Response::from_string("Successful. You can close this tab.");
-            request.respond(response).unwrap();
-        }
-        drop(server);
+    // Generate the full authorization URL.
+    let (auth_url, csrf_token) = client
+        .authorize_url(CsrfToken::new_random)
+        .add_scopes(scopes.into_iter().map(|s| Scope::new(s.to_string())))
+        .set_pkce_challenge(pkce_challenge)
+        .url();
 
-        let str = str.unwrap();
-        log::debug!("Request string: {}", str);
+    println!("Go to this url:");
+    println!("{}", auth_url);
 
-        let str = str.trim();
-        let code = Url::parse(format!("http://{}", str).as_str()).unwrap();
-        let mut params = code.query_pairs();
-        let code = params.find(|x| x.0 == "code").unwrap().1;
-        let state = params.find(|x| x.0 == "state").unwrap().1;
+    let mut str = None;
 
-        if state.as_ref() != csrf_token.secret() {
-            panic!("Csrf token doesn't match!");
-        }
+    let server = tiny_http::Server::http("localhost:8022").unwrap();
+    if let Some(request) = server.incoming_requests().next() {
+        log::debug!(
+            "received request. method: {:?}, url: {:?}, headers: {:?}",
+            request.method(),
+            request.url(),
+            request.headers()
+        );
 
-        client
-            .exchange_code(AuthorizationCode::new(code.to_string()))
-            // Set the PKCE code verifier.
-            .set_pkce_verifier(pkce_verifier)
-            .request_async(async_http_client)
-            .await
-            .unwrap()
+        str = Some(request.url().to_string());
+        let response = tiny_http::Response::from_string("Successful. You can close this tab.");
+        request.respond(response).unwrap();
     }
+    drop(server);
+
+    let str = str.unwrap();
+    log::debug!("Request string: {}", str);
+
+    let str = str.trim();
+    let code = Url::parse(format!("http://{}", str).as_str()).unwrap();
+    let mut params = code.query_pairs();
+    let code = params.find(|x| x.0 == "code").unwrap().1;
+    let state = params.find(|x| x.0 == "state").unwrap().1;
+
+    if state.as_ref() != csrf_token.secret() {
+        panic!("Csrf token doesn't match!");
+    }
+
+    client
+        .exchange_code(AuthorizationCode::new(code.to_string()))
+        // Set the PKCE code verifier.
+        .set_pkce_verifier(pkce_verifier)
+        .request_async(async_http_client)
+        .await
+        .unwrap()
 }
 
 async fn create_auth(token: StandardTokenResponse<EmptyExtraTokenFields, BasicTokenType>) -> Auth {
@@ -187,71 +189,18 @@ async fn validate_token(
 
     let jwk_set = jwks.keys.iter().find(|x| x.alg == JWK_ALGORITHM).unwrap();
 
+    let mut validation = Validation::new(jsonwebtoken::Algorithm::RS256);
+    validation.set_issuer(JWK_ISSUERS);
+    validation.set_audience(&[JWK_AUDIENCE]);
+
     let character_info = jsonwebtoken::decode::<CharacterInfo>(
         token.access_token().secret(),
         &DecodingKey::from_rsa_components(jwk_set.n.as_ref().unwrap(), jwk_set.e.as_ref().unwrap())
             .unwrap(),
-        &Validation::new(jsonwebtoken::Algorithm::RS256),
+        &validation,
     )
-    .unwrap()
+    .expect("Couldn't decode token")
     .claims;
 
     character_info
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SsoMetadata {
-    pub issuer: String,
-    pub authorization_endpoint: String,
-    pub token_endpoint: String,
-    pub response_types_supported: Vec<String>,
-    pub jwks_uri: String,
-    pub revocation_endpoint: String,
-    pub revocation_endpoint_auth_methods_supported: Vec<String>,
-    pub token_endpoint_auth_methods_supported: Vec<String>,
-    pub token_endpoint_auth_signing_alg_values_supported: Vec<String>,
-    pub code_challenge_methods_supported: Vec<String>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SsoJwkKeys {
-    pub keys: Vec<SsoKey>,
-    #[serde(rename = "SkipUnresolvedJsonWebKeys")]
-    pub skip_unresolved_json_web_keys: bool,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SsoKey {
-    pub alg: String,
-    pub e: Option<String>,
-    pub kid: String,
-    pub kty: String,
-    pub n: Option<String>,
-    #[serde(rename = "use")]
-    pub use_field: String,
-    pub crv: Option<String>,
-    pub x: Option<String>,
-    pub y: Option<String>,
-}
-
-#[derive(Serialize)]
-struct AuthTokenParams {
-    pub grant_type: String,
-    pub code: String,
-    pub client_id: String,
-}
-
-#[derive(Serialize)]
-struct AuthRefreshTokenParams {
-    pub grant_type: String,
-    pub refresh_token: String,
-    pub client_id: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct EveAuthResponse {
-    pub access_token: String,
-    pub token_type: String,
-    pub expires_in: i64,
-    pub refresh_token: String,
 }
