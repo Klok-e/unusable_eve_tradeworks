@@ -12,6 +12,7 @@ pub mod order_ext;
 pub mod requests;
 pub mod stat;
 pub mod zkb;
+pub mod helper_ext;
 
 use serde::{Deserialize, Serialize};
 

@@ -2,13 +2,12 @@ use std::collections::HashMap;
 
 use crate::{
     consts::DATE_FMT,
-    item_type::MarketsRegionHistory,
+    item_type::{ItemHistory, ItemOrders, MarketsRegionHistory},
     requests::{paged_all::get_all_pages, retry::Retry},
     Station, StationIdData,
 };
 use crate::{
     consts::{self, BUFFER_UNORDERED},
-    item_type::ItemType,
     requests::paged_all::OnlyOk,
     requests::retry,
     StationId,
@@ -434,12 +433,22 @@ impl<'a> EsiRequestsService<'a> {
         Ok(orders_in_station)
     }
 
-    pub async fn all_item_data(
+    pub async fn all_item_orders(&self, station: StationIdData) -> Result<Vec<ItemOrders>> {
+        let station_orders = self.get_orders_station(station).await?;
+        let station_orders = station_orders.into_iter().into_group_map_by(|x| x.type_id);
+
+        Ok(station_orders
+            .into_iter()
+            .map(|(id, orders)| ItemOrders { id, orders })
+            .collect_vec())
+    }
+
+    pub async fn all_item_history(
         &self,
         item_types: &[i32],
-        station: StationIdData,
-    ) -> Result<Vec<ItemType>> {
-        let mut data = self.download_item_data(item_types, station).await?;
+        region_id: i32,
+    ) -> Result<Vec<ItemHistory>> {
+        let mut data = self.download_item_data(item_types, region_id).await?;
 
         // fill blanks
         for item in data.iter_mut() {
@@ -505,16 +514,15 @@ impl<'a> EsiRequestsService<'a> {
     }
     async fn get_item_type_history(
         &self,
-        station: StationIdData,
+        region_id: i32,
         item_type: i32,
-        station_orders: &Mutex<HashMap<i32, Vec<Order>>>,
-    ) -> Result<Option<ItemType>> {
-        let res: Option<ItemType> = retry::retry_smart(|| async {
+    ) -> Result<Option<ItemHistory>> {
+        let res: Option<ItemHistory> = retry::retry_smart(|| async {
             let hist_for_type: Result<_> = async {
                 Ok(market_api::get_markets_region_id_history(
                     self.config,
                     GetMarketsRegionIdHistoryParams {
-                        region_id: station.region_id,
+                        region_id: region_id,
                         type_id: item_type,
                         datasource: None,
                         if_none_match: None,
@@ -541,7 +549,7 @@ impl<'a> EsiRequestsService<'a> {
                     Vec::new()
                 }
                 Err(e) => {
-                    let region_id = station.region_id;
+                    let region_id = region_id;
                     log::debug!(
                         "Region id: {region_id}; Item type: {item_type} Returning error: {e:?}"
                     );
@@ -549,8 +557,7 @@ impl<'a> EsiRequestsService<'a> {
                 }
             };
 
-            let mut dummy_empty_vec = Vec::new();
-            let item = ItemType {
+            let item = ItemHistory {
                 id: item_type,
                 history: hist_for_type
                     .into_iter()
@@ -563,13 +570,6 @@ impl<'a> EsiRequestsService<'a> {
                         volume: x.volume,
                     })
                     .collect(),
-                orders: std::mem::take(
-                    station_orders
-                        .lock()
-                        .await
-                        .get_mut(&item_type)
-                        .unwrap_or(&mut dummy_empty_vec),
-                ),
             };
             Ok(Retry::Success(item))
         })
@@ -580,17 +580,10 @@ impl<'a> EsiRequestsService<'a> {
     async fn download_item_data(
         &self,
         item_types: &[i32],
-        station: StationIdData,
-    ) -> Result<Vec<ItemType>> {
-        let station_orders = self.get_orders_station(station).await?;
-        let station_orders =
-            Mutex::new(station_orders.into_iter().into_group_map_by(|x| x.type_id));
-
+        region_id: i32,
+    ) -> Result<Vec<ItemHistory>> {
         let hists = stream::iter(item_types)
-            .map(|&item_type| {
-                let station_orders = &station_orders;
-                self.get_item_type_history(station, item_type, station_orders)
-            })
+            .map(|&item_type| self.get_item_type_history(region_id, item_type))
             .buffer_unordered(BUFFER_UNORDERED);
         Ok(hists
             .collect::<Vec<_>>()

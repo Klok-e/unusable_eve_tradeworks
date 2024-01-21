@@ -24,7 +24,8 @@ use unusable_eve_tradeworks_lib::{
         sell_sell::{get_good_items_sell_sell, make_table_sell_sell},
         sell_sell_zkb::{get_good_items_sell_sell_zkb, make_table_sell_sell_zkb},
     },
-    item_type::{SystemMarketsItem, SystemMarketsItemData, TypeDescription},
+    helper_ext::HashMapJoin,
+    item_type::{MarketData, SystemMarketsItem, SystemMarketsItemData, TypeDescription},
     logger,
     requests::service::EsiRequestsService,
     zkb::{killmails::KillmailService, zkb_requests::ZkbRequestsService},
@@ -393,10 +394,10 @@ async fn compute_pairs<'a>(
         .unwrap();
     let all_types = cache
         .load_or_create_json_async(CACHE_ALL_TYPES, vec![], Some(Duration::days(7)), || async {
-            let all_types = esi_requests.get_all_item_types(source_region.region_id);
+            let all_types_src = esi_requests.get_all_item_types(source_region.region_id);
             let all_types_dest = esi_requests.get_all_item_types(dest_region.region_id);
-            let (all_types, all_types_dest) = join!(all_types, all_types_dest);
-            let (mut all_types, all_types_dest) = (all_types?, all_types_dest?);
+            let (all_types_src, all_types_dest) = join!(all_types_src, all_types_dest);
+            let (mut all_types, all_types_dest) = (all_types_src?, all_types_dest?);
 
             all_types.extend(all_types_dest);
             all_types.sort_unstable();
@@ -445,49 +446,73 @@ async fn compute_pairs<'a>(
             },
         )
         .await?;
-    let cache_source_hist = format!("cache/{}.rmp", config.route.source.name);
-    let source_item_data = cache
+
+    let source_item_history = cache
         .load_or_create_async(
-            cache_source_hist,
+            format!("cache/{}-history.rmp", source_region.region_id),
             vec![CACHE_ALL_TYPES],
-            Some(Duration::hours(config.common.refresh_timeout_hours)),
+            Some(Duration::hours(config.common.item_history_timeout_hours)),
             || async {
                 Ok(esi_requests
-                    .all_item_data(&all_types, source_region)
+                    .all_item_history(&all_types, source_region.region_id)
                     .await?)
             },
         )
-        .await?;
-    let cache_dest_hist = format!("cache/{}.rmp", config.route.destination.name);
-    let dest_item_data = cache
+        .await?
+        .into_iter()
+        .map(|x| (x.id, x))
+        .collect::<HashMap<_, _>>();
+    let dest_item_history = cache
         .load_or_create_async(
-            cache_dest_hist,
+            format!("cache/{}-history.rmp", dest_region.region_id),
+            vec![CACHE_ALL_TYPES],
+            Some(Duration::hours(config.common.item_history_timeout_hours)),
+            || async {
+                Ok(esi_requests
+                    .all_item_history(&all_types, dest_region.region_id)
+                    .await?)
+            },
+        )
+        .await?
+        .into_iter()
+        .map(|x| (x.id, x))
+        .collect::<HashMap<_, _>>();
+
+    let source_item_orders = cache
+        .load_or_create_async(
+            format!("cache/{}-orders.rmp", config.route.source.name),
             vec![CACHE_ALL_TYPES],
             Some(Duration::hours(config.common.refresh_timeout_hours)),
-            || async { Ok(esi_requests.all_item_data(&all_types, dest_region).await?) },
+            || async { Ok(esi_requests.all_item_orders(source_region).await?) },
         )
-        .await?;
-    let source_types_average = source_item_data
+        .await?
         .into_iter()
         .map(|x| (x.id, x))
         .collect::<HashMap<_, _>>();
-    let mut dest_types_average = dest_item_data
+    let dest_item_orders = cache
+        .load_or_create_async(
+            format!("cache/{}-orders.rmp", config.route.destination.name),
+            vec![CACHE_ALL_TYPES],
+            Some(Duration::hours(config.common.refresh_timeout_hours)),
+            || async { Ok(esi_requests.all_item_orders(dest_region).await?) },
+        )
+        .await?
         .into_iter()
         .map(|x| (x.id, x))
         .collect::<HashMap<_, _>>();
-    let pairs = source_types_average.into_iter().flat_map(|(k, v)| {
-        Some(SystemMarketsItem {
-            id: k,
-            source: v.into(),
-            destination: match dest_types_average.insert(k, Default::default()) {
-                Some(x) => x.into(),
-                None => {
-                    log::warn!("Destination history didn't have history for item: {}", k);
-                    return None;
-                }
-            },
-        })
-    });
+
+    let source_items = source_item_history.inner_join(source_item_orders);
+    let dest_items = dest_item_history.inner_join(dest_item_orders);
+    let pairs = source_items
+        .inner_join(dest_items)
+        .into_iter()
+        .flat_map(|(k, (source, dest))| {
+            Some(SystemMarketsItem {
+                id: k,
+                source: MarketData::new(source.1, source.0),
+                destination: MarketData::new(dest.1, dest.0),
+            })
+        });
     let group_ids = config
         .common
         .include_groups

@@ -12,10 +12,15 @@ pub struct MarketsRegionHistory {
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
-pub struct ItemType {
+pub struct ItemOrders {
+    pub id: i32,
+    pub orders: Vec<Order>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct ItemHistory {
     pub id: i32,
     pub history: Vec<MarketsRegionHistory>,
-    pub orders: Vec<Order>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,10 +58,10 @@ pub struct MarketData {
     pub orders: Vec<Order>,
 }
 
-impl From<ItemType> for MarketData {
-    fn from(x: ItemType) -> Self {
+impl MarketData {
+    pub fn new(orders: ItemOrders, history: ItemHistory) -> Self {
         MarketData {
-            history: x
+            history: history
                 .history
                 .iter()
                 .map(|x| ItemHistoryDay {
@@ -67,7 +72,7 @@ impl From<ItemType> for MarketData {
                     volume: x.volume,
                 })
                 .collect(),
-            orders: x.orders,
+            orders: orders.orders,
         }
     }
 }

@@ -3,4 +3,4 @@ pub const DATE_TIME_FMT: &str = "%Y-%m-%dT%H:%M:%S%Z";
 
 pub const RETRIES: u32 = 5;
 pub const ITEM_NAME_LEN: &str = "25";
-pub const BUFFER_UNORDERED: usize = 16;
+pub const BUFFER_UNORDERED: usize = 4;
