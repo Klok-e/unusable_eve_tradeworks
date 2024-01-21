@@ -383,8 +383,6 @@ async fn compute_pairs<'a>(
     cache: &mut CachedStuff,
     data_service: &DatadumpService,
 ) -> anyhow::Result<Vec<SystemMarketsItemData>> {
-    let config = config;
-    let esi_requests = esi_requests;
     let source_region = esi_requests
         .find_region_id_station(config.route.source.clone(), character_id)
         .await

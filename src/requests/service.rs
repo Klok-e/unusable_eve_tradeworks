@@ -510,7 +510,7 @@ impl<'a> EsiRequestsService<'a> {
         station_orders: &Mutex<HashMap<i32, Vec<Order>>>,
     ) -> Result<Option<ItemType>> {
         let res: Option<ItemType> = retry::retry_smart(|| async {
-            let hist_for_type: Result<_> = (|| async {
+            let hist_for_type: Result<_> = async {
                 Ok(market_api::get_markets_region_id_history(
                     self.config,
                     GetMarketsRegionIdHistoryParams {
@@ -525,7 +525,7 @@ impl<'a> EsiRequestsService<'a> {
                 .unwrap()
                 .into_ok()
                 .unwrap())
-            })()
+            }
             .await;
 
             // turn all 404 errors into empty vecs

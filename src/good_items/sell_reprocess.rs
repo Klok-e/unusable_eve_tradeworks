@@ -142,8 +142,8 @@ fn calculate_prices_volumes(
         .source
         .orders
         .iter()
+        .filter(|&x| !x.is_buy_order)
         .cloned()
-        .filter(|x| !x.is_buy_order)
         .sorted_by_key(|x| NotNan::new(x.price).unwrap())
         .collect::<Vec<_>>();
     let mut recommend_buy_volume = 0;
@@ -179,8 +179,8 @@ fn calculate_prices_volumes(
                 .destination
                 .orders
                 .iter()
+                .filter(|&x| x.is_buy_order)
                 .cloned()
-                .filter(|x| x.is_buy_order)
                 .sorted_by_key(|x| NotNan::new(-x.price).unwrap());
             let (sum_received, matched) = match_buy_orders_profit(
                 reprocessed_item_buy_orders,

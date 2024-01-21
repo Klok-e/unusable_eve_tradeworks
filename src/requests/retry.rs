@@ -1,4 +1,4 @@
-use std::{error::Error, time::Duration};
+use std::time::Duration;
 
 use super::error::EsiApiError;
 use crate::consts::RETRIES;
@@ -6,8 +6,6 @@ use futures::Future;
 use reqwest::StatusCode;
 
 const ERROR_LIMITED_RETRY_DELAY: u64 = 60;
-const RETRY_DELAY: f32 = 0.1;
-const MAX_RETRY_DELAY: f32 = 120.;
 
 #[track_caller]
 pub fn retry_smart<T, Fut, F, E>(func: F) -> impl Future<Output = Result<Option<T>, E>>

@@ -73,8 +73,8 @@ fn calculate_prices_volumes(
         .source
         .orders
         .iter()
+        .filter(|&x| !x.is_buy_order)
         .cloned()
-        .filter(|x| !x.is_buy_order)
         .sorted_by_key(|x| NotNan::new(x.price).unwrap());
     let mut curr_src_sell_order = source_sell_orders.next()?;
     let mut recommend_bought_volume = 0;
@@ -170,7 +170,7 @@ impl DataVecExt for Vec<PairCalculatedDataSellBuy> {
             .with(space_constraint)
             .solve()?;
 
-        let recommended_items = var_refs.into_iter().zip(self.into_iter()).map(
+        let recommended_items = var_refs.into_iter().zip(self).map(
             |(var, item): (Variable, PairCalculatedDataSellBuy)| -> PairCalculatedDataSellBuyFinal {
                 let optimal = solution.value(var);
                 let recommend_buy = optimal as i64;
