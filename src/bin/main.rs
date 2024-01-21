@@ -32,8 +32,14 @@ use unusable_eve_tradeworks_lib::{
 };
 
 #[tokio::main]
-async fn main() -> Result<(), anyhow::Error> {
-    run().await
+async fn main() {
+    let res = run().await;
+    if let Err(err) = res {
+        log::error!("ERROR: {}", err);
+        err.chain()
+            .skip(1)
+            .for_each(|cause| log::error!("because: {}", cause));
+    }
 }
 
 const CACHE_AUTH: &str = "cache/auth";
@@ -121,7 +127,6 @@ async fn run() -> Result<(), anyhow::Error> {
         .parse()
         .unwrap();
 
-    // let force_refresh = cli_args.get_flag(cli::FORCE_REFRESH);
     let force_no_refresh = cli_args.get_flag(cli::FORCE_NO_REFRESH);
 
     let mut pairs: Vec<SystemMarketsItemData> = compute_pairs(

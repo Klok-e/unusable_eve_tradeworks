@@ -81,7 +81,7 @@ impl CachedStuff {
                     _ => {}
                 },
                 Err(err) => {
-                    log::info!("Couldn't deserialize cached value: {err}");
+                    log::warn!("Couldn't deserialize cached value: {err}");
                 }
             }
         }

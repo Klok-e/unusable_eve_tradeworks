@@ -10,7 +10,6 @@ pub const REPROCESS: &str = "reprocess";
 pub const DISPLAY_SIMPLE_LIST: &str = "simple-list";
 pub const DISPLAY_SIMPLE_LIST_PRICE: &str = "simple-list-price";
 pub const DEBUG_ITEM_ID: &str = "debug-item";
-// pub const FORCE_REFRESH: &str = "force-refresh";
 pub const FORCE_NO_REFRESH: &str = "force-no-refresh";
 pub const NAME_LENGTH: &str = "name-length";
 pub const QUIET: &str = "quiet";
@@ -69,17 +68,10 @@ pub fn matches() -> ArgMatches {
                 .default_value(ITEM_NAME_LEN),
         )
         .arg(Arg::new(DEBUG_ITEM_ID).long("debug-item").num_args(1))
-        // .arg(
-        //     Arg::new(FORCE_REFRESH)
-        //         .short('r')
-        //         .long("force-refresh")
-        //         .action(ArgAction::SetTrue)
-        //         .conflicts_with(FORCE_NO_REFRESH),
-        // )
         .arg(
             Arg::new(FORCE_NO_REFRESH)
                 .long("force-no-refresh")
-                .action(ArgAction::SetTrue), // .conflicts_with(FORCE_REFRESH),
+                .action(ArgAction::SetTrue),
         )
         .arg(Arg::new(QUIET).short('q').action(ArgAction::SetTrue))
         .arg(Arg::new(FILE_LOUD).short('v').action(ArgAction::SetTrue))

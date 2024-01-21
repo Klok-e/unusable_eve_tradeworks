@@ -34,25 +34,25 @@ impl Display for EsiApiError {
 
 #[derive(Error, Debug)]
 enum EsiApiErrorEnum {
-    #[error("market group")]
+    #[error("Market groups error: {0}")]
     MarketGroups(#[from] apis::Error<GetMarketsGroupsError>),
-    #[error("regional market")]
+    #[error("Regional market error: {0}")]
     MarketOrders(#[from] apis::Error<GetMarketsRegionIdOrdersError>),
-    #[error("structure search")]
+    #[error("Structure search error: {0}")]
     StructSearch(#[from] apis::Error<GetCharactersCharacterIdSearchError>),
-    #[error("structure market")]
+    #[error("Structure market error: {0}")]
     StructureMarket(#[from] apis::Error<GetMarketsStructuresStructureIdError>),
-    #[error("region type ids")]
+    #[error("Region type IDs error: {0}")]
     RegionTypeId(#[from] apis::Error<GetMarketsRegionIdTypesError>),
-    #[error("route")]
+    #[error("Route error: {0}")]
     Route(#[from] apis::Error<GetRouteOriginDestinationError>),
-    #[error("killmails")]
+    #[error("Killmails data error: {0}")]
     KillmailData(#[from] apis::Error<GetKillmailsKillmailIdKillmailHashError>),
-    #[error("type ids")]
+    #[error("Universe types type ID error: {0}")]
     UniverseTypesTypeId(#[from] apis::Error<GetUniverseTypesTypeIdError>),
-    #[error("market history")]
+    #[error("Market history error: {0}")]
     MarketHistory(#[from] apis::Error<GetMarketsRegionIdHistoryError>),
-    #[error("market prices")]
+    #[error("Market prices error: {0}")]
     MarketsPrices(#[from] apis::Error<GetMarketsPricesError>),
 }
 
@@ -188,6 +188,10 @@ impl From<apis::Error<GetUniverseTypesTypeIdError>> for EsiApiError {
 impl From<apis::Error<GetMarketsRegionIdHistoryError>> for EsiApiError {
     fn from(x: apis::Error<GetMarketsRegionIdHistoryError>) -> Self {
         let code = match &x {
+            apis::Error::ResponseError(ResponseContent {
+                entity: Some(GetMarketsRegionIdHistoryError::Status400(r)),
+                ..
+            }) if r.error.contains("Undefined 429 response") => StatusCode::TOO_MANY_REQUESTS,
             apis::Error::ResponseError(x) => x.status,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };

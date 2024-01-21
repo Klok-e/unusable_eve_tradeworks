@@ -1411,8 +1411,8 @@ dependencies = [
 
 [[package]]
 name = "rust_eveonline_esi"
-version = "1.17.0"
-source = "git+https://github.com/LokiVKlokeNaAndoke/rust_eveonline_esi#245a4f6ac8785cbe9f22a4a6ee63c15bcfce73a8"
+version = "1.19.0"
+source = "git+https://github.com/LokiVKlokeNaAndoke/rust_eveonline_esi#c0e7c07ceacb8386bc5273dbd888b2f8d0591e98"
 dependencies = [
  "reqwest",
  "serde",
@@ -1923,6 +1923,7 @@ version = "1.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f00cc9702ca12d3c81455259621e676d0f7251cec66a21e98fe2e9a37db93b2a"
 dependencies = [
+ "getrandom",
  "serde",
 ]
 

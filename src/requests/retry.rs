@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{error::Error, time::Duration};
 
 use super::error::EsiApiError;
 use crate::consts::RETRIES;
@@ -14,39 +14,45 @@ pub fn retry_smart<T, Fut, F, E>(func: F) -> impl Future<Output = Result<Option<
 where
     Fut: Future<Output = Result<Retry<T>, E>>,
     F: Fn() -> Fut,
-    E: RetryableError + std::fmt::Display,
+    E: RetryableError + std::fmt::Display + std::fmt::Debug,
 {
     let caller = std::panic::Location::caller();
     async move {
         let mut retries = 0;
         loop {
+            log::debug!("[{caller}] Trying...");
             let out = func().await;
             match out {
                 Ok(Retry::Success(x)) => break Ok(Some(x)),
                 Ok(Retry::Retry) => {
                     if retries > RETRIES {
+                        log::debug!("Retries finished. Retried {retries} times.");
                         break Ok(None);
                     } else {
                         retries += 1;
-                        let delay = get_exponential_backoff(retries, RETRY_DELAY, MAX_RETRY_DELAY);
-                        tokio::time::sleep(Duration::from_secs_f32(delay)).await;
-                        continue;
+                        log::debug!("Retrying in {ERROR_LIMITED_RETRY_DELAY}s...");
+                        tokio::time::sleep(Duration::from_secs_f32(
+                            ERROR_LIMITED_RETRY_DELAY as f32,
+                        ))
+                        .await;
                     }
                 }
-                // error limited
                 Err(ref e) if e.is_error_limited() => {
-                    log::warn!(
-                        "[{}] Error limited: {}. Retrying in 60 seconds...",
-                        caller,
-                        e
-                    );
+                    log::debug!("[{caller}] Retry: Error limited: {e:?}");
                     tokio::time::sleep(Duration::from_secs(ERROR_LIMITED_RETRY_DELAY)).await;
                 }
-                // common errors for ccp servers
-                Err(ref err) if err.should_retry() => {
-                    log::warn!("[{}] Error: {}. Retrying...", caller, err);
+                Err(ref e) if e.is_too_many_requests() => {
+                    log::debug!("[{caller}] Retry: Too many requests: {e:?}");
+                    tokio::time::sleep(Duration::from_secs(ERROR_LIMITED_RETRY_DELAY)).await;
                 }
-                Err(e) => break Err(e),
+                Err(ref e) if e.is_common_ccp_error() => {
+                    log::debug!("[{caller}] Retry: Error: {e:?}");
+                    tokio::time::sleep(Duration::from_secs(ERROR_LIMITED_RETRY_DELAY)).await;
+                }
+                Err(e) => {
+                    log::debug!("[{caller}] Error broke out: {e:?}");
+                    break Err(e);
+                }
             }
         }
     }
@@ -57,35 +63,39 @@ pub enum Retry<T> {
     Success(T),
 }
 
-fn get_exponential_backoff(retries: u32, base: f32, cap: f32) -> f32 {
-    let delay = (2f32.powf(retries as f32) - 1.0) * base;
-    delay.min(cap)
-}
-
 pub trait RetryableError {
-    fn should_retry(&self) -> bool;
+    fn is_common_ccp_error(&self) -> bool;
     fn is_error_limited(&self) -> bool;
+    fn is_too_many_requests(&self) -> bool;
 }
 
 impl RetryableError for EsiApiError {
-    fn should_retry(&self) -> bool {
+    fn is_common_ccp_error(&self) -> bool {
         matches!(
             self.status,
-            StatusCode::BAD_GATEWAY | StatusCode::SERVICE_UNAVAILABLE | StatusCode::GATEWAY_TIMEOUT
+            StatusCode::INTERNAL_SERVER_ERROR
+                | StatusCode::BAD_GATEWAY
+                | StatusCode::SERVICE_UNAVAILABLE
+                | StatusCode::GATEWAY_TIMEOUT
         )
     }
 
     fn is_error_limited(&self) -> bool {
         self.status == StatusCode::from_u16(420).expect("Invalid status code")
     }
+
+    fn is_too_many_requests(&self) -> bool {
+        self.status == StatusCode::from_u16(429).expect("Invalid status code")
+    }
 }
 
 impl RetryableError for reqwest::Error {
-    fn should_retry(&self) -> bool {
+    fn is_common_ccp_error(&self) -> bool {
         matches!(
             self.status(),
             Some(
-                StatusCode::BAD_GATEWAY
+                StatusCode::INTERNAL_SERVER_ERROR
+                    | StatusCode::BAD_GATEWAY
                     | StatusCode::SERVICE_UNAVAILABLE
                     | StatusCode::GATEWAY_TIMEOUT
             )
@@ -94,5 +104,9 @@ impl RetryableError for reqwest::Error {
 
     fn is_error_limited(&self) -> bool {
         self.status() == Some(StatusCode::from_u16(420).expect("Invalid status code"))
+    }
+
+    fn is_too_many_requests(&self) -> bool {
+        self.status() == Some(StatusCode::TOO_MANY_REQUESTS)
     }
 }

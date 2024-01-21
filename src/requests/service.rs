@@ -531,11 +531,22 @@ impl<'a> EsiRequestsService<'a> {
             // turn all 404 errors into empty vecs
             let hist_for_type = match hist_for_type {
                 Ok(ok) => ok,
-                Err(EsiApiError {
-                    status: StatusCode::NOT_FOUND,
-                    ..
-                }) => Vec::new(),
-                Err(e) => return Err(e),
+                Err(
+                    api_err @ EsiApiError {
+                        status: StatusCode::NOT_FOUND | StatusCode::BAD_REQUEST,
+                        ..
+                    },
+                ) => {
+                    log::debug!("Making empty hist_for_type: {api_err:?}");
+                    Vec::new()
+                }
+                Err(e) => {
+                    let region_id = station.region_id;
+                    log::debug!(
+                        "Region id: {region_id}; Item type: {item_type} Returning error: {e:?}"
+                    );
+                    return Err(e);
+                }
             };
 
             let mut dummy_empty_vec = Vec::new();

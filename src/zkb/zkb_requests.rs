@@ -54,8 +54,7 @@ impl<'a> ZkbRequestsService<'a> {
                 );
                 let response = self.client.get(url.clone()).send().await?;
                 if response.status() == 429 {
-                    log::warn!("Zkill returned status 429. Retrying in 1 second...");
-                    tokio::time::sleep(std::time::Duration::from_secs_f32(1.)).await;
+                    log::warn!("Zkill returned status 429. Retrying in 60 seconds...");
                     return Ok(Retry::Retry);
                 }
 
