@@ -62,8 +62,7 @@ pub fn averages(config: &Config, history: &[ItemHistoryDay]) -> Option<ItemTypeA
         .iter()
         .map(|x| x.volume as f64)
         .map(to_not_nan)
-        .average()
-        .unwrap();
+        .average()?;
     match (avg_price, avg_volume) {
         (Some(p), v) => Some(ItemTypeAveraged {
             average: p,

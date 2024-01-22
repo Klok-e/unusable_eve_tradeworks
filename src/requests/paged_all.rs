@@ -34,10 +34,10 @@ where
     Ret: Future<Output = Result<Vec<T>, super::error::EsiApiError>>,
     T: Debug,
 {
-    let mut all_types = Vec::new();
+    let mut all_items = Vec::new();
     let mut page = 1;
     loop {
-        let types = retry::retry_smart(|| async {
+        let page_items = retry::retry_smart(|| async {
             match get(page).await {
                 Ok(x) => Ok(Retry::Success(x)),
 
@@ -47,22 +47,31 @@ where
                     ..
                 }) => Ok(Retry::Success(Vec::new())),
 
+                // 403 Forbidden is sometimes thrown randomly??? retry in this case
+                Err(EsiApiError {
+                    status: StatusCode::FORBIDDEN,
+                    ..
+                }) => {
+                    log::warn!("403 Forbidden when getting pages, retrying...");
+                    Ok(Retry::Retry)
+                }
+
                 Err(e) => Err(e),
             }
         })
         .await?;
-        let mut types = types.unwrap_or_else(|| {
+        let mut page_items = page_items.unwrap_or_else(|| {
             log::warn!("Max retry count exceeded and error wasn't resolved.");
             Vec::new()
         });
-        if types.is_empty() {
+        if page_items.is_empty() {
             break;
         }
-        all_types.append(&mut types);
+        all_items.append(&mut page_items);
 
         page += 1;
     }
-    Ok(all_types)
+    Ok(all_items)
 }
 
 pub trait OnlyOk<T, E>: Sized {

@@ -25,7 +25,10 @@ use unusable_eve_tradeworks_lib::{
         sell_sell_zkb::{get_good_items_sell_sell_zkb, make_table_sell_sell_zkb},
     },
     helper_ext::HashMapJoin,
-    item_type::{MarketData, SystemMarketsItem, SystemMarketsItemData, TypeDescription},
+    item_type::{
+        ItemHistory, ItemOrders, MarketData, SystemMarketsItem, SystemMarketsItemData,
+        TypeDescription,
+    },
     logger,
     requests::service::EsiRequestsService,
     zkb::{killmails::KillmailService, zkb_requests::ZkbRequestsService},
@@ -33,14 +36,15 @@ use unusable_eve_tradeworks_lib::{
 };
 
 #[tokio::main]
-async fn main() {
-    let res = run().await;
-    if let Err(err) = res {
+async fn main() -> Result<(), anyhow::Error> {
+    let result = run().await;
+    if let Err(ref err) = result {
         log::error!("ERROR: {}", err);
         err.chain()
             .skip(1)
             .for_each(|cause| log::error!("because: {}", cause));
     }
+    result
 }
 
 const CACHE_AUTH: &str = "cache/auth";
@@ -130,12 +134,16 @@ async fn run() -> Result<(), anyhow::Error> {
 
     let force_no_refresh = cli_args.get_flag(cli::FORCE_NO_REFRESH);
 
+    let sell_sell = cli_args.get_flag(cli::SELL_SELL);
+    let sell_sell_zkb = cli_args.get_flag(cli::SELL_SELL_ZKB);
+
     let mut pairs: Vec<SystemMarketsItemData> = compute_pairs(
         &config,
         &esi_requests,
         character_id,
         &mut cache,
         &data_service,
+        sell_sell || sell_sell_zkb,
     )
     .await?;
 
@@ -173,9 +181,6 @@ async fn run() -> Result<(), anyhow::Error> {
             );
             consts::ITEM_NAME_LEN.parse().unwrap()
         };
-
-        let sell_sell = cli_args.get_flag(cli::SELL_SELL);
-        let sell_sell_zkb = cli_args.get_flag(cli::SELL_SELL_ZKB);
 
         if sell_sell {
             log::trace!("Sell sell path.");
@@ -383,6 +388,7 @@ async fn compute_pairs<'a>(
     character_id: i32,
     cache: &mut CachedStuff,
     data_service: &DatadumpService,
+    download_history: bool,
 ) -> anyhow::Result<Vec<SystemMarketsItemData>> {
     let source_region = esi_requests
         .find_region_id_station(config.route.source.clone(), character_id)
@@ -447,36 +453,44 @@ async fn compute_pairs<'a>(
         )
         .await?;
 
-    let source_item_history = cache
-        .load_or_create_async(
-            format!("cache/{}-history.rmp", source_region.region_id),
-            vec![CACHE_ALL_TYPES],
-            Some(Duration::hours(config.common.item_history_timeout_hours)),
-            || async {
-                Ok(esi_requests
-                    .all_item_history(&all_types, source_region.region_id)
-                    .await?)
-            },
-        )
-        .await?
-        .into_iter()
-        .map(|x| (x.id, x))
-        .collect::<HashMap<_, _>>();
-    let dest_item_history = cache
-        .load_or_create_async(
-            format!("cache/{}-history.rmp", dest_region.region_id),
-            vec![CACHE_ALL_TYPES],
-            Some(Duration::hours(config.common.item_history_timeout_hours)),
-            || async {
-                Ok(esi_requests
-                    .all_item_history(&all_types, dest_region.region_id)
-                    .await?)
-            },
-        )
-        .await?
-        .into_iter()
-        .map(|x| (x.id, x))
-        .collect::<HashMap<_, _>>();
+    let source_item_history = if download_history {
+        cache
+            .load_or_create_async(
+                format!("cache/{}-history.rmp", source_region.region_id),
+                vec![CACHE_ALL_TYPES],
+                Some(Duration::hours(config.common.item_history_timeout_hours)),
+                || async {
+                    Ok(esi_requests
+                        .all_item_history(&all_types, source_region.region_id)
+                        .await?)
+                },
+            )
+            .await?
+            .into_iter()
+            .map(|x| (x.id, x))
+            .collect::<HashMap<_, _>>()
+    } else {
+        HashMap::new()
+    };
+    let dest_item_history = if download_history {
+        cache
+            .load_or_create_async(
+                format!("cache/{}-history.rmp", dest_region.region_id),
+                vec![CACHE_ALL_TYPES],
+                Some(Duration::hours(config.common.item_history_timeout_hours)),
+                || async {
+                    Ok(esi_requests
+                        .all_item_history(&all_types, dest_region.region_id)
+                        .await?)
+                },
+            )
+            .await?
+            .into_iter()
+            .map(|x| (x.id, x))
+            .collect::<HashMap<_, _>>()
+    } else {
+        HashMap::new()
+    };
 
     let source_item_orders = cache
         .load_or_create_async(
@@ -501,16 +515,28 @@ async fn compute_pairs<'a>(
         .map(|x| (x.id, x))
         .collect::<HashMap<_, _>>();
 
-    let source_items = source_item_history.inner_join(source_item_orders);
-    let dest_items = dest_item_history.inner_join(dest_item_orders);
+    let source_items = source_item_orders.outer_join(source_item_history);
+    let dest_items = dest_item_orders.outer_join(dest_item_history);
     let pairs = source_items
         .inner_join(dest_items)
         .into_iter()
         .flat_map(|(k, (source, dest))| {
+            let source = match make_item_orders_history_empty_if_none(source) {
+                Some(source) => source,
+                None => {
+                    return None;
+                }
+            };
+            let dest = match make_item_orders_history_empty_if_none(dest) {
+                Some(dest) => dest,
+                None => {
+                    return None;
+                }
+            };
             Some(SystemMarketsItem {
                 id: k,
-                source: MarketData::new(source.1, source.0),
-                destination: MarketData::new(dest.1, dest.0),
+                source: MarketData::new(source.0, source.1),
+                destination: MarketData::new(dest.0, dest.1),
             })
         });
     let group_ids = config
@@ -565,4 +591,27 @@ pub struct SimpleDisplay {
     pub name: String,
     pub recommend_buy: i64,
     pub sell_price: f64,
+}
+
+fn make_item_orders_history_empty_if_none(
+    items: (Option<ItemOrders>, Option<ItemHistory>),
+) -> Option<(ItemOrders, ItemHistory)> {
+    match items {
+        (Some(order), Some(history)) => Some((order, history)),
+        (Some(order), None) => {
+            let new_history = ItemHistory {
+                id: order.id,
+                ..Default::default()
+            };
+            Some((order, new_history))
+        }
+        (None, Some(history)) => {
+            let new_orders = ItemOrders {
+                id: history.id,
+                ..Default::default()
+            };
+            Some((new_orders, history))
+        }
+        _ => None,
+    }
 }

@@ -47,7 +47,7 @@ use rust_eveonline_esi::{
     },
 };
 
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 
 pub struct EsiRequestsService<'a> {
     pub config: &'a Configuration,
@@ -522,7 +522,7 @@ impl<'a> EsiRequestsService<'a> {
                 Ok(market_api::get_markets_region_id_history(
                     self.config,
                     GetMarketsRegionIdHistoryParams {
-                        region_id: region_id,
+                        region_id,
                         type_id: item_type,
                         datasource: None,
                         if_none_match: None,

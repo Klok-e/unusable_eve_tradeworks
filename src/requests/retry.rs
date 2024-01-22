@@ -18,7 +18,7 @@ where
     async move {
         let mut retries = 0;
         loop {
-            log::debug!("[{caller}] Trying...");
+            log::trace!("[{caller}] Trying...");
             let out = func().await;
             match out {
                 Ok(Retry::Success(x)) => break Ok(Some(x)),
