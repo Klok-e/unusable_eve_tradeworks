@@ -30,7 +30,7 @@ use unusable_eve_tradeworks_lib::{
         TypeDescription,
     },
     logger,
-    requests::service::EsiRequestsService,
+    requests::{item_history::ItemHistoryEsiService, service::EsiRequestsService},
     zkb::{killmails::KillmailService, zkb_requests::ZkbRequestsService},
     Station,
 };
@@ -137,9 +137,12 @@ async fn run() -> Result<(), anyhow::Error> {
     let sell_sell = cli_args.get_flag(cli::SELL_SELL);
     let sell_sell_zkb = cli_args.get_flag(cli::SELL_SELL_ZKB);
 
+    let esi_history = ItemHistoryEsiService::new(&esi_config);
+
     let mut pairs: Vec<SystemMarketsItemData> = compute_pairs(
         &config,
         &esi_requests,
+        &esi_history,
         character_id,
         &mut cache,
         &data_service,
@@ -385,6 +388,7 @@ async fn compute_sell_sell_zkb<'a>(
 async fn compute_pairs<'a>(
     config: &Config,
     esi_requests: &EsiRequestsService<'a>,
+    esi_history: &ItemHistoryEsiService<'a>,
     character_id: i32,
     cache: &mut CachedStuff,
     data_service: &DatadumpService,
@@ -460,7 +464,7 @@ async fn compute_pairs<'a>(
                 vec![CACHE_ALL_TYPES],
                 Some(Duration::hours(config.common.item_history_timeout_hours)),
                 || async {
-                    Ok(esi_requests
+                    Ok(esi_history
                         .all_item_history(&all_types, source_region.region_id)
                         .await?)
                 },
@@ -479,7 +483,7 @@ async fn compute_pairs<'a>(
                 vec![CACHE_ALL_TYPES],
                 Some(Duration::hours(config.common.item_history_timeout_hours)),
                 || async {
-                    Ok(esi_requests
+                    Ok(esi_history
                         .all_item_history(&all_types, dest_region.region_id)
                         .await?)
                 },
