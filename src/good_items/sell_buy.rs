@@ -164,11 +164,9 @@ impl DataVecExt for Vec<PairCalculatedDataSellBuy> {
             .sum::<Expression>()
             .leq(max_cargo);
 
-        let solution = vars
-            .maximise(&goal)
-            .using(default_solver)
-            .with(space_constraint)
-            .solve()?;
+        let mut solution = vars.maximise(&goal).using(default_solver);
+        solution.set_parameter("log", "0");
+        let solution = solution.with(space_constraint).solve()?;
 
         let recommended_items = var_refs.into_iter().zip(self).map(
             |(var, item): (Variable, PairCalculatedDataSellBuy)| -> PairCalculatedDataSellBuyFinal {

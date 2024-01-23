@@ -27,7 +27,10 @@ oauth2 = { version = "4.1", default-features = false, features = ["reqwest"] }
 tiny_http = "0.12.0"
 rusqlite = "0.30.0"
 bzip2 = "0.4"
-good_lp = { version = "1.3", features = ["highs"], default-features = false }
+good_lp = { version = "1.3", features = [
+    "coin_cbc",
+    "singlethread-cbc",
+], default-features = false }
 num-format = "0.4.4"
 anyhow = "1.0.69"
 rayon = "1.7.0"

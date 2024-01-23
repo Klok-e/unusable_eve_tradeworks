@@ -549,7 +549,6 @@ impl<'a> EsiRequestsService<'a> {
                     Vec::new()
                 }
                 Err(e) => {
-                    let region_id = region_id;
                     log::debug!(
                         "Region id: {region_id}; Item type: {item_type} Returning error: {e:?}"
                     );
