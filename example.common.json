@@ -8,6 +8,7 @@
     "tp": "Alliance"
   },
   "refresh_timeout_hours": 1,
+  "item_history_timeout_hours": 168,
   "min_profit": 100000.0,
   "include_groups": null,
   "sell_sell": {
@@ -23,7 +24,7 @@
     }
   },
   "sell_buy": {
-    "cargo_capacity": 60000
+    "cargo_capacity": 12000
   },
   "sell_reprocess": {
     "repro_portion": 0.5,
@@ -52,6 +53,18 @@
       "is_citadel": true,
       "name": "UMI-KK - War of Interesting Times",
       "short": "umi",
+      "broker_fee": 0.01
+    },
+    {
+      "is_citadel": true,
+      "name": "VFK-IV - Suslik North Home",
+      "short": "vfk",
+      "broker_fee": 0.02
+    },
+    {
+      "is_citadel": true,
+      "name": "3T7-M8 - 3Time world war bee champs",
+      "short": "3t7",
       "broker_fee": 0.01
     }
   ]

@@ -134,9 +134,6 @@ async fn run() -> Result<(), anyhow::Error> {
 
     let force_no_refresh = cli_args.get_flag(cli::FORCE_NO_REFRESH);
 
-    let sell_sell = cli_args.get_flag(cli::SELL_SELL);
-    let sell_sell_zkb = cli_args.get_flag(cli::SELL_SELL_ZKB);
-
     let esi_history = ItemHistoryEsiService::new(&esi_config);
 
     let mut pairs: Vec<SystemMarketsItemData> = compute_pairs(
@@ -146,7 +143,6 @@ async fn run() -> Result<(), anyhow::Error> {
         character_id,
         &mut cache,
         &data_service,
-        sell_sell || sell_sell_zkb,
     )
     .await?;
 
@@ -173,6 +169,9 @@ async fn run() -> Result<(), anyhow::Error> {
 
     let mut simple_list: Vec<_> = Vec::new();
     let rows = {
+        let sell_sell = cli_args.get_flag(cli::SELL_SELL);
+        let sell_sell_zkb = cli_args.get_flag(cli::SELL_SELL_ZKB);
+
         let cli_in = cli_args.get_one::<String>(cli::NAME_LENGTH);
         let name_len = if let Some(v) = cli_in.and_then(|x| x.parse::<usize>().ok()) {
             v
@@ -392,7 +391,6 @@ async fn compute_pairs<'a>(
     character_id: i32,
     cache: &mut CachedStuff,
     data_service: &DatadumpService,
-    download_history: bool,
 ) -> anyhow::Result<Vec<SystemMarketsItemData>> {
     let source_region = esi_requests
         .find_region_id_station(config.route.source.clone(), character_id)
@@ -457,44 +455,36 @@ async fn compute_pairs<'a>(
         )
         .await?;
 
-    let source_item_history = if download_history {
-        cache
-            .load_or_create_async(
-                format!("cache/{}-history.rmp", source_region.region_id),
-                vec![CACHE_ALL_TYPES],
-                Some(Duration::hours(config.common.item_history_timeout_hours)),
-                || async {
-                    Ok(esi_history
-                        .all_item_history(&all_types, source_region.region_id)
-                        .await?)
-                },
-            )
-            .await?
-            .into_iter()
-            .map(|x| (x.id, x))
-            .collect::<HashMap<_, _>>()
-    } else {
-        HashMap::new()
-    };
-    let dest_item_history = if download_history {
-        cache
-            .load_or_create_async(
-                format!("cache/{}-history.rmp", dest_region.region_id),
-                vec![CACHE_ALL_TYPES],
-                Some(Duration::hours(config.common.item_history_timeout_hours)),
-                || async {
-                    Ok(esi_history
-                        .all_item_history(&all_types, dest_region.region_id)
-                        .await?)
-                },
-            )
-            .await?
-            .into_iter()
-            .map(|x| (x.id, x))
-            .collect::<HashMap<_, _>>()
-    } else {
-        HashMap::new()
-    };
+    let source_item_history = cache
+        .load_or_create_async(
+            format!("cache/{}-history.rmp", source_region.region_id),
+            vec![CACHE_ALL_TYPES],
+            Some(Duration::hours(config.common.item_history_timeout_hours)),
+            || async {
+                Ok(esi_history
+                    .all_item_history(&all_types, source_region.region_id)
+                    .await?)
+            },
+        )
+        .await?
+        .into_iter()
+        .map(|x| (x.id, x))
+        .collect::<HashMap<_, _>>();
+    let dest_item_history = cache
+        .load_or_create_async(
+            format!("cache/{}-history.rmp", dest_region.region_id),
+            vec![CACHE_ALL_TYPES],
+            Some(Duration::hours(config.common.item_history_timeout_hours)),
+            || async {
+                Ok(esi_history
+                    .all_item_history(&all_types, dest_region.region_id)
+                    .await?)
+            },
+        )
+        .await?
+        .into_iter()
+        .map(|x| (x.id, x))
+        .collect::<HashMap<_, _>>();
 
     let source_item_orders = cache
         .load_or_create_async(
@@ -564,7 +554,14 @@ async fn compute_pairs<'a>(
         .transpose()?;
     Ok(pairs
         .filter_map(|it| {
-            let req_res = all_type_descriptions[&it.id].clone();
+            let req_res = all_type_descriptions
+                .get(&it.id)
+                .unwrap_or_else(|| {
+                    let it_id = it.id;
+                    log::warn!("Couldn't find item {it_id} in all_type_descriptions map");
+                    &None
+                })
+                .clone();
             let req_res = match req_res {
                 Some(x) => x,
                 None => return None,
