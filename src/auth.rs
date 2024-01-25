@@ -52,6 +52,16 @@ impl Auth {
 
         data
     }
+
+    pub fn get_character_id(&self) -> i32 {
+        self.character_info
+            .sub
+            .split(':')
+            .nth(2)
+            .unwrap()
+            .parse()
+            .unwrap()
+    }
 }
 
 async fn refresh_token(

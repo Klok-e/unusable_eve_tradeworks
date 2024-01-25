@@ -8,6 +8,7 @@ pub mod error;
 pub mod good_items;
 pub mod helper_ext;
 pub mod item_type;
+pub mod items_list;
 pub mod logger;
 pub mod order_ext;
 pub mod requests;
