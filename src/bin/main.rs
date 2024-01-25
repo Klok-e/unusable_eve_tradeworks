@@ -490,7 +490,7 @@ async fn compute_pairs<'a>(
         .load_or_create_async(
             format!("cache/{}-orders.rmp", config.route.source.name),
             vec![CACHE_ALL_TYPES],
-            Some(Duration::hours(config.common.refresh_timeout_hours)),
+            Some(Duration::seconds((config.common.refresh_timeout_hours * 60. * 60.) as i64)),
             || async { Ok(esi_requests.all_item_orders(source_region).await?) },
         )
         .await?
@@ -501,7 +501,7 @@ async fn compute_pairs<'a>(
         .load_or_create_async(
             format!("cache/{}-orders.rmp", config.route.destination.name),
             vec![CACHE_ALL_TYPES],
-            Some(Duration::hours(config.common.refresh_timeout_hours)),
+            Some(Duration::seconds((config.common.refresh_timeout_hours * 60. * 60.) as i64)),
             || async { Ok(esi_requests.all_item_orders(dest_region).await?) },
         )
         .await?

@@ -45,7 +45,7 @@ pub struct CommonConfig {
     pub sales_tax: f64,
     pub items_take: usize,
     pub zkill_entity: ZkillEntity,
-    pub refresh_timeout_hours: i64,
+    pub refresh_timeout_hours: f64,
     pub item_history_timeout_hours: i64,
     pub min_profit: Option<f64>,
     pub include_groups: Option<Vec<String>>,
