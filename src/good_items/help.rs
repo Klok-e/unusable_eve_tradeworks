@@ -11,7 +11,7 @@ use crate::{
 
 #[derive(Debug, Clone, Copy)]
 pub struct ItemProfitData {
-    pub single_item_desc_volume: f64,
+    pub single_item_volume_m3: f64,
     pub expenses: f64,
     pub sell_price: f64,
     pub max_profitable_buy: i64,
@@ -19,7 +19,7 @@ pub struct ItemProfitData {
 
 #[derive(Debug)]
 pub struct ProcessedItemProfitData<T> {
-    pub calcs: ItemProfitData,
+    pub profit_data: ItemProfitData,
     pub volume_m3: i64,
     pub recommend_buy: i64,
     pub rough_profit: f64,
@@ -73,7 +73,7 @@ where
             .zip(self.iter())
             .map(|(&var, item): (&Variable, &T)| -> Expression {
                 let item: ItemProfitData = (item.clone()).into();
-                item.single_item_desc_volume * var
+                item.single_item_volume_m3 * var
             })
             .sum::<Expression>()
             .leq(max_cargo);
@@ -91,9 +91,9 @@ where
 
                 let item_converted: ItemProfitData = (item.clone()).into();
 
-                let volume = (recommend_buy as f64 * item_converted.single_item_desc_volume) as i64;
+                let volume = (recommend_buy as f64 * item_converted.single_item_volume_m3) as i64;
                 ProcessedItemProfitData {
-                    calcs: item_converted,
+                    profit_data: item_converted,
                     rough_profit: (item_converted.sell_price - item_converted.expenses)
                         * recommend_buy as f64,
                     recommend_buy,
@@ -101,13 +101,13 @@ where
                     item,
                 }
             })
-            .filter(|x: &ProcessedItemProfitData<_>| x.calcs.max_profitable_buy > 0)
+            .filter(|x: &ProcessedItemProfitData<_>| x.profit_data.max_profitable_buy > 0)
             .sorted_unstable_by_key(|x| NotNan::new(-x.rough_profit).unwrap())
             .collect::<Vec<_>>();
 
         let volume = recommended_items
             .iter()
-            .map(|x| x.calcs.single_item_desc_volume * x.calcs.max_profitable_buy as f64)
+            .map(|x| x.profit_data.single_item_volume_m3 * x.profit_data.max_profitable_buy as f64)
             .sum::<f64>() as i32;
         Ok(ProfitableItemsSummary {
             items: recommended_items,

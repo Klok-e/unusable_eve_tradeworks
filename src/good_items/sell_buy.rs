@@ -205,7 +205,7 @@ pub struct PairCalculatedDataSellBuy {
 impl From<PairCalculatedDataSellBuy> for help::ItemProfitData {
     fn from(value: PairCalculatedDataSellBuy) -> Self {
         help::ItemProfitData {
-            single_item_desc_volume: value.market.desc.volume as f64,
+            single_item_volume_m3: value.market.desc.volume as f64,
             expenses: value.expenses,
             sell_price: value.sell_price,
             max_profitable_buy: value.max_profitable_buy_volume,
