@@ -176,34 +176,15 @@ async fn run() -> Result<(), anyhow::Error> {
             )
             .await?
         } else if reprocess_flag {
-            log::trace!("Reprocess path.");
-            let pairs_clone = if let Some(v) = cli_args
-                .get_one::<String>(cli::DEBUG_ITEM_ID)
-                .and_then(|x| x.parse::<i32>().ok())
-            {
-                let mut clone = pairs.clone();
-                clone.retain(|x| x.desc.type_id == v);
-                clone
-            } else {
-                pairs.clone()
-            };
-            let good_items = get_good_items_sell_reprocess(
-                pairs_clone,
+            compute_reprocess_rows(
+                &cli_args,
                 pairs,
                 &config,
                 disable_filters,
-                &data_service,
-            )?;
-            simple_list = good_items
-                .items
-                .iter()
-                .map(|x| SimpleDisplay {
-                    name: x.market.desc.name.clone(),
-                    recommend_buy: x.recommend_buy,
-                    sell_price: x.dest_min_sell_price,
-                })
-                .collect();
-            make_table_sell_reprocess(&good_items, name_len)
+                data_service,
+                &mut simple_list,
+                name_len,
+            )?
         } else {
             log::trace!("Sell buy path.");
             compute_sell_buy(pairs, &config, disable_filters, &mut simple_list, name_len)?
@@ -220,6 +201,40 @@ async fn run() -> Result<(), anyhow::Error> {
         print_simple_list_with_price(simple_list);
     }
     Ok(())
+}
+
+fn compute_reprocess_rows<'b>(
+    cli_args: &clap::ArgMatches,
+    pairs: Vec<SystemMarketsItemData>,
+    config: &Config,
+    disable_filters: bool,
+    data_service: DatadumpService,
+    simple_list: &mut Vec<SimpleDisplay>,
+    name_len: usize,
+) -> Result<Vec<Row<'b>>, anyhow::Error> {
+    log::trace!("Reprocess path.");
+    let pairs_clone = if let Some(v) = cli_args
+        .get_one::<String>(cli::DEBUG_ITEM_ID)
+        .and_then(|x| x.parse::<i32>().ok())
+    {
+        let mut clone = pairs.clone();
+        clone.retain(|x| x.desc.type_id == v);
+        clone
+    } else {
+        pairs.clone()
+    };
+    let good_items =
+        get_good_items_sell_reprocess(pairs_clone, pairs, config, disable_filters, &data_service)?;
+    *simple_list = good_items
+        .items
+        .iter()
+        .map(|x| SimpleDisplay {
+            name: x.market.desc.name.clone(),
+            recommend_buy: x.recommend_buy,
+            sell_price: x.dest_min_sell_price,
+        })
+        .collect();
+    Ok(make_table_sell_reprocess(&good_items, name_len))
 }
 
 fn print_simple_list_with_price(simple_list: Vec<SimpleDisplay>) {
@@ -244,7 +259,7 @@ fn print_simple_list_with_price(simple_list: Vec<SimpleDisplay>) {
     println!("Item sell prices:\n{}", table.render());
 }
 
-fn print_simple_list(simple_list: &Vec<SimpleDisplay>) {
+fn print_simple_list(simple_list: &[SimpleDisplay]) {
     let rows = simple_list
         .iter()
         .map(|it| {
