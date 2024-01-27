@@ -17,7 +17,6 @@ use crate::{
     good_items::{
         sell_buy::{get_good_items_sell_buy, make_table_sell_buy},
         sell_sell::{get_good_items_sell_sell, make_table_sell_sell},
-        sell_sell_zkb::{get_good_items_sell_sell_zkb, make_table_sell_sell_zkb},
     },
     helper_ext::HashMapJoin,
     item_type::{
@@ -25,59 +24,44 @@ use crate::{
         TypeDescription,
     },
     requests::{item_history::ItemHistoryEsiService, service::EsiRequestsService},
-    zkb::{killmails::KillmailService, zkb_requests::ZkbRequestsService},
+    zkb::{
+        killmails::{ItemFrequencies, KillmailService},
+        zkb_requests::ZkbRequestsService,
+    },
 };
 
-pub fn compute_sell_sell<'a>(
+pub async fn compute_sell_sell<'a>(
     pairs: Vec<SystemMarketsItemData>,
     config: &Config,
     disable_filters: bool,
     simple_list: &mut Vec<SimpleDisplay>,
     name_len: usize,
-) -> Vec<Row<'a>> {
-    let good_items = get_good_items_sell_sell(pairs, config, disable_filters);
-    *simple_list = good_items
-        .iter()
-        .map(|x| SimpleDisplay {
-            name: x.market.desc.name.clone(),
-            recommend_buy: x.recommend_buy,
-            sell_price: x.dest_min_sell_price,
-        })
-        .collect();
-    make_table_sell_sell(&good_items, name_len)
-}
-
-pub fn compute_sell_buy<'a>(
-    pairs: Vec<SystemMarketsItemData>,
-    config: &Config,
-    disable_filters: bool,
-    simple_list: &mut Vec<SimpleDisplay>,
-    name_len: usize,
-) -> anyhow::Result<Vec<Row<'a>>> {
-    let good_items = get_good_items_sell_buy(pairs, config, disable_filters)?;
-    *simple_list = good_items
-        .items
-        .iter()
-        .map(|x| SimpleDisplay {
-            name: x.market.desc.name.clone(),
-            recommend_buy: x.recommend_buy,
-            sell_price: x.dest_min_sell_price,
-        })
-        .collect();
-    Ok(make_table_sell_buy(&good_items, name_len))
-}
-
-pub async fn compute_sell_sell_zkb<'a>(
-    config: Config,
-    mut cache: CachedStuff,
+    cache: CachedStuff,
     force_no_refresh: bool,
     esi_requests: EsiRequestsService<'a>,
     esi_config: &Configuration,
-    pairs: Vec<SystemMarketsItemData>,
-    disable_filters: bool,
-    simple_list: &mut Vec<SimpleDisplay>,
-    name_len: usize,
-) -> Result<Vec<Row<'a>>, anyhow::Error> {
+) -> anyhow::Result<Vec<Row<'a>>> {
+    let kms =
+        get_zkb_frequencies(config, cache, force_no_refresh, esi_requests, esi_config).await?;
+    let good_items = get_good_items_sell_sell(pairs, config, disable_filters, kms);
+    *simple_list = good_items
+        .iter()
+        .map(|x| SimpleDisplay {
+            name: x.market.desc.name.clone(),
+            recommend_buy: x.recommend_buy,
+            sell_price: x.dest_min_sell_price,
+        })
+        .collect();
+    Ok(make_table_sell_sell(&good_items, name_len))
+}
+
+async fn get_zkb_frequencies(
+    config: &Config,
+    mut cache: CachedStuff,
+    force_no_refresh: bool,
+    esi_requests: EsiRequestsService<'_>,
+    esi_config: &Configuration,
+) -> Result<ItemFrequencies, anyhow::Error> {
     let cache_zkb_entity = format!(
         "cache/zkb_losses.{}.{}.rmp",
         config.common.zkill_entity.tp.zkill_filter_string(),
@@ -109,16 +93,27 @@ pub async fn compute_sell_sell_zkb<'a>(
             },
         )
         .await?;
-    let good_items = get_good_items_sell_sell_zkb(pairs, kms, &config, disable_filters);
+    Ok(kms)
+}
+
+pub fn compute_sell_buy<'a>(
+    pairs: Vec<SystemMarketsItemData>,
+    config: &Config,
+    disable_filters: bool,
+    simple_list: &mut Vec<SimpleDisplay>,
+    name_len: usize,
+) -> anyhow::Result<Vec<Row<'a>>> {
+    let good_items = get_good_items_sell_buy(pairs, config, disable_filters)?;
     *simple_list = good_items
+        .items
         .iter()
         .map(|x| SimpleDisplay {
-            name: x.market.desc.name.clone(),
+            name: x.item.market.desc.name.clone(),
             recommend_buy: x.recommend_buy,
-            sell_price: x.dest_min_sell_price,
+            sell_price: x.item.dest_min_sell_price,
         })
         .collect();
-    Ok(make_table_sell_sell_zkb(&good_items, name_len))
+    Ok(make_table_sell_buy(&good_items, name_len))
 }
 
 pub async fn compute_pairs<'a>(

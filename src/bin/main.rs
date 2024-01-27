@@ -17,9 +17,7 @@ use unusable_eve_tradeworks_lib::{
     datadump_service::DatadumpService,
     good_items::sell_reprocess::{get_good_items_sell_reprocess, make_table_sell_reprocess},
     item_type::SystemMarketsItemData,
-    items_list::{
-        compute_pairs, compute_sell_buy, compute_sell_sell, compute_sell_sell_zkb, SimpleDisplay,
-    },
+    items_list::{compute_pairs, compute_sell_buy, compute_sell_sell, SimpleDisplay},
     logger,
     requests::{item_history::ItemHistoryEsiService, service::EsiRequestsService},
     Station,
@@ -144,7 +142,6 @@ async fn run() -> Result<(), anyhow::Error> {
     let mut simple_list: Vec<_> = Vec::new();
     let rows = {
         let sell_sell = cli_args.get_flag(cli::SELL_SELL);
-        let sell_sell_zkb = cli_args.get_flag(cli::SELL_SELL_ZKB);
 
         let cli_in = cli_args.get_one::<String>(cli::NAME_LENGTH);
         let name_len = if let Some(v) = cli_in.and_then(|x| x.parse::<usize>().ok()) {
@@ -160,19 +157,16 @@ async fn run() -> Result<(), anyhow::Error> {
 
         if sell_sell {
             log::trace!("Sell sell path.");
-            compute_sell_sell(pairs, &config, disable_filters, &mut simple_list, name_len)
-        } else if sell_sell_zkb {
-            log::trace!("Sell sell zkb path.");
-            compute_sell_sell_zkb(
-                config,
+            compute_sell_sell(
+                pairs,
+                &config,
+                disable_filters,
+                &mut simple_list,
+                name_len,
                 cache,
                 force_no_refresh,
                 esi_requests,
                 &esi_config,
-                pairs,
-                disable_filters,
-                &mut simple_list,
-                name_len,
             )
             .await?
         } else if reprocess_flag {

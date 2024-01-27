@@ -4,7 +4,6 @@ use crate::consts::ITEM_NAME_LEN;
 
 pub const CONFIG: &str = "config";
 pub const SELL_SELL: &str = "sell-sell";
-pub const SELL_SELL_ZKB: &str = "sell-sell-zkb";
 pub const SELL_BUY: &str = "sell-buy";
 pub const REPROCESS: &str = "reprocess";
 pub const DISPLAY_SIMPLE_LIST: &str = "simple-list";
@@ -26,28 +25,21 @@ pub fn matches() -> ArgMatches {
                 .short('s')
                 .long("sell-sell")
                 .action(ArgAction::SetTrue)
-                .conflicts_with_all([SELL_BUY, SELL_SELL_ZKB, REPROCESS]),
-        )
-        .arg(
-            Arg::new(SELL_SELL_ZKB)
-                .short('z')
-                .long("sell-sell-zkb")
-                .action(ArgAction::SetTrue)
-                .conflicts_with_all([SELL_BUY, SELL_SELL, REPROCESS]),
+                .conflicts_with_all([SELL_BUY, REPROCESS]),
         )
         .arg(
             Arg::new(SELL_BUY)
                 .short('b')
                 .long("sell-buy")
                 .action(ArgAction::SetTrue)
-                .conflicts_with_all([SELL_SELL, SELL_SELL_ZKB, REPROCESS]),
+                .conflicts_with_all([SELL_SELL, REPROCESS]),
         )
         .arg(
             Arg::new(REPROCESS)
                 .short('e')
                 .long("reprocess")
                 .action(ArgAction::SetTrue)
-                .conflicts_with_all([SELL_SELL, SELL_SELL_ZKB, SELL_BUY]),
+                .conflicts_with_all([SELL_SELL, SELL_BUY]),
         )
         .arg(
             Arg::new(DISPLAY_SIMPLE_LIST)

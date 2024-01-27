@@ -44,6 +44,14 @@ impl<'a> KillmailService<'a> {
 
         let most_recent_time = km_freqs.iter().map(|x| x.time).max().unwrap();
         let oldest_time = km_freqs.iter().map(|x| x.time).min().unwrap();
+        let period_seconds = (most_recent_time - oldest_time).num_seconds();
+
+        log::info!(
+            "Got {} killmails for the last {} days...",
+            km_freqs.len(),
+            period_seconds as f64 / 60. / 60. / 24.
+        );
+
         Ok(ItemFrequencies {
             items: km_freqs.iter().fold(HashMap::new(), |mut acc, x| {
                 for (k, v) in x.items.iter() {
@@ -51,7 +59,7 @@ impl<'a> KillmailService<'a> {
                 }
                 acc
             }),
-            period_seconds: (most_recent_time - oldest_time).num_seconds(),
+            period_seconds,
         })
     }
 }

@@ -2,7 +2,10 @@ use itertools::Itertools;
 use ordered_float::NotNan;
 use term_table::{row::Row, table_cell::TableCell};
 
-use crate::{config::Config, item_type::SystemMarketsItemData, order_ext::OrderIterExt};
+use crate::{
+    config::Config, item_type::SystemMarketsItemData, order_ext::OrderIterExt,
+    zkb::killmails::ItemFrequencies,
+};
 
 use super::help::{averages, prepare_sell_sell, PairCalculatedDataSellSellCommon};
 
@@ -10,10 +13,15 @@ pub fn get_good_items_sell_sell(
     pairs: Vec<SystemMarketsItemData>,
     config: &Config,
     disable_filters: bool,
+    zkb_items: ItemFrequencies,
 ) -> Vec<PairCalculatedDataSellSell> {
     pairs
         .into_iter()
         .filter_map(|x| {
+            let item_lose_popularity = *zkb_items.items.get(&x.desc.type_id).unwrap_or(&0);
+            let period_days = (zkb_items.period_seconds as f64) / 60. / 60. / 24.;
+            let lost_per_day = item_lose_popularity as f64 / period_days;
+
             let src_mkt_orders = x.source.orders.clone();
             let src_volume_on_market = src_mkt_orders.iter().sell_order_volume();
 
@@ -40,11 +48,11 @@ pub fn get_good_items_sell_sell(
             let common = prepare_sell_sell(
                 config,
                 x,
-                dst_avgs.volume,
                 src_volume_on_market,
                 src_avgs,
                 dst_volume_on_market,
                 dst_avgs,
+                lost_per_day,
             );
 
             Some(PairCalculatedDataSellSell { common })
@@ -54,7 +62,13 @@ pub fn get_good_items_sell_sell(
             disable_filters
                 || x.src_avgs.map(|x| x.volume).unwrap_or(0f64)
                     > config.common.sell_sell.min_src_volume
-                    && x.dst_avgs.volume > config.common.sell_sell.min_dst_volume
+                    && (x.dst_avgs.volume > config.common.sell_sell.min_dst_volume
+                        || x.common.lost_per_day
+                            > config
+                                .common
+                                .sell_sell
+                                .sell_sell_zkb
+                                .min_dst_zkb_lost_volume)
                     && config
                         .common
                         .min_profit
@@ -79,17 +93,18 @@ pub fn make_table_sell_sell<'b>(
 ) -> Vec<Row<'b>> {
     let rows = std::iter::once(Row::new(vec![
         TableCell::new("id"),
-        TableCell::new("item name"),
-        TableCell::new("src prc"),
-        TableCell::new("dst prc"),
-        TableCell::new("expenses"),
-        TableCell::new("sell prc"),
-        TableCell::new("margin"),
+        TableCell::new("itm nm"),
+        TableCell::new("src p"),
+        TableCell::new("dst p"),
+        TableCell::new("expns"),
+        TableCell::new("sll p"),
+        TableCell::new("mrgn"),
         TableCell::new("vlm src"),
         TableCell::new("vlm dst"),
         TableCell::new("mkt src"),
         TableCell::new("mkt dst"),
-        TableCell::new("rough prft"),
+        TableCell::new("lst"),
+        TableCell::new("rgh prft"),
         TableCell::new("rcmnd vlm"),
         TableCell::new("fld fr dy"),
     ]))
@@ -111,6 +126,7 @@ pub fn make_table_sell_sell<'b>(
             TableCell::new(format!("{:.2}", it.dst_avgs.volume)),
             TableCell::new(format!("{:.2}", it.market_src_volume)),
             TableCell::new(format!("{:.2}", it.market_dest_volume)),
+            TableCell::new(format!("{:.2}", it.lost_per_day)),
             TableCell::new(format!("{:.2}", it.rough_profit)),
             TableCell::new(format!("{}", it.recommend_buy)),
             TableCell::new(
