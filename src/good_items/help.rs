@@ -200,13 +200,14 @@ pub fn calculate_weighted_price(config: &Config, history: &[ItemHistoryDay]) -> 
         .take(config.common.days_average)
         .collect::<Vec<_>>();
 
-    let sum_volume = last_n_days.iter().map(|x| x.volume).sum::<i64>() as f64;
+    let sum_volume = to_not_nan(last_n_days.iter().map(|x| x.volume).sum::<i64>() as f64);
 
-    last_n_days
-        .iter()
-        .map(|x| x.average.unwrap() * x.volume as f64)
-        .sum::<f64>()
-        / sum_volume
+    *(to_not_nan(
+        last_n_days
+            .iter()
+            .map(|x| x.average.unwrap() * x.volume as f64)
+            .sum::<f64>(),
+    ) / sum_volume)
 }
 
 pub fn match_buy_orders_profit(

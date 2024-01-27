@@ -31,7 +31,7 @@ use crate::{
 };
 
 pub async fn compute_sell_sell<'a>(
-    pairs: Vec<SystemMarketsItemData>,
+    mut pairs: Vec<SystemMarketsItemData>,
     config: &Config,
     disable_filters: bool,
     simple_list: &mut Vec<SimpleDisplay>,
@@ -40,9 +40,57 @@ pub async fn compute_sell_sell<'a>(
     force_no_refresh: bool,
     esi_requests: EsiRequestsService<'a>,
     esi_config: &Configuration,
+    data_service: DatadumpService,
 ) -> anyhow::Result<Vec<Row<'a>>> {
+    let exclude_group_ids = config
+        .common
+        .sell_sell
+        .exclude_groups
+        .as_ref()
+        .map(|exclude_groups| data_service.get_group_ids_for_groups(exclude_groups))
+        .transpose()?;
+    log::debug!("Sell sell exclude groups {exclude_group_ids:?}");
+
+    let include_group_ids = config
+        .common
+        .sell_sell
+        .include_groups
+        .as_ref()
+        .map(|include_groups| data_service.get_group_ids_for_groups(include_groups))
+        .transpose()?;
+    log::debug!("Sell sell include groups {include_group_ids:?}");
+
+    pairs.retain_mut(|pair| {
+        let x = include_group_ids
+            .as_ref()
+            .map(|include_group_ids| {
+                pair.desc
+                    .market_group_id
+                    .map(|market_group_id| include_group_ids.contains(&market_group_id))
+                    .unwrap_or(false)
+            })
+            .unwrap_or(true)
+            && exclude_group_ids
+                .as_ref()
+                .map(|exclude_group_ids| {
+                    pair.desc
+                        .market_group_id
+                        .map(|market_group_id| !exclude_group_ids.contains(&market_group_id))
+                        .unwrap_or(true)
+                })
+                .unwrap_or(true);
+        log::debug!(
+            "Item {}, market group id {:?}, excluded: {}",
+            pair.desc.name,
+            pair.desc.market_group_id,
+            !x
+        );
+        x
+    });
+
     let kms =
         get_zkb_frequencies(config, cache, force_no_refresh, esi_requests, esi_config).await?;
+
     let good_items = get_good_items_sell_sell(pairs, config, disable_filters, kms)?;
     *simple_list = good_items
         .items
@@ -274,7 +322,7 @@ pub async fn compute_pairs<'a>(
         .common
         .include_groups
         .as_ref()
-        .map(|x| {
+        .map(|x| -> anyhow::Result<Vec<i32>> {
             let groups = x
                 .iter()
                 .map(|name| {
@@ -282,11 +330,11 @@ pub async fn compute_pairs<'a>(
 
                     Ok(children)
                 })
-                .collect::<error::Result<Vec<_>>>()?
+                .collect::<anyhow::Result<Vec<_>>>()?
                 .into_iter()
                 .flatten()
                 .collect::<Vec<_>>();
-            error::Result::Ok(groups)
+            Ok(groups)
         })
         .transpose()?;
     Ok(pairs

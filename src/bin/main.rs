@@ -167,6 +167,7 @@ async fn run() -> Result<(), anyhow::Error> {
                 force_no_refresh,
                 esi_requests,
                 &esi_config,
+                data_service,
             )
             .await?
         } else if reprocess_flag {
@@ -234,12 +235,18 @@ fn compute_reprocess_rows<'b>(
 fn print_simple_list_with_price(simple_list: Vec<SimpleDisplay>) {
     let rows = simple_list
         .iter()
-        .map(|it| {
-            Row::new(vec![
+        .enumerate()
+        .flat_map(|(i, it)| {
+            let mut rows = Vec::new();
+            if i % 100 == 99 {
+                rows.push(Row::new(vec![TableCell::new_with_col_span("---", 3)]));
+            }
+            rows.push(Row::new(vec![
                 TableCell::new(it.name.clone()),
                 TableCell::new(it.recommend_buy),
                 TableCell::new(format!("{:.2}", it.sell_price)),
-            ])
+            ]));
+            rows.into_iter()
         })
         .collect::<Vec<_>>();
 
@@ -256,11 +263,17 @@ fn print_simple_list_with_price(simple_list: Vec<SimpleDisplay>) {
 fn print_simple_list(simple_list: &[SimpleDisplay]) {
     let rows = simple_list
         .iter()
-        .map(|it| {
-            Row::new(vec![
+        .enumerate()
+        .flat_map(|(i, it)| {
+            let mut rows = Vec::new();
+            if i % 100 == 99 {
+                rows.push(Row::new(vec![TableCell::new_with_col_span("---", 2)]));
+            }
+            rows.push(Row::new(vec![
                 TableCell::new(it.name.clone()),
                 TableCell::new(it.recommend_buy),
-            ])
+            ]));
+            rows.into_iter()
         })
         .collect::<Vec<_>>();
 

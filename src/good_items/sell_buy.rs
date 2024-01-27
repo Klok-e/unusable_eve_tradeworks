@@ -21,7 +21,7 @@ pub fn get_good_items_sell_buy(
         .filter_map(|x| calculate_pairs(x, config))
         .filter(|x| disable_filters || x.margin > config.common.margin_cutoff)
         .collect::<Vec<_>>()
-        .take_maximizing_profit(config.common.sell_buy.cargo_capacity)
+        .take_maximizing_profit(config.common.cargo_capacity)
 }
 
 fn calculate_pairs(x: SystemMarketsItemData, config: &Config) -> Option<PairCalculatedDataSellBuy> {

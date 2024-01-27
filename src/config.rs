@@ -50,7 +50,7 @@ pub struct CommonConfig {
     pub min_profit: Option<f64>,
     pub include_groups: Option<Vec<String>>,
     pub sell_sell: ConfigSellSell,
-    pub sell_buy: ConfigSellBuy,
+    pub cargo_capacity: i32,
     pub sell_reprocess: ConfigSellReprocess,
     pub stations: Vec<Station>,
 }
@@ -75,17 +75,17 @@ pub struct ConfigSellSell {
     pub freight_cost_iskm3: f64,
     pub freight_cost_collateral_percent: f64,
     pub sell_sell_zkb: ConfigSellSellZkb,
+    pub markup_if_no_orders_dest: f64,
+    pub dst_ignore_orders_under_volume_pct: f64,
+    pub exclude_groups: Option<Vec<String>>,
+    pub include_groups: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConfigSellSellZkb {
     pub min_dst_zkb_lost_volume: f64,
     pub zkb_download_pages: u32,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ConfigSellBuy {
-    pub cargo_capacity: i32,
+    pub zkb_losses_volume_multiplier: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

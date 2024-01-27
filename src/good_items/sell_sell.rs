@@ -10,10 +10,8 @@ use crate::{
     zkb::killmails::ItemFrequencies,
 };
 
-use super::help::DataVecExt;
-use super::help::{
-    self, calculate_item_averages, calculate_optimal_buy_volume, calculate_weighted_price,
-};
+use super::help::{self, calculate_item_averages, calculate_optimal_buy_volume};
+use super::help::{DataVecExt};
 
 pub fn get_good_items_sell_sell(
     pairs: Vec<SystemMarketsItemData>,
@@ -34,23 +32,8 @@ pub fn get_good_items_sell_sell(
             let dst_mkt_orders = x.destination.orders.clone();
             let dst_volume_on_market = dst_mkt_orders.iter().sell_order_volume();
 
-            let src_avgs = calculate_item_averages(config, &x.source.history).or_else(|| {
-                log::debug!(
-                    "Item {} ({}) doesn't have any history in source.",
-                    x.desc.name,
-                    x.desc.type_id
-                );
-                None
-            });
-            let dst_avgs =
-                calculate_item_averages(config, &x.destination.history).or_else(|| {
-                    log::debug!(
-                        "Item {} ({}) doesn't have any history in destination.",
-                        x.desc.name,
-                        x.desc.type_id
-                    );
-                    None
-                })?;
+            let src_avgs = calculate_item_averages(config, &x.source.history).or_else(|| None);
+            let dst_avgs = calculate_item_averages(config, &x.destination.history).or_else(|| None);
 
             let common = prepare_sell_sell(
                 config,
@@ -60,7 +43,7 @@ pub fn get_good_items_sell_sell(
                 dst_volume_on_market,
                 dst_avgs,
                 lost_per_day,
-            );
+            )?;
 
             Some(common)
         })
@@ -68,14 +51,15 @@ pub fn get_good_items_sell_sell(
         .filter(|x| {
             disable_filters
                 || x.src_avgs.map(|x| x.volume).unwrap_or(0f64)
-                    > config.common.sell_sell.min_src_volume
-                    && (x.dst_avgs.volume > config.common.sell_sell.min_dst_volume
-                        || x.lost_per_day
-                            > config
-                                .common
-                                .sell_sell
-                                .sell_sell_zkb
-                                .min_dst_zkb_lost_volume)
+                    >= config.common.sell_sell.min_src_volume
+                    && x.dst_avgs.map(|x| x.volume).unwrap_or(0f64)
+                        >= config.common.sell_sell.min_dst_volume
+                    && x.lost_per_day
+                        >= config
+                            .common
+                            .sell_sell
+                            .sell_sell_zkb
+                            .min_dst_zkb_lost_volume
                     && config
                         .common
                         .min_profit
@@ -90,7 +74,7 @@ pub fn get_good_items_sell_sell(
                 }
         })
         .collect::<Vec<_>>()
-        .take_maximizing_profit(config.common.sell_buy.cargo_capacity)
+        .take_maximizing_profit(config.common.cargo_capacity)
 }
 
 pub fn make_table_sell_sell<'b>(
@@ -111,8 +95,8 @@ pub fn make_table_sell_sell<'b>(
         TableCell::new("mkt dst"),
         TableCell::new("lst"),
         TableCell::new("rgh prft"),
-        TableCell::new("rcmnd vlm"),
-        TableCell::new("fld fr dy"),
+        TableCell::new("buy"),
+        TableCell::new("fld"),
     ]))
     .chain(good_items.items.iter().map(|it| {
         let it = &it.item;
@@ -130,7 +114,10 @@ pub fn make_table_sell_sell<'b>(
                 "{:.2}",
                 it.src_avgs.map(|x| x.volume).unwrap_or(0f64)
             )),
-            TableCell::new(format!("{:.2}", it.dst_avgs.volume)),
+            TableCell::new(format!(
+                "{:.2}",
+                it.dst_avgs.map(|x| x.volume).unwrap_or(0f64)
+            )),
             TableCell::new(format!("{:.2}", it.market_src_volume)),
             TableCell::new(format!("{:.2}", it.market_dest_volume)),
             TableCell::new(format!("{:.2}", it.lost_per_day)),
@@ -170,7 +157,7 @@ pub struct PairCalculatedDataSellSell {
     pub src_buy_price: f64,
     pub dest_min_sell_price: f64,
     pub src_avgs: Option<ItemTypeAveraged>,
-    pub dst_avgs: ItemTypeAveraged,
+    pub dst_avgs: Option<ItemTypeAveraged>,
     pub market_src_volume: i64,
     pub lost_per_day: f64,
 }
@@ -192,25 +179,50 @@ pub fn prepare_sell_sell(
     src_volume_on_market: i64,
     src_avgs: Option<ItemTypeAveraged>,
     dst_volume_on_market: i64,
-    dst_avgs: ItemTypeAveraged,
+    dst_avgs: Option<ItemTypeAveraged>,
     lost_per_day: f64,
-) -> PairCalculatedDataSellSell {
-    let dst_lowest_sell_order = market_data
-        .destination
-        .orders
-        .iter()
-        .filter(|x| !x.is_buy_order)
-        .map(|x| to_not_nan(x.price))
-        .min()
-        .map(|x| *x);
-    let dst_weighted_price = calculate_weighted_price(config, &market_data.destination.history);
-    let dest_sell_price =
-        dst_lowest_sell_order.map_or(dst_weighted_price, |x| x.min(dst_weighted_price));
+) -> Option<PairCalculatedDataSellSell> {
+    let src_lowest_sell_order = market_data.source.orders.iter().sell_order_min_price()?;
 
-    let expected_item_volume_per_day = dst_avgs.volume.max(lost_per_day);
+    let dst_lowest_sell_order = if let Some(dst_avgs) = dst_avgs {
+        market_data
+            .destination
+            .orders
+            .iter()
+            .get_lowest_sell_order_over_volume(
+                dst_avgs.volume * config.common.sell_sell.dst_ignore_orders_under_volume_pct,
+            )
+    } else {
+        market_data.destination.orders.iter().sell_order_min_price()
+    };
+
+    let sell_with_markup =
+        src_lowest_sell_order * (1. + config.common.sell_sell.markup_if_no_orders_dest);
+    let dest_sell_price = match dst_lowest_sell_order {
+        Some(x) => (x * 0.999).min(sell_with_markup),
+        None => sell_with_markup,
+    };
+
+    let expected_item_volume_per_day = match dst_avgs {
+        Some(x) => x.volume.max(
+            lost_per_day
+                * config
+                    .common
+                    .sell_sell
+                    .sell_sell_zkb
+                    .zkb_losses_volume_multiplier,
+        ),
+        None => {
+            lost_per_day
+                * config
+                    .common
+                    .sell_sell
+                    .sell_sell_zkb
+                    .zkb_losses_volume_multiplier
+        }
+    };
 
     let max_buy_vol = (expected_item_volume_per_day * config.common.sell_sell.rcmnd_fill_days)
-        .max(1.)
         .min(src_volume_on_market as f64)
         .floor() as i64;
     let (buy_from_src_price, buy_from_src_volume) = calculate_optimal_buy_volume(
@@ -229,9 +241,18 @@ pub fn prepare_sell_sell(
         dest_sell_price * (1. - config.route.destination.broker_fee - config.common.sales_tax);
     let margin = (sell_price_with_taxes - expenses) / expenses;
     let rough_profit = (sell_price_with_taxes - expenses) * buy_from_src_volume as f64;
-    let filled_for_days =
-        (dst_avgs.volume > 0.).then_some(1. / dst_avgs.volume * dst_volume_on_market as f64);
-    PairCalculatedDataSellSell {
+
+    let filled_for_days = if dst_volume_on_market == 0 {
+        Some(0.)
+    } else if expected_item_volume_per_day > 0. {
+        Some(*to_not_nan(
+            1. / expected_item_volume_per_day * dst_volume_on_market as f64,
+        ))
+    } else {
+        None
+    };
+
+    Some(PairCalculatedDataSellSell {
         market: market_data,
         margin,
         rough_profit,
@@ -246,5 +267,5 @@ pub fn prepare_sell_sell(
         src_avgs,
         dst_avgs,
         lost_per_day,
-    }
+    })
 }

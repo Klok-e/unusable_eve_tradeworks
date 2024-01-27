@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 
+use anyhow::anyhow;
 use rusqlite::{Connection, Result};
 
 #[derive(Debug)]
@@ -14,13 +15,44 @@ impl DatadumpService {
         }
     }
 
-    pub fn get_all_group_id_with_root_name(&self, name: &str) -> Result<Vec<i32>> {
-        let group_id = self.conn.lock().unwrap().query_row(
-            "SELECT marketGroupID FROM invMarketGroups WHERE marketGroupName like '%' || ? || '%' and parentGroupID  is NULL",
-            [name,],
-            |row| row.get(0),
-        )?;
-        let children = self.get_child_groups_parent(group_id)?;
+    pub fn get_group_ids_for_groups(
+        &self,
+        groups: &Vec<String>,
+    ) -> Result<Vec<i32>, anyhow::Error> {
+        log::debug!("get_group_ids_for_groups {groups:?}");
+        let groups = groups
+            .iter()
+            .map(|name| {
+                let children = self.get_all_group_id_with_root_name(name.as_str())?;
+
+                Ok(children)
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+        Ok(groups)
+    }
+
+    pub fn get_all_group_id_with_root_name(&self, name: &str) -> anyhow::Result<Vec<i32>> {
+        let group_ids: Vec<i32> = {
+            let connection = self.conn.lock().unwrap();
+            let mut statement = connection
+                .prepare("SELECT marketGroupID FROM invMarketGroups WHERE description = ? or marketGroupName = ?")?;
+            let groups = statement.query([name, name])?;
+            groups.mapped(|x| x.get(0)).collect::<Result<Vec<_>>>()?
+        };
+        if group_ids.len() > 1 {
+            log::warn!("Multiple group ids found for item {name}: {group_ids:?}");
+        }
+
+        let group_id = group_ids
+            .first()
+            .ok_or_else(|| anyhow!("No group id found for name {name}"))?;
+
+        log::debug!("group_id of group {name} is {group_id}");
+
+        let children = self.get_child_groups_parent(*group_id)?;
         Ok(children)
     }
 
@@ -38,16 +70,17 @@ impl DatadumpService {
             let groups = statement.query([parent_id])?;
             groups.mapped(|x| x.get(0)).collect::<Result<Vec<_>>>()?
         };
+        log::debug!("children of group {parent_id} are: {groups:?}");
 
         let groups = groups
             .iter()
             .map(|&group| {
                 self.get_child_groups_parent(group)
-                    .map(|x| x.into_iter().chain(std::iter::once(group)))
             })
             .collect::<Result<Vec<_>>>()?
             .into_iter()
             .flatten()
+            .chain(std::iter::once(parent_id))
             .collect();
 
         Ok(groups)
