@@ -10,8 +10,8 @@ use crate::{
     zkb::killmails::ItemFrequencies,
 };
 
+use super::help::DataVecExt;
 use super::help::{self, calculate_item_averages, calculate_optimal_buy_volume};
-use super::help::{DataVecExt};
 
 pub fn get_good_items_sell_sell(
     pairs: Vec<SystemMarketsItemData>,
@@ -32,8 +32,8 @@ pub fn get_good_items_sell_sell(
             let dst_mkt_orders = x.destination.orders.clone();
             let dst_volume_on_market = dst_mkt_orders.iter().sell_order_volume();
 
-            let src_avgs = calculate_item_averages(config, &x.source.history).or_else(|| None);
-            let dst_avgs = calculate_item_averages(config, &x.destination.history).or_else(|| None);
+            let src_avgs = calculate_item_averages(config, &x.source.history).or(None);
+            let dst_avgs = calculate_item_averages(config, &x.destination.history).or(None);
 
             let common = prepare_sell_sell(
                 config,

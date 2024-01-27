@@ -74,9 +74,7 @@ impl DatadumpService {
 
         let groups = groups
             .iter()
-            .map(|&group| {
-                self.get_child_groups_parent(group)
-            })
+            .map(|&group| self.get_child_groups_parent(group))
             .collect::<Result<Vec<_>>>()?
             .into_iter()
             .flatten()
