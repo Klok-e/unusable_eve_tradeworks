@@ -14,7 +14,7 @@ pub struct ItemProfitData {
     pub single_item_volume_m3: f64,
     pub expenses: f64,
     pub sell_price: f64,
-    pub max_profitable_buy: i64,
+    pub max_profitable_buy_size: i64,
 }
 
 #[derive(Debug)]
@@ -55,7 +55,7 @@ where
             let var_def = variable()
                 .integer()
                 .min(0)
-                .max(item.max_profitable_buy as i32);
+                .max(item.max_profitable_buy_size as i32);
             var_refs.push(vars.add(var_def));
         }
 
@@ -101,13 +101,13 @@ where
                     item,
                 }
             })
-            .filter(|x: &ProcessedItemProfitData<_>| x.profit_data.max_profitable_buy > 0)
+            .filter(|x: &ProcessedItemProfitData<_>| x.recommend_buy > 0)
             .sorted_unstable_by_key(|x| NotNan::new(-x.rough_profit).unwrap())
             .collect::<Vec<_>>();
 
         let volume = recommended_items
             .iter()
-            .map(|x| x.profit_data.single_item_volume_m3 * x.profit_data.max_profitable_buy as f64)
+            .map(|x| x.profit_data.single_item_volume_m3 * x.recommend_buy as f64)
             .sum::<f64>() as i32;
         Ok(ProfitableItemsSummary {
             items: recommended_items,

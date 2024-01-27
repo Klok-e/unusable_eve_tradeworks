@@ -208,7 +208,7 @@ impl From<PairCalculatedDataSellBuy> for help::ItemProfitData {
             single_item_volume_m3: value.market.desc.volume as f64,
             expenses: value.expenses,
             sell_price: value.sell_price,
-            max_profitable_buy: value.max_profitable_buy_volume,
+            max_profitable_buy_size: value.max_profitable_buy_volume,
         }
     }
 }
