@@ -43,13 +43,13 @@ pub async fn compute_sell_sell<'a>(
 ) -> anyhow::Result<Vec<Row<'a>>> {
     let kms =
         get_zkb_frequencies(config, cache, force_no_refresh, esi_requests, esi_config).await?;
-    let good_items = get_good_items_sell_sell(pairs, config, disable_filters, kms);
-    *simple_list = good_items
+    let good_items = get_good_items_sell_sell(pairs, config, disable_filters, kms)?;
+    *simple_list = good_items.items
         .iter()
         .map(|x| SimpleDisplay {
-            name: x.market.desc.name.clone(),
+            name: x.item.market.desc.name.clone(),
             recommend_buy: x.recommend_buy,
-            sell_price: x.dest_min_sell_price,
+            sell_price: x.item.dest_min_sell_price,
         })
         .collect();
     Ok(make_table_sell_sell(&good_items, name_len))
