@@ -10,12 +10,12 @@ use crate::{
     order_ext::OrderIterExt,
 };
 
-use super::help::{self, averages, DataVecExt};
+use super::help::{self, calculate_item_averages, DataVecExt};
 pub fn get_good_items_sell_buy(
     pairs: Vec<SystemMarketsItemData>,
     config: &Config,
     disable_filters: bool,
-) -> Result<help::ProcessedSellBuyItems<PairCalculatedDataSellBuy>, anyhow::Error> {
+) -> Result<help::ProfitableItemsSummary<PairCalculatedDataSellBuy>, anyhow::Error> {
     pairs
         .into_iter()
         .filter_map(|x| calculate_pairs(x, config))
@@ -31,8 +31,8 @@ fn calculate_pairs(x: SystemMarketsItemData, config: &Config) -> Option<PairCalc
     let dst_mkt_orders = x.destination.orders.clone();
     let dst_mkt_volume = dst_mkt_orders.iter().sell_order_volume();
 
-    let src_avgs = averages(config, &x.source.history);
-    let dst_avgs = averages(config, &x.destination.history);
+    let src_avgs = calculate_item_averages(config, &x.source.history);
+    let dst_avgs = calculate_item_averages(config, &x.destination.history);
 
     let (max_profitable_buy_volume, dest_sell_price, max_buy_price, avg_buy_price) =
         calculate_prices_volumes(&x, config)?;
@@ -126,7 +126,7 @@ fn calculate_prices_volumes(
 }
 
 pub fn make_table_sell_buy<'b>(
-    good_items: &help::ProcessedSellBuyItems<PairCalculatedDataSellBuy>,
+    good_items: &help::ProfitableItemsSummary<PairCalculatedDataSellBuy>,
     name_length: usize,
 ) -> Vec<Row<'b>> {
     let rows = std::iter::once(Row::new(vec![
@@ -169,7 +169,7 @@ pub fn make_table_sell_buy<'b>(
             TableCell::new(format!("{:.2}", item.market_dest_volume)),
             TableCell::new(format!("{:.2}", it.rough_profit)),
             TableCell::new(format!("{}", it.recommend_buy)),
-            TableCell::new(format!("{}", it.m3_volume)),
+            TableCell::new(format!("{}", it.volume_m3)),
         ])
     }))
     .chain(std::iter::once(Row::new(vec![
@@ -181,7 +181,7 @@ pub fn make_table_sell_buy<'b>(
     ])))
     .chain(std::iter::once(Row::new(vec![
         TableCell::new("total volume"),
-        TableCell::new_with_col_span(good_items.sum_volume.to_formatted_string(&Locale::fr), 13),
+        TableCell::new_with_col_span(good_items.total_volume.to_formatted_string(&Locale::fr), 13),
     ])))
     .collect::<Vec<_>>();
     rows
@@ -202,9 +202,9 @@ pub struct PairCalculatedDataSellBuy {
     market_src_volume: i64,
 }
 
-impl From<PairCalculatedDataSellBuy> for help::PairCalculatedDataSellBuyFinal {
+impl From<PairCalculatedDataSellBuy> for help::ItemProfitData {
     fn from(value: PairCalculatedDataSellBuy) -> Self {
-        help::PairCalculatedDataSellBuyFinal {
+        help::ItemProfitData {
             single_item_desc_volume: value.market.desc.volume as f64,
             expenses: value.expenses,
             sell_price: value.sell_price,

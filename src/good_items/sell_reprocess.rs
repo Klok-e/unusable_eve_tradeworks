@@ -12,7 +12,7 @@ use crate::{
     order_ext::OrderIterExt,
 };
 
-use super::help::{averages, match_buy_from_sell_orders, match_buy_orders_profit};
+use super::help::{calculate_item_averages, match_buy_from_sell_orders, match_buy_orders_profit};
 
 pub fn get_good_items_sell_reprocess(
     pairs: Vec<SystemMarketsItemData>,
@@ -95,8 +95,8 @@ fn process_item_pair(
     let dst_mkt_orders = x.destination.orders.clone();
     let dst_mkt_volume = dst_mkt_orders.iter().sell_order_volume();
 
-    let src_avgs = averages(config, &x.source.history);
-    let dst_avgs = averages(config, &x.destination.history);
+    let src_avgs = calculate_item_averages(config, &x.source.history);
+    let dst_avgs = calculate_item_averages(config, &x.destination.history);
 
     let (
         recommend_buy_vol,

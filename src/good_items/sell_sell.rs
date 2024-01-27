@@ -7,7 +7,7 @@ use crate::{
     zkb::killmails::ItemFrequencies,
 };
 
-use super::help::{averages, prepare_sell_sell, PairCalculatedDataSellSellCommon};
+use super::help::{calculate_item_averages, prepare_sell_sell, PairCalculatedDataSellSellCommon};
 
 pub fn get_good_items_sell_sell(
     pairs: Vec<SystemMarketsItemData>,
@@ -28,7 +28,7 @@ pub fn get_good_items_sell_sell(
             let dst_mkt_orders = x.destination.orders.clone();
             let dst_volume_on_market = dst_mkt_orders.iter().sell_order_volume();
 
-            let src_avgs = averages(config, &x.source.history).or_else(|| {
+            let src_avgs = calculate_item_averages(config, &x.source.history).or_else(|| {
                 log::debug!(
                     "Item {} ({}) doesn't have any history in source.",
                     x.desc.name,
@@ -36,14 +36,15 @@ pub fn get_good_items_sell_sell(
                 );
                 None
             });
-            let dst_avgs = averages(config, &x.destination.history).or_else(|| {
-                log::debug!(
-                    "Item {} ({}) doesn't have any history in destination.",
-                    x.desc.name,
-                    x.desc.type_id
-                );
-                None
-            })?;
+            let dst_avgs =
+                calculate_item_averages(config, &x.destination.history).or_else(|| {
+                    log::debug!(
+                        "Item {} ({}) doesn't have any history in destination.",
+                        x.desc.name,
+                        x.desc.type_id
+                    );
+                    None
+                })?;
 
             let common = prepare_sell_sell(
                 config,

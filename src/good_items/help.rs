@@ -10,7 +10,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy)]
-pub struct PairCalculatedDataSellBuyFinal {
+pub struct ItemProfitData {
     pub single_item_desc_volume: f64,
     pub expenses: f64,
     pub sell_price: f64,
@@ -18,40 +18,40 @@ pub struct PairCalculatedDataSellBuyFinal {
 }
 
 #[derive(Debug)]
-pub struct PairCalculatedDataSellBuyFinal2<T> {
-    pub calcs: PairCalculatedDataSellBuyFinal,
-    pub m3_volume: i64,
+pub struct ProcessedItemProfitData<T> {
+    pub calcs: ItemProfitData,
+    pub volume_m3: i64,
     pub recommend_buy: i64,
     pub rough_profit: f64,
     pub item: T,
 }
 
-pub struct ProcessedSellBuyItems<T> {
-    pub items: Vec<PairCalculatedDataSellBuyFinal2<T>>,
+pub struct ProfitableItemsSummary<T> {
+    pub items: Vec<ProcessedItemProfitData<T>>,
     pub sum_profit: f64,
-    pub sum_volume: i32,
+    pub total_volume: i32,
 }
 
 pub trait DataVecExt<T> {
     fn take_maximizing_profit(
         self,
         max_cargo: i32,
-    ) -> Result<ProcessedSellBuyItems<T>, anyhow::Error>;
+    ) -> Result<ProfitableItemsSummary<T>, anyhow::Error>;
 }
 
 impl<T> DataVecExt<T> for Vec<T>
 where
-    T: Into<PairCalculatedDataSellBuyFinal> + Clone,
+    T: Into<ItemProfitData> + Clone,
 {
     fn take_maximizing_profit(
         self,
         max_cargo: i32,
-    ) -> Result<ProcessedSellBuyItems<T>, anyhow::Error> {
+    ) -> Result<ProfitableItemsSummary<T>, anyhow::Error> {
         use good_lp::{default_solver, variable, Expression, ProblemVariables, Solution, Variable};
         let mut vars = ProblemVariables::new();
         let mut var_refs = Vec::new();
         for item in &self {
-            let item: PairCalculatedDataSellBuyFinal = (*item).clone().into();
+            let item: ItemProfitData = (*item).clone().into();
             let var_def = variable()
                 .integer()
                 .min(0)
@@ -63,7 +63,7 @@ where
             .iter()
             .zip(self.iter())
             .map(|(&var, item): (&Variable, &T)| -> Expression {
-                let item: PairCalculatedDataSellBuyFinal = (item.clone()).into();
+                let item: ItemProfitData = (item.clone()).into();
                 (item.sell_price - item.expenses) * var
             })
             .sum::<Expression>();
@@ -72,7 +72,7 @@ where
             .iter()
             .zip(self.iter())
             .map(|(&var, item): (&Variable, &T)| -> Expression {
-                let item: PairCalculatedDataSellBuyFinal = (item.clone()).into();
+                let item: ItemProfitData = (item.clone()).into();
                 item.single_item_desc_volume * var
             })
             .sum::<Expression>()
@@ -85,26 +85,23 @@ where
         let recommended_items = var_refs
             .into_iter()
             .zip(self)
-            .map(
-                |(var, item): (Variable, T)| -> PairCalculatedDataSellBuyFinal2<_> {
-                    let optimal = solution.value(var);
-                    let recommend_buy = optimal as i64;
+            .map(|(var, item): (Variable, T)| -> ProcessedItemProfitData<_> {
+                let optimal = solution.value(var);
+                let recommend_buy = optimal as i64;
 
-                    let item_converted: PairCalculatedDataSellBuyFinal = (item.clone()).into();
+                let item_converted: ItemProfitData = (item.clone()).into();
 
-                    let volume =
-                        (recommend_buy as f64 * item_converted.single_item_desc_volume) as i64;
-                    PairCalculatedDataSellBuyFinal2 {
-                        calcs: item_converted,
-                        rough_profit: (item_converted.sell_price - item_converted.expenses)
-                            * recommend_buy as f64,
-                        recommend_buy,
-                        m3_volume: volume,
-                        item,
-                    }
-                },
-            )
-            .filter(|x: &PairCalculatedDataSellBuyFinal2<_>| x.calcs.max_profitable_buy > 0)
+                let volume = (recommend_buy as f64 * item_converted.single_item_desc_volume) as i64;
+                ProcessedItemProfitData {
+                    calcs: item_converted,
+                    rough_profit: (item_converted.sell_price - item_converted.expenses)
+                        * recommend_buy as f64,
+                    recommend_buy,
+                    volume_m3: volume,
+                    item,
+                }
+            })
+            .filter(|x: &ProcessedItemProfitData<_>| x.calcs.max_profitable_buy > 0)
             .sorted_unstable_by_key(|x| NotNan::new(-x.rough_profit).unwrap())
             .collect::<Vec<_>>();
 
@@ -112,16 +109,16 @@ where
             .iter()
             .map(|x| x.calcs.single_item_desc_volume * x.calcs.max_profitable_buy as f64)
             .sum::<f64>() as i32;
-        Ok(ProcessedSellBuyItems {
+        Ok(ProfitableItemsSummary {
             items: recommended_items,
             sum_profit: solution.eval(&goal),
-            sum_volume: volume,
+            total_volume: volume,
         })
     }
 }
 
-pub fn best_buy_volume_from_sell_to_sell(
-    x: &[Order],
+pub fn calculate_optimal_buy_volume(
+    orders: &[Order],
     recommend_buy_vol: i64,
     sell_price: f64,
     buy_broker_fee: f64,
@@ -130,7 +127,7 @@ pub fn best_buy_volume_from_sell_to_sell(
 ) -> (f64, i64) {
     let mut recommend_bought_volume = 0;
     let mut max_price = 0.;
-    for order in x
+    for order in orders
         .iter()
         .filter(|x| !x.is_buy_order)
         .sorted_by_key(|x| NotNan::new(x.price).unwrap())
@@ -157,7 +154,10 @@ pub fn best_buy_volume_from_sell_to_sell(
     (max_price, recommend_bought_volume)
 }
 
-pub fn averages(config: &Config, history: &[ItemHistoryDay]) -> Option<ItemTypeAveraged> {
+pub fn calculate_item_averages(
+    config: &Config,
+    history: &[ItemHistoryDay],
+) -> Option<ItemTypeAveraged> {
     let last_n_days = history
         .iter()
         .rev()
@@ -193,7 +193,7 @@ pub fn averages(config: &Config, history: &[ItemHistoryDay]) -> Option<ItemTypeA
     }
 }
 
-pub fn weighted_price(config: &Config, history: &[ItemHistoryDay]) -> f64 {
+pub fn calculate_weighted_price(config: &Config, history: &[ItemHistoryDay]) -> f64 {
     let last_n_days = history
         .iter()
         .rev()
@@ -309,7 +309,7 @@ pub fn prepare_sell_sell(
         .map(|x| to_not_nan(x.price))
         .min()
         .map(|x| *x);
-    let dst_weighted_price = weighted_price(config, &market_data.destination.history);
+    let dst_weighted_price = calculate_weighted_price(config, &market_data.destination.history);
     let dest_sell_price =
         dst_lowest_sell_order.map_or(dst_weighted_price, |x| x.min(dst_weighted_price));
 
@@ -319,7 +319,7 @@ pub fn prepare_sell_sell(
         .max(1.)
         .min(src_volume_on_market as f64)
         .floor() as i64;
-    let (buy_from_src_price, buy_from_src_volume) = best_buy_volume_from_sell_to_sell(
+    let (buy_from_src_price, buy_from_src_volume) = calculate_optimal_buy_volume(
         market_data.source.orders.as_slice(),
         max_buy_vol,
         dest_sell_price,
