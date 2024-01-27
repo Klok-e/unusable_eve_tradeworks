@@ -1,6 +1,5 @@
-use itertools::Itertools;
 use num_format::{Locale, ToFormattedString};
-use ordered_float::NotNan;
+
 use term_table::{row::Row, table_cell::TableCell};
 
 use crate::{

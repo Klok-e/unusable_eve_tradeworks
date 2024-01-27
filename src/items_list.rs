@@ -44,7 +44,8 @@ pub async fn compute_sell_sell<'a>(
     let kms =
         get_zkb_frequencies(config, cache, force_no_refresh, esi_requests, esi_config).await?;
     let good_items = get_good_items_sell_sell(pairs, config, disable_filters, kms)?;
-    *simple_list = good_items.items
+    *simple_list = good_items
+        .items
         .iter()
         .map(|x| SimpleDisplay {
             name: x.item.market.desc.name.clone(),
