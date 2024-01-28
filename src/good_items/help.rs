@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use good_lp::SolverModel;
 use itertools::Itertools;
 use ordered_float::NotNan;
@@ -193,21 +194,33 @@ pub fn calculate_item_averages(
     }
 }
 
-pub fn calculate_weighted_price(config: &Config, history: &[ItemHistoryDay]) -> f64 {
+pub fn calculate_weighted_price(
+    config: &Config,
+    history: &[ItemHistoryDay],
+) -> anyhow::Result<f64> {
     let last_n_days = history
         .iter()
         .rev()
         .take(config.common.days_average)
         .collect::<Vec<_>>();
 
-    let sum_volume = to_not_nan(last_n_days.iter().map(|x| x.volume).sum::<i64>() as f64);
+    let sum = last_n_days.iter().map(|x| x.volume).sum::<i64>();
+    if sum == 0 {
+        return Err(anyhow!("Historical volume is zero"));
+    }
 
-    *(to_not_nan(
+    let sum_volume = to_not_nan(sum as f64);
+
+    Ok(*(to_not_nan(
         last_n_days
             .iter()
-            .map(|x| x.average.unwrap() * x.volume as f64)
+            .map(
+                |x| Ok(x.average.ok_or(anyhow!("Item history average is None"))? * x.volume as f64),
+            )
+            .collect::<anyhow::Result<Vec<_>>>()?
+            .iter()
             .sum::<f64>(),
-    ) / sum_volume)
+    ) / sum_volume))
 }
 
 pub fn match_buy_orders_profit(

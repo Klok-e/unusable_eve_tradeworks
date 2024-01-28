@@ -12,6 +12,7 @@ use crate::{
     Station, StationIdData,
 };
 use chrono::NaiveDateTime;
+use serde::{Deserialize, Serialize};
 
 use super::error::{EsiApiError, Result};
 use crate::item_type::Order;
@@ -486,6 +487,7 @@ impl<'a> EsiRequestsService<'a> {
             })
             .chain(std::iter::once((km.victim.ship_type_id, 1)));
         Ok(Some(Killmail {
+            km_id: killmail_id,
             items: km_items
                 .group_by(|x| x.0)
                 .into_iter()
@@ -522,7 +524,9 @@ impl<'a> EsiRequestsService<'a> {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Killmail {
+    pub km_id: i32,
     pub items: HashMap<i32, i64>,
     pub time: NaiveDateTime,
 }

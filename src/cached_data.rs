@@ -22,7 +22,7 @@ impl CachedStuff {
         gen: F,
     ) -> Result<T>
     where
-        F: FnOnce() -> FO,
+        F: FnOnce(Option<T>) -> FO,
         FO: Future<Output = Result<T>>,
         T: Serialize + DeserializeOwned,
     {
@@ -38,7 +38,7 @@ impl CachedStuff {
         gen: F,
     ) -> Result<T>
     where
-        F: FnOnce() -> FO,
+        F: FnOnce(Option<T>) -> FO,
         FO: Future<Output = Result<T>>,
         T: Serialize + DeserializeOwned,
     {
@@ -55,13 +55,14 @@ impl CachedStuff {
         gen: F,
     ) -> Result<T>
     where
-        F: FnOnce() -> FO,
+        F: FnOnce(Option<T>) -> FO,
         FO: Future<Output = Result<T>>,
         T: Serialize + DeserializeOwned,
     {
         let were_depends_updated = depends
             .iter()
             .any(|&x| *self.caches_updated.get(x).unwrap_or(&false));
+        let mut deser_opt: Option<Container<T>> = None;
         if path.exists() && !were_depends_updated {
             let str = std::fs::read(path)?;
             let deser: Result<Container<T>> = match format {
@@ -69,19 +70,22 @@ impl CachedStuff {
                 DataFormat::Bin => rmp_serde::from_read(str.as_slice()).map_err(Into::into),
             };
             match deser {
-                Ok(deser) => match timeout {
-                    Some(timeout) if deser.time + timeout > Utc::now() => {
-                        log::info!("Path {:?} loaded", path);
-                        return Ok(deser.data);
+                Ok(deser) => {
+                    match timeout {
+                        Some(timeout) if deser.time + timeout > Utc::now() => {
+                            log::info!("Path {:?} loaded", path);
+                            return Ok(deser.data);
+                        }
+                        None => {
+                            log::info!("Path {:?} loaded", path);
+                            return Ok(deser.data);
+                        }
+                        _ => {}
                     }
-                    None => {
-                        log::info!("Path {:?} loaded", path);
-                        return Ok(deser.data);
-                    }
-                    _ => {}
-                },
+                    deser_opt = Some(deser);
+                }
                 Err(err) => {
-                    log::warn!("Couldn't deserialize cached value: {err}");
+                    log::warn!("Couldn't deserialize cached value for {path:?}: {err}");
                 }
             }
         }
@@ -89,7 +93,7 @@ impl CachedStuff {
             log::info!("Path {:?} deps were updated", path);
         }
 
-        let cont = self.gen_and_save(&path, gen, format).await?;
+        let cont = self.gen_and_save(&path, gen, format, deser_opt).await?;
         Ok(cont.data)
     }
 
@@ -98,14 +102,15 @@ impl CachedStuff {
         path: &impl AsRef<Path>,
         gen: F,
         format: DataFormat,
+        previous: Option<Container<T>>,
     ) -> Result<Container<T>>
     where
-        F: FnOnce() -> FO,
+        F: FnOnce(Option<T>) -> FO,
         FO: Future<Output = Result<T>>,
         T: Serialize,
     {
         log::info!("Generating path {:?}", path.as_ref());
-        let generated = gen().await?;
+        let generated = gen(previous.map(|x| x.data)).await?;
         let generated = self.save(generated, format, path);
         Ok(generated)
     }

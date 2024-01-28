@@ -79,23 +79,28 @@ async fn run() -> Result<(), anyhow::Error> {
     let esi_requests = EsiRequestsService::new(&esi_config);
 
     let path_to_datadump = cache
-        .load_or_create_json_async(CACHE_DATADUMP, vec![], Some(Duration::days(14)), || async {
-            let client = &esi_config.client;
-            let res = client
-                .get("https://www.fuzzwork.co.uk/dump/sqlite-latest.sqlite.bz2")
-                .send()
-                .await?;
-            let bytes = res.bytes().await?.to_vec();
+        .load_or_create_json_async(
+            CACHE_DATADUMP,
+            vec![],
+            Some(Duration::days(14)),
+            |_| async {
+                let client = &esi_config.client;
+                let res = client
+                    .get("https://www.fuzzwork.co.uk/dump/sqlite-latest.sqlite.bz2")
+                    .send()
+                    .await?;
+                let bytes = res.bytes().await?.to_vec();
 
-            // decompress
-            let mut decompressor = bzip2::read::BzDecoder::new(bytes.as_slice());
-            let mut contents = Vec::new();
-            decompressor.read_to_end(&mut contents).unwrap();
+                // decompress
+                let mut decompressor = bzip2::read::BzDecoder::new(bytes.as_slice());
+                let mut contents = Vec::new();
+                decompressor.read_to_end(&mut contents).unwrap();
 
-            let path = "cache/datadump.db".to_string();
-            std::fs::write(&path, contents)?;
-            Ok(path)
-        })
+                let path = "cache/datadump.db".to_string();
+                std::fs::write(&path, contents)?;
+                Ok(path)
+            },
+        )
         .await?;
 
     let db = rusqlite::Connection::open_with_flags(

@@ -36,55 +36,68 @@ impl<'a> ZkbRequestsService<'a> {
 
     pub async fn get_killmails(
         &self,
+        ent: &ZkillEntity,
+        pages: u32,
+    ) -> Result<KillList, reqwest::Error> {
+        let mut kills = KillList::new();
+
+        for page in 1..=pages {
+            let mut kills_page = self.get_kb_page(ent, page).await?;
+            kills.append(&mut kills_page);
+        }
+        Ok(kills)
+    }
+
+    pub async fn get_kb_page(
+        &self,
         ZkillEntity {
             id: entity_id,
             tp: entity_type,
         }: &ZkillEntity,
-        pages: u32,
-    ) -> Result<KillList, reqwest::Error> {
-        let mut kills = KillList::new();
-        log::info!("Getting killmails...");
-        for pg in 1..=pages {
-            let mut kills_page = retry_smart(|| async {
-                let url = format!(
-                    "https://zkillboard.com/api/losses/{}/{}/page/{}/",
-                    entity_type.zkill_filter_string(),
-                    entity_id,
-                    pg
-                );
-                let response = self.client.get(url.clone()).send().await?;
-                if response.status() == 429 {
-                    log::warn!("Zkill returned status 429. Retrying in 60 seconds...");
-                    return Ok(Retry::Retry);
-                }
+        page: u32,
+    ) -> Result<Vec<Kill>, reqwest::Error> {
+        log::info!("Getting killmails page {page}...");
 
-                let full = response.bytes().await?;
-                let ser_res = serde_json::from_slice(&full);
+        let kills_page = retry_smart(|| async {
+            let url = format!(
+                "https://zkillboard.com/api/losses/{}/{}/page/{}/",
+                entity_type.zkill_filter_string(),
+                entity_id,
+                page
+            );
+            let response = self.client.get(url.clone()).send().await?;
+            if response.status() == 429 {
+                log::warn!("Zkill returned status 429. Retrying in 60 seconds...");
+                return Ok(Retry::Retry);
+            }
 
-                let kills_page = ser_res
-                    .map_err(|e| {
-                        let save_path = "cache/tmp-tst";
-                        log::error!(
-                            "Errorneous url: {}. Zkill server response saved to: {}",
-                            url,
-                            save_path
-                        );
-                        std::fs::write(save_path, &full).unwrap();
-                        e
-                    })
-                    .unwrap();
+            let full = response.bytes().await?;
+            let ser_res = serde_json::from_slice(&full);
 
-                // zkillboard allows only one request per second
-                tokio::time::sleep(std::time::Duration::from_secs_f32(1.)).await;
+            let kills_page = ser_res
+                .map_err(|e| {
+                    let save_path = "cache/tmp-tst";
+                    log::error!(
+                        "Errorneous url: {}. Zkill server response saved to: {}",
+                        url,
+                        save_path
+                    );
+                    std::fs::write(save_path, &full).unwrap();
+                    e
+                })
+                .unwrap();
 
-                Ok(Retry::Success(kills_page))
-            })
-            .await?
-            .unwrap();
-            kills.append(&mut kills_page);
-        }
-        log::info!("{} page of killmails downloaded", pages);
-        Ok(kills)
+            // zkillboard allows only one request per second
+            tokio::time::sleep(std::time::Duration::from_secs_f32(1.)).await;
+
+            Ok(Retry::Success(kills_page))
+        })
+        .await?
+        .unwrap();
+
+        log::info!("{page} page of killmails downloaded");
+
+        Ok(kills_page)
     }
 }
 

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use chrono::Duration;
 use futures::{stream, StreamExt};
@@ -23,7 +23,10 @@ use crate::{
         ItemHistory, ItemOrders, MarketData, SystemMarketsItem, SystemMarketsItemData,
         TypeDescription,
     },
-    requests::{item_history::ItemHistoryEsiService, service::EsiRequestsService},
+    requests::{
+        item_history::ItemHistoryEsiService,
+        service::{EsiRequestsService, Killmail},
+    },
     zkb::{
         killmails::{ItemFrequencies, KillmailService},
         zkb_requests::ZkbRequestsService,
@@ -42,6 +45,29 @@ pub async fn compute_sell_sell<'a>(
     esi_config: &Configuration,
     data_service: DatadumpService,
 ) -> anyhow::Result<Vec<Row<'a>>> {
+    retain_item_groups(config, data_service, &mut pairs)?;
+
+    let kms =
+        get_zkb_frequencies(config, cache, force_no_refresh, esi_requests, esi_config).await?;
+
+    let good_items = get_good_items_sell_sell(pairs, config, disable_filters, kms)?;
+    *simple_list = good_items
+        .items
+        .iter()
+        .map(|x| SimpleDisplay {
+            name: x.item.market.desc.name.clone(),
+            recommend_buy: x.recommend_buy,
+            sell_price: x.item.dest_min_sell_price,
+        })
+        .collect();
+    Ok(make_table_sell_sell(&good_items, name_len))
+}
+
+fn retain_item_groups(
+    config: &Config,
+    data_service: DatadumpService,
+    pairs: &mut Vec<SystemMarketsItemData>,
+) -> Result<(), anyhow::Error> {
     let exclude_group_ids = config
         .common
         .sell_sell
@@ -50,7 +76,6 @@ pub async fn compute_sell_sell<'a>(
         .map(|exclude_groups| data_service.get_group_ids_for_groups(exclude_groups))
         .transpose()?;
     log::debug!("Sell sell exclude groups {exclude_group_ids:?}");
-
     let include_group_ids = config
         .common
         .sell_sell
@@ -59,7 +84,6 @@ pub async fn compute_sell_sell<'a>(
         .map(|include_groups| data_service.get_group_ids_for_groups(include_groups))
         .transpose()?;
     log::debug!("Sell sell include groups {include_group_ids:?}");
-
     pairs.retain_mut(|pair| {
         let x = include_group_ids
             .as_ref()
@@ -87,21 +111,7 @@ pub async fn compute_sell_sell<'a>(
         );
         x
     });
-
-    let kms =
-        get_zkb_frequencies(config, cache, force_no_refresh, esi_requests, esi_config).await?;
-
-    let good_items = get_good_items_sell_sell(pairs, config, disable_filters, kms)?;
-    *simple_list = good_items
-        .items
-        .iter()
-        .map(|x| SimpleDisplay {
-            name: x.item.market.desc.name.clone(),
-            recommend_buy: x.recommend_buy,
-            sell_price: x.item.dest_min_sell_price,
-        })
-        .collect();
-    Ok(make_table_sell_sell(&good_items, name_len))
+    Ok(())
 }
 
 async fn get_zkb_frequencies(
@@ -116,7 +126,15 @@ async fn get_zkb_frequencies(
         config.common.zkill_entity.tp.zkill_filter_string(),
         config.common.zkill_entity.id
     );
-    let kms = cache
+
+    let esi_requests = &esi_requests;
+    let client = &esi_config.client;
+    let config = &config;
+
+    let zkb = ZkbRequestsService::new(client);
+    let km_service = KillmailService::new(&zkb, esi_requests);
+
+    let killmails = cache
         .load_or_create_async(
             cache_zkb_entity,
             vec![],
@@ -125,24 +143,46 @@ async fn get_zkb_frequencies(
             } else {
                 Some(Duration::hours(24))
             },
-            || {
-                let esi_requests = &esi_requests;
-                let client = &esi_config.client;
-                let config = &config;
+            |previous: Option<Vec<Killmail>>| {
+                let km_service = &km_service;
+
                 async move {
-                    let zkb = ZkbRequestsService::new(client);
-                    let km_service = KillmailService::new(&zkb, esi_requests);
-                    Ok(km_service
-                        .get_kill_item_frequencies(
-                            &config.common.zkill_entity,
-                            config.common.sell_sell.sell_sell_zkb.zkb_download_pages,
-                        )
-                        .await?)
+                    let mut kills = Vec::new();
+                    for page in 1..=config.common.sell_sell.sell_sell_zkb.zkb_download_pages {
+                        let mut kills_page = km_service
+                            .get_killmails(&config.common.zkill_entity, page)
+                            .await?;
+
+                        let kills_page_ids_hashset =
+                            kills_page.iter().map(|x| x.km_id).collect::<HashSet<_>>();
+                        match previous {
+                            Some(ref previous)
+                                if previous
+                                    .iter()
+                                    .any(|x| kills_page_ids_hashset.contains(&x.km_id)) =>
+                            {
+                                log::info!("Killmail already in cache, download stopped");
+                                break;
+                            }
+                            _ => (),
+                        }
+
+                        kills.append(&mut kills_page);
+                    }
+
+                    kills.append(&mut previous.unwrap_or_default());
+
+                    kills.sort_unstable_by_key(|x| x.km_id);
+                    kills.dedup_by_key(|x| x.km_id);
+
+                    Ok(kills)
                 }
             },
         )
         .await?;
-    Ok(kms)
+
+    let frequencies = km_service.get_item_frequencies(killmails);
+    Ok(frequencies)
 }
 
 pub fn compute_sell_buy<'a>(
@@ -182,24 +222,29 @@ pub async fn compute_pairs<'a>(
         .await
         .unwrap();
     let all_types = cache
-        .load_or_create_json_async(CACHE_ALL_TYPES, vec![], Some(Duration::days(7)), || async {
-            let all_types_src = esi_requests.get_all_item_types(source_region.region_id);
-            let all_types_dest = esi_requests.get_all_item_types(dest_region.region_id);
-            let (all_types_src, all_types_dest) = join!(all_types_src, all_types_dest);
-            let (mut all_types, all_types_dest) = (all_types_src?, all_types_dest?);
+        .load_or_create_json_async(
+            CACHE_ALL_TYPES,
+            vec![],
+            Some(Duration::days(7)),
+            |_| async {
+                let all_types_src = esi_requests.get_all_item_types(source_region.region_id);
+                let all_types_dest = esi_requests.get_all_item_types(dest_region.region_id);
+                let (all_types_src, all_types_dest) = join!(all_types_src, all_types_dest);
+                let (mut all_types, all_types_dest) = (all_types_src?, all_types_dest?);
 
-            all_types.extend(all_types_dest);
-            all_types.sort_unstable();
-            all_types.dedup();
-            Ok(all_types)
-        })
+                all_types.extend(all_types_dest);
+                all_types.sort_unstable();
+                all_types.dedup();
+                Ok(all_types)
+            },
+        )
         .await?;
     let all_type_descriptions: HashMap<i32, Option<TypeDescription>> = cache
         .load_or_create_async(
             CACHE_ALL_TYPE_DESC,
             vec![CACHE_ALL_TYPES],
             Some(Duration::days(7)),
-            || async {
+            |_| async {
                 let res = stream::iter(all_types.clone())
                     .map(|id| {
                         let esi_requests = &esi_requests;
@@ -226,7 +271,7 @@ pub async fn compute_pairs<'a>(
             CACHE_ALL_TYPE_PRICES,
             vec![CACHE_ALL_TYPES],
             Some(Duration::days(1)),
-            || async {
+            |_| async {
                 let prices = esi_requests.get_ajusted_prices().await?.unwrap();
                 Ok(prices
                     .into_iter()
@@ -241,7 +286,7 @@ pub async fn compute_pairs<'a>(
             format!("cache/{}-history.rmp", source_region.region_id),
             vec![CACHE_ALL_TYPES],
             Some(Duration::hours(config.common.item_history_timeout_hours)),
-            || async {
+            |_| async {
                 Ok(esi_history
                     .all_item_history(&all_types, source_region.region_id)
                     .await?)
@@ -256,7 +301,7 @@ pub async fn compute_pairs<'a>(
             format!("cache/{}-history.rmp", dest_region.region_id),
             vec![CACHE_ALL_TYPES],
             Some(Duration::hours(config.common.item_history_timeout_hours)),
-            || async {
+            |_| async {
                 Ok(esi_history
                     .all_item_history(&all_types, dest_region.region_id)
                     .await?)
@@ -274,7 +319,7 @@ pub async fn compute_pairs<'a>(
             Some(Duration::seconds(
                 (config.common.refresh_timeout_hours * 60. * 60.) as i64,
             )),
-            || async { Ok(esi_requests.all_item_orders(source_region).await?) },
+            |_| async { Ok(esi_requests.all_item_orders(source_region).await?) },
         )
         .await?
         .into_iter()
@@ -287,7 +332,7 @@ pub async fn compute_pairs<'a>(
             Some(Duration::seconds(
                 (config.common.refresh_timeout_hours * 60. * 60.) as i64,
             )),
-            || async { Ok(esi_requests.all_item_orders(dest_region).await?) },
+            |_| async { Ok(esi_requests.all_item_orders(dest_region).await?) },
         )
         .await?
         .into_iter()

@@ -20,19 +20,39 @@ impl<'a> KillmailService<'a> {
         Self { zkb, esi }
     }
 
-    pub async fn get_kill_item_frequencies(
+    pub fn get_item_frequencies(&self, killmails: Vec<Killmail>) -> ItemFrequencies {
+        let most_recent_time = killmails.iter().map(|x| x.time).max().unwrap();
+        let oldest_time = killmails.iter().map(|x| x.time).min().unwrap();
+        let period_seconds = (most_recent_time - oldest_time).num_seconds();
+
+        log::info!(
+            "{} killmails for {} days...",
+            killmails.len(),
+            period_seconds as f64 / 60. / 60. / 24.
+        );
+
+        ItemFrequencies {
+            items: killmails.iter().fold(HashMap::new(), |mut acc, x| {
+                for (k, v) in x.items.iter() {
+                    *acc.entry(*k).or_insert(0) += v;
+                }
+                acc
+            }),
+            period_seconds,
+        }
+    }
+
+    pub async fn get_killmails(
         &self,
         entity: &ZkillEntity,
-        pages: u32,
-    ) -> crate::requests::error::Result<ItemFrequencies> {
-        let kms = self.zkb.get_killmails(entity, pages).await.unwrap();
+        page: u32,
+    ) -> Result<Vec<Killmail>, anyhow::Error> {
+        let kms = self.zkb.get_kb_page(entity, page).await?;
         let frequencies = kms.into_iter().map(|km| {
             self.esi
                 .get_killmail_items_frequency(km.killmail_id, km.zkb.hash)
         });
-
         let km_freqs: Vec<Killmail> = stream::iter(frequencies)
-            .map(|x| x)
             .buffer_unordered(BUFFER_UNORDERED)
             .collect::<Vec<_>>()
             .await
@@ -41,26 +61,7 @@ impl<'a> KillmailService<'a> {
             .into_iter()
             .flatten()
             .collect();
-
-        let most_recent_time = km_freqs.iter().map(|x| x.time).max().unwrap();
-        let oldest_time = km_freqs.iter().map(|x| x.time).min().unwrap();
-        let period_seconds = (most_recent_time - oldest_time).num_seconds();
-
-        log::info!(
-            "Got {} killmails for the last {} days...",
-            km_freqs.len(),
-            period_seconds as f64 / 60. / 60. / 24.
-        );
-
-        Ok(ItemFrequencies {
-            items: km_freqs.iter().fold(HashMap::new(), |mut acc, x| {
-                for (k, v) in x.items.iter() {
-                    *acc.entry(*k).or_insert(0) += v;
-                }
-                acc
-            }),
-            period_seconds,
-        })
+        Ok(km_freqs)
     }
 }
 

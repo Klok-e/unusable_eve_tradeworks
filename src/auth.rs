@@ -40,7 +40,7 @@ impl Auth {
         path: &str,
     ) -> Self {
         let mut data = cache
-            .load_or_create_json_async(&path, vec![], None, || async {
+            .load_or_create_json_async(&path, vec![], None, |_| async {
                 Ok(create_auth(request_new_token(config).await).await)
             })
             .await

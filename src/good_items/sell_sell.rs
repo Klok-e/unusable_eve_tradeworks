@@ -10,8 +10,8 @@ use crate::{
     zkb::killmails::ItemFrequencies,
 };
 
-use super::help::DataVecExt;
 use super::help::{self, calculate_item_averages, calculate_optimal_buy_volume};
+use super::help::{calculate_weighted_price, DataVecExt};
 
 pub fn get_good_items_sell_sell(
     pairs: Vec<SystemMarketsItemData>,
@@ -21,23 +21,25 @@ pub fn get_good_items_sell_sell(
 ) -> Result<help::ProfitableItemsSummary<PairCalculatedDataSellSell>, anyhow::Error> {
     pairs
         .into_iter()
-        .filter_map(|x| {
-            let item_lose_popularity = *zkb_items.items.get(&x.desc.type_id).unwrap_or(&0);
+        .filter_map(|market_data| {
+            let item_lose_popularity =
+                *zkb_items.items.get(&market_data.desc.type_id).unwrap_or(&0);
             let period_days = (zkb_items.period_seconds as f64) / 60. / 60. / 24.;
             let lost_per_day = item_lose_popularity as f64 / period_days;
 
-            let src_mkt_orders = x.source.orders.clone();
+            let src_mkt_orders = market_data.source.orders.clone();
             let src_volume_on_market = src_mkt_orders.iter().sell_order_volume();
 
-            let dst_mkt_orders = x.destination.orders.clone();
+            let dst_mkt_orders = market_data.destination.orders.clone();
             let dst_volume_on_market = dst_mkt_orders.iter().sell_order_volume();
 
-            let src_avgs = calculate_item_averages(config, &x.source.history).or(None);
-            let dst_avgs = calculate_item_averages(config, &x.destination.history).or(None);
+            let src_avgs = calculate_item_averages(config, &market_data.source.history).or(None);
+            let dst_avgs =
+                calculate_item_averages(config, &market_data.destination.history).or(None);
 
             let common = prepare_sell_sell(
                 config,
-                x,
+                market_data,
                 src_volume_on_market,
                 src_avgs,
                 dst_volume_on_market,
@@ -196,30 +198,29 @@ pub fn prepare_sell_sell(
         market_data.destination.orders.iter().sell_order_min_price()
     };
 
-    let sell_with_markup =
+    let mut sell_with_markup =
         src_lowest_sell_order * (1. + config.common.sell_sell.markup_if_no_orders_dest);
+
+    let weighted_price = calculate_weighted_price(config, &market_data.destination.history);
+    if let Ok(weighted_price) = weighted_price {
+        sell_with_markup = sell_with_markup.max(weighted_price)
+    }
+
     let dest_sell_price = match dst_lowest_sell_order {
-        Some(x) => (x * 0.999).min(sell_with_markup),
+        Some(dst_lowest_sell_order) => (dst_lowest_sell_order * 0.999).min(sell_with_markup),
         None => sell_with_markup,
     };
 
+    let lost_per_day_scaled = lost_per_day
+        * config
+            .common
+            .sell_sell
+            .sell_sell_zkb
+            .zkb_losses_volume_multiplier;
+
     let expected_item_volume_per_day = match dst_avgs {
-        Some(x) => x.volume.max(
-            lost_per_day
-                * config
-                    .common
-                    .sell_sell
-                    .sell_sell_zkb
-                    .zkb_losses_volume_multiplier,
-        ),
-        None => {
-            lost_per_day
-                * config
-                    .common
-                    .sell_sell
-                    .sell_sell_zkb
-                    .zkb_losses_volume_multiplier
-        }
+        Some(x) => x.volume.max(lost_per_day_scaled),
+        None => lost_per_day_scaled,
     };
 
     let max_buy_vol = (expected_item_volume_per_day * config.common.sell_sell.rcmnd_fill_days)
