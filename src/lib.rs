@@ -14,6 +14,7 @@ pub mod order_ext;
 pub mod requests;
 pub mod stat;
 pub mod zkb;
+pub mod items_prices;
 
 use serde::{Deserialize, Serialize};
 

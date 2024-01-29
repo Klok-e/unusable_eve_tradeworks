@@ -135,6 +135,7 @@ async fn run() -> Result<(), anyhow::Error> {
     let items_prices = cli_args.get_flag(cli::ITEMS_PRICES);
     if items_prices {
         log::debug!("Items prices");
+        
     }
 
     Ok(())
