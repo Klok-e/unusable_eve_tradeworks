@@ -6,6 +6,7 @@ pub const CONFIG: &str = "config";
 pub const SELL_SELL: &str = "sell-sell";
 pub const SELL_BUY: &str = "sell-buy";
 pub const REPROCESS: &str = "reprocess";
+pub const ITEMS_PRICES: &str = "items-prices";
 pub const DISPLAY_SIMPLE_LIST: &str = "simple-list";
 pub const DISPLAY_SIMPLE_LIST_PRICE: &str = "simple-list-price";
 pub const DEBUG_ITEM_ID: &str = "debug-item";
@@ -25,21 +26,37 @@ pub fn matches() -> ArgMatches {
                 .short('s')
                 .long("sell-sell")
                 .action(ArgAction::SetTrue)
-                .conflicts_with_all([SELL_BUY, REPROCESS]),
+                .conflicts_with_all([SELL_BUY, REPROCESS, ITEMS_PRICES]),
         )
         .arg(
             Arg::new(SELL_BUY)
                 .short('b')
                 .long("sell-buy")
                 .action(ArgAction::SetTrue)
-                .conflicts_with_all([SELL_SELL, REPROCESS]),
+                .conflicts_with_all([SELL_SELL, REPROCESS, ITEMS_PRICES]),
         )
         .arg(
             Arg::new(REPROCESS)
                 .short('e')
                 .long("reprocess")
                 .action(ArgAction::SetTrue)
-                .conflicts_with_all([SELL_SELL, SELL_BUY]),
+                .conflicts_with_all([SELL_SELL, SELL_BUY, ITEMS_PRICES]),
+        )
+        .arg(
+            Arg::new(ITEMS_PRICES)
+                .short('i')
+                .long("items-prices")
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all([
+                    SELL_SELL,
+                    SELL_BUY,
+                    REPROCESS,
+                    DISPLAY_SIMPLE_LIST,
+                    DISPLAY_SIMPLE_LIST_PRICE,
+                    NAME_LENGTH,
+                    DEBUG_ITEM_ID,
+                    FORCE_NO_REFRESH,
+                ]),
         )
         .arg(
             Arg::new(DISPLAY_SIMPLE_LIST)

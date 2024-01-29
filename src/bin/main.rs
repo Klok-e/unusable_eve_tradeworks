@@ -113,6 +113,45 @@ async fn run() -> Result<(), anyhow::Error> {
 
     let esi_history = ItemHistoryEsiService::new(&esi_config);
 
+    let sell_sell = cli_args.get_flag(cli::SELL_SELL);
+    let sell_buy = cli_args.get_flag(cli::SELL_BUY);
+    let reprocess_flag = cli_args.get_flag(cli::REPROCESS);
+    if sell_sell || reprocess_flag || sell_buy {
+        print_buy_tables(
+            config,
+            &cli_args,
+            esi_requests,
+            esi_history,
+            auth,
+            cache,
+            data_service,
+            &esi_config,
+            sell_sell,
+            force_no_refresh,
+        )
+        .await?;
+    }
+
+    let items_prices = cli_args.get_flag(cli::ITEMS_PRICES);
+    if items_prices {
+        log::debug!("Items prices");
+    }
+
+    Ok(())
+}
+
+async fn print_buy_tables(
+    config: Config,
+    cli_args: &clap::ArgMatches,
+    esi_requests: EsiRequestsService<'_>,
+    esi_history: ItemHistoryEsiService<'_>,
+    auth: Auth,
+    mut cache: CachedStuff,
+    data_service: DatadumpService,
+    esi_config: &Configuration,
+    sell_sell: bool,
+    force_no_refresh: bool,
+) -> Result<(), anyhow::Error> {
     let mut pairs: Vec<SystemMarketsItemData> = compute_pairs(
         &config,
         &esi_requests,
@@ -122,7 +161,6 @@ async fn run() -> Result<(), anyhow::Error> {
         &data_service,
     )
     .await?;
-
     let reprocess_flag = cli_args.get_flag(cli::REPROCESS);
     let mut disable_filters = false;
     if let Some(v) = cli_args
@@ -143,11 +181,9 @@ async fn run() -> Result<(), anyhow::Error> {
         pairs.retain(|x| x.desc.type_id == v || reprocess.contains(&x.desc.type_id));
         disable_filters = true;
     }
-
+    let esi_config = &esi_config;
     let mut simple_list: Vec<_> = Vec::new();
     let rows = {
-        let sell_sell = cli_args.get_flag(cli::SELL_SELL);
-
         let cli_in = cli_args.get_one::<String>(cli::NAME_LENGTH);
         let name_len = if let Some(v) = cli_in.and_then(|x| x.parse::<usize>().ok()) {
             v
@@ -171,13 +207,13 @@ async fn run() -> Result<(), anyhow::Error> {
                 cache,
                 force_no_refresh,
                 esi_requests,
-                &esi_config,
+                esi_config,
                 data_service,
             )
             .await?
         } else if reprocess_flag {
             compute_reprocess_rows(
-                &cli_args,
+                cli_args,
                 pairs,
                 &config,
                 disable_filters,
@@ -190,16 +226,14 @@ async fn run() -> Result<(), anyhow::Error> {
             compute_sell_buy(pairs, &config, disable_filters, &mut simple_list, name_len)?
         }
     };
-
     let table = TableBuilder::new().rows(rows).build();
     println!("{}", table.render());
-
     if cli_args.get_flag(cli::DISPLAY_SIMPLE_LIST) {
         print_simple_list(&simple_list);
     }
     if cli_args.get_flag(cli::DISPLAY_SIMPLE_LIST_PRICE) {
         print_simple_list_with_price(simple_list);
-    }
+    };
     Ok(())
 }
 
