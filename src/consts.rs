@@ -5,9 +5,9 @@ pub const RETRIES: u32 = 5;
 pub const ITEM_NAME_LEN: &str = "25";
 pub const BUFFER_UNORDERED: usize = 4;
 
-pub const CACHE_AUTH: &str = "cache/auth";
-pub const CACHE_DATADUMP: &str = "cache/datadump.json";
-pub const CACHE_ALL_TYPES: &&str = &"cache/all_types.json";
-pub const CACHE_ALL_TYPE_DESC: &&str = &"cache/all_type_descriptions.rmp";
-pub const CACHE_ALL_TYPE_PRICES: &&str = &"cache/all_type_prices.rmp";
-pub const CONFIG_COMMON: &&str = &"config.common.json";
+pub const CACHE_AUTH: &str = "auth";
+pub const CACHE_DATADUMP: &str = "datadump.json";
+pub const CACHE_ALL_TYPES: &str = "all_types.json";
+pub const CACHE_ALL_TYPE_DESC: &str = "all_type_descriptions.rmp";
+pub const CACHE_ALL_TYPE_PRICES: &str = "all_type_prices.rmp";
+pub const CONFIG_COMMON: &str = "config.common.json";

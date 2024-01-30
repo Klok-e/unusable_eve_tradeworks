@@ -122,7 +122,7 @@ async fn get_zkb_frequencies(
     esi_config: &Configuration,
 ) -> Result<ItemFrequencies, anyhow::Error> {
     let cache_zkb_entity = format!(
-        "cache/zkb_losses.{}.{}.rmp",
+        "zkb_losses.{}.{}.rmp",
         config.common.zkill_entity.tp.zkill_filter_string(),
         config.common.zkill_entity.id
     );
@@ -283,7 +283,7 @@ pub async fn compute_pairs<'a>(
 
     let source_item_history = cache
         .load_or_create_async(
-            format!("cache/{}-history.rmp", source_region.region_id),
+            format!("{}-history.rmp", source_region.region_id),
             vec![CACHE_ALL_TYPES],
             Some(Duration::hours(config.common.item_history_timeout_hours)),
             |_| async {
@@ -298,7 +298,7 @@ pub async fn compute_pairs<'a>(
         .collect::<HashMap<_, _>>();
     let dest_item_history = cache
         .load_or_create_async(
-            format!("cache/{}-history.rmp", dest_region.region_id),
+            format!("{}-history.rmp", dest_region.region_id),
             vec![CACHE_ALL_TYPES],
             Some(Duration::hours(config.common.item_history_timeout_hours)),
             |_| async {
@@ -314,7 +314,7 @@ pub async fn compute_pairs<'a>(
 
     let source_item_orders = cache
         .load_or_create_async(
-            format!("cache/{}-orders.rmp", config.route.source.name),
+            format!("{}-orders.rmp", config.route.source.name),
             vec![CACHE_ALL_TYPES],
             Some(Duration::seconds(
                 (config.common.refresh_timeout_hours * 60. * 60.) as i64,
@@ -327,7 +327,7 @@ pub async fn compute_pairs<'a>(
         .collect::<HashMap<_, _>>();
     let dest_item_orders = cache
         .load_or_create_async(
-            format!("cache/{}-orders.rmp", config.route.destination.name),
+            format!("{}-orders.rmp", config.route.destination.name),
             vec![CACHE_ALL_TYPES],
             Some(Duration::seconds(
                 (config.common.refresh_timeout_hours * 60. * 60.) as i64,

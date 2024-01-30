@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{
     consts::{self, BUFFER_UNORDERED},
     requests::paged_all::OnlyOk,
-    requests::retry,
+    requests::retry::{self, retry_smart},
     StationId,
 };
 use crate::{
@@ -278,7 +278,7 @@ impl<'a> EsiRequestsService<'a> {
                                 x.system_id
                             );
                             let dist =
-                                retry::retry_smart::<_,_,_,EsiApiError>(
+                                retry_smart(
                                     || async {
                                         let res = routes_api::get_route_origin_destination(
                                             self.config,
@@ -296,7 +296,7 @@ impl<'a> EsiRequestsService<'a> {
                                         .entity
                                         .unwrap();
 
-                                        Ok(Retry::Success(res.into_ok().unwrap()))
+                                        Ok::<_,EsiApiError>(Retry::Success(res.into_ok().unwrap()))
                                     },
                                 )
                                 .await?

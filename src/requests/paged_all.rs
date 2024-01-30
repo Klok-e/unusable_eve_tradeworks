@@ -15,10 +15,12 @@ use rust_eveonline_esi::{
             GetUniverseStationsStationIdSuccess, GetUniverseStructuresStructureIdSuccess,
             GetUniverseTypesTypeIdSuccess,
         },
+        wallet_api::GetCharactersCharacterIdWalletTransactionsSuccess,
     },
     models::{
-        GetCharactersCharacterIdSearchOk, GetKillmailsKillmailIdKillmailHashOk,
-        GetMarketsPrices200Ok, GetMarketsRegionIdHistory200Ok, GetMarketsRegionIdOrders200Ok,
+        GetCharactersCharacterIdSearchOk, GetCharactersCharacterIdWalletTransactions200Ok,
+        GetKillmailsKillmailIdKillmailHashOk, GetMarketsPrices200Ok,
+        GetMarketsRegionIdHistory200Ok, GetMarketsRegionIdOrders200Ok,
         GetMarketsStructuresStructureId200Ok, GetUniverseStationsStationIdOk,
         GetUniverseStructuresStructureIdOk, GetUniverseTypesTypeIdOk,
     },
@@ -207,6 +209,26 @@ impl OnlyOk<Vec<i32>, GetRouteOriginDestinationSuccess> for GetRouteOriginDestin
 impl OnlyOk<Vec<GetMarketsPrices200Ok>, GetMarketsPricesSuccess> for GetMarketsPricesSuccess {
     fn into_ok(self) -> Result<Vec<GetMarketsPrices200Ok>, GetMarketsPricesSuccess> {
         if let GetMarketsPricesSuccess::Status200(ok) = self {
+            Ok(ok)
+        } else {
+            Err(self)
+        }
+    }
+}
+
+impl
+    OnlyOk<
+        Vec<GetCharactersCharacterIdWalletTransactions200Ok>,
+        GetCharactersCharacterIdWalletTransactionsSuccess,
+    > for GetCharactersCharacterIdWalletTransactionsSuccess
+{
+    fn into_ok(
+        self,
+    ) -> Result<
+        Vec<GetCharactersCharacterIdWalletTransactions200Ok>,
+        GetCharactersCharacterIdWalletTransactionsSuccess,
+    > {
+        if let GetCharactersCharacterIdWalletTransactionsSuccess::Status200(ok) = self {
             Ok(ok)
         } else {
             Err(self)

@@ -1,12 +1,26 @@
-use std::{collections::HashMap, future::Future, path::Path};
+use std::{
+    collections::HashMap,
+    future::Future,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct CachedStuff {
     caches_updated: HashMap<String, bool>,
+    path: PathBuf,
+}
+
+impl Default for CachedStuff {
+    fn default() -> Self {
+        Self {
+            caches_updated: Default::default(),
+            path: "cache".into(),
+        }
+    }
 }
 
 impl CachedStuff {
@@ -26,8 +40,14 @@ impl CachedStuff {
         FO: Future<Output = Result<T>>,
         T: Serialize + DeserializeOwned,
     {
-        self.load_data_or_create_async(path.as_ref(), depends, DataFormat::Bin, timeout, gen)
-            .await
+        self.load_data_or_create_async(
+            &self.path.join(path.as_ref()),
+            depends,
+            DataFormat::Bin,
+            timeout,
+            gen,
+        )
+        .await
     }
 
     pub async fn load_or_create_json_async<T, F, FO>(
@@ -42,8 +62,14 @@ impl CachedStuff {
         FO: Future<Output = Result<T>>,
         T: Serialize + DeserializeOwned,
     {
-        self.load_data_or_create_async(path.as_ref(), depends, DataFormat::Json, timeout, gen)
-            .await
+        self.load_data_or_create_async(
+            &self.path.join(path.as_ref()),
+            depends,
+            DataFormat::Json,
+            timeout,
+            gen,
+        )
+        .await
     }
 
     async fn load_data_or_create_async<T, F, FO>(

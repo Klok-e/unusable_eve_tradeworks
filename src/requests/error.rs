@@ -2,17 +2,11 @@ use std::fmt::Display;
 
 use reqwest::StatusCode;
 use rust_eveonline_esi::apis::{
-    self,
-    killmails_api::GetKillmailsKillmailIdKillmailHashError,
-    market_api::{
+    self, killmails_api::GetKillmailsKillmailIdKillmailHashError, market_api::{
         GetMarketsGroupsError, GetMarketsPricesError, GetMarketsRegionIdHistoryError,
         GetMarketsRegionIdOrdersError, GetMarketsRegionIdTypesError,
         GetMarketsStructuresStructureIdError,
-    },
-    routes_api::GetRouteOriginDestinationError,
-    search_api::GetCharactersCharacterIdSearchError,
-    universe_api::GetUniverseTypesTypeIdError,
-    ResponseContent,
+    }, routes_api::GetRouteOriginDestinationError, search_api::GetCharactersCharacterIdSearchError, universe_api::GetUniverseTypesTypeIdError, wallet_api::GetCharactersCharacterIdWalletTransactionsError, ResponseContent
 };
 use thiserror::Error;
 
@@ -54,6 +48,8 @@ enum EsiApiErrorEnum {
     MarketHistory(#[from] apis::Error<GetMarketsRegionIdHistoryError>),
     #[error("Market prices error: {0}")]
     MarketsPrices(#[from] apis::Error<GetMarketsPricesError>),
+    #[error("Character wallet transactions error: {0}")]
+    CharacterWalletTransactions(#[from] apis::Error<GetCharactersCharacterIdWalletTransactionsError>),
 }
 
 impl From<apis::Error<GetMarketsPricesError>> for EsiApiError {
@@ -192,6 +188,19 @@ impl From<apis::Error<GetMarketsRegionIdHistoryError>> for EsiApiError {
                 entity: Some(GetMarketsRegionIdHistoryError::Status400(r)),
                 ..
             }) if r.error.contains("Undefined 429 response") => StatusCode::TOO_MANY_REQUESTS,
+            apis::Error::ResponseError(x) => x.status,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        EsiApiError {
+            internal: x.into(),
+            status: code,
+        }
+    }
+}
+
+impl From<apis::Error<GetCharactersCharacterIdWalletTransactionsError>> for EsiApiError {
+    fn from(x: apis::Error<GetCharactersCharacterIdWalletTransactionsError>) -> Self {
+        let code = match &x {
             apis::Error::ResponseError(x) => x.status,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
