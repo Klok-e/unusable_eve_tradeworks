@@ -23,6 +23,7 @@ use crate::{
         ItemHistory, ItemOrders, MarketData, SystemMarketsItem, SystemMarketsItemData,
         TypeDescription,
     },
+    load_create::{load_or_create_history, load_or_create_orders},
     requests::{
         item_history::ItemHistoryEsiService,
         service::{EsiRequestsService, Killmail},
@@ -31,6 +32,7 @@ use crate::{
         killmails::{ItemFrequencies, KillmailService},
         zkb_requests::ZkbRequestsService,
     },
+    StationIdData,
 };
 
 pub async fn compute_sell_sell<'a>(
@@ -281,63 +283,38 @@ pub async fn compute_pairs<'a>(
         )
         .await?;
 
-    let source_item_history = cache
-        .load_or_create_async(
-            format!("{}-history.rmp", source_region.region_id),
-            vec![CACHE_ALL_TYPES],
-            Some(Duration::hours(config.common.item_history_timeout_hours)),
-            |_| async {
-                Ok(esi_history
-                    .all_item_history(&all_types, source_region.region_id)
-                    .await?)
-            },
-        )
-        .await?
-        .into_iter()
-        .map(|x| (x.id, x))
-        .collect::<HashMap<_, _>>();
-    let dest_item_history = cache
-        .load_or_create_async(
-            format!("{}-history.rmp", dest_region.region_id),
-            vec![CACHE_ALL_TYPES],
-            Some(Duration::hours(config.common.item_history_timeout_hours)),
-            |_| async {
-                Ok(esi_history
-                    .all_item_history(&all_types, dest_region.region_id)
-                    .await?)
-            },
-        )
-        .await?
-        .into_iter()
-        .map(|x| (x.id, x))
-        .collect::<HashMap<_, _>>();
+    let source_item_history = load_or_create_history(
+        cache,
+        source_region,
+        Duration::hours(config.common.item_history_timeout_hours),
+        esi_history,
+        &all_types,
+    )
+    .await?;
+    let dest_item_history = load_or_create_history(
+        cache,
+        dest_region,
+        Duration::hours(config.common.item_history_timeout_hours),
+        esi_history,
+        &all_types,
+    )
+    .await?;
 
-    let source_item_orders = cache
-        .load_or_create_async(
-            format!("{}-orders.rmp", config.route.source.name),
-            vec![CACHE_ALL_TYPES],
-            Some(Duration::seconds(
-                (config.common.refresh_timeout_hours * 60. * 60.) as i64,
-            )),
-            |_| async { Ok(esi_requests.all_item_orders(source_region).await?) },
-        )
-        .await?
-        .into_iter()
-        .map(|x| (x.id, x))
-        .collect::<HashMap<_, _>>();
-    let dest_item_orders = cache
-        .load_or_create_async(
-            format!("{}-orders.rmp", config.route.destination.name),
-            vec![CACHE_ALL_TYPES],
-            Some(Duration::seconds(
-                (config.common.refresh_timeout_hours * 60. * 60.) as i64,
-            )),
-            |_| async { Ok(esi_requests.all_item_orders(dest_region).await?) },
-        )
-        .await?
-        .into_iter()
-        .map(|x| (x.id, x))
-        .collect::<HashMap<_, _>>();
+    let source_item_orders = load_or_create_orders(
+        cache,
+        Duration::seconds((config.common.refresh_timeout_hours * 60. * 60.) as i64),
+        esi_requests,
+        source_region,
+    )
+    .await?;
+
+    let dest_item_orders = load_or_create_orders(
+        cache,
+        Duration::seconds((config.common.refresh_timeout_hours * 60. * 60.) as i64),
+        esi_requests,
+        dest_region,
+    )
+    .await?;
 
     let source_items = source_item_orders.outer_join(source_item_history);
     let dest_items = dest_item_orders.outer_join(dest_item_history);
@@ -417,6 +394,7 @@ pub async fn compute_pairs<'a>(
         })
         .collect::<Vec<_>>())
 }
+
 
 pub struct SimpleDisplay {
     pub name: String,
