@@ -145,7 +145,8 @@ impl CachedStuff {
     where
         T: Serialize,
     {
-        self.save(generated, DataFormat::Json, path).data
+        self.save(generated, DataFormat::Json, &self.path.join(path.as_ref()))
+            .data
     }
 
     fn save<T>(&mut self, generated: T, format: DataFormat, path: &impl AsRef<Path>) -> Container<T>
