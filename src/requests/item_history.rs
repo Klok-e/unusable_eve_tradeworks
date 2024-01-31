@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use rust_eveonline_esi::apis::configuration::Configuration;
 
-use crate::{consts::{BUFFER_UNORDERED, BUFFER_UNORDERED_SMALL}, requests::paged_all::OnlyOk, requests::retry};
+use crate::{consts::BUFFER_UNORDERED_SMALL, requests::paged_all::OnlyOk, requests::retry};
 use crate::{
     consts::DATE_FMT,
     item_type::{ItemHistory, MarketsRegionHistory},

@@ -2,7 +2,6 @@ use std::io::Read;
 
 use anyhow::{anyhow, Context, Ok};
 use chrono::Duration;
-use cmd_lib;
 
 use copypasta::{ClipboardContext, ClipboardProvider};
 use itertools::Itertools;
