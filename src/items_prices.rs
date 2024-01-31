@@ -99,6 +99,9 @@ impl<'a> ItemsPricesService<'a> {
                 let buy_price = transactions
                     .get_bought_price_for_item(item.type_id, item_input.amount)
                     .unwrap_or(0.);
+
+                log::debug!("Item {} buy price: {}", item.name, buy_price);
+
                 let sell_price =
                     calculate_sell_price(average_history, &market_data, self.config, buy_price);
 

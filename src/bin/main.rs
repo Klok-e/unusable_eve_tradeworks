@@ -161,7 +161,7 @@ async fn run() -> Result<(), anyhow::Error> {
             .await?;
 
         for price in prices {
-            print!("{}", price.price);
+            println!("{}", price.price);
         }
     }
 
@@ -247,7 +247,7 @@ async fn print_buy_tables(
         };
 
         if sell_sell {
-            log::trace!("Sell sell path.");
+            log::debug!("Sell sell path.");
             compute_sell_sell(
                 pairs,
                 &config,
@@ -272,7 +272,7 @@ async fn print_buy_tables(
                 name_len,
             )?
         } else {
-            log::trace!("Sell buy path.");
+            log::debug!("Sell buy path.");
             compute_sell_buy(pairs, &config, disable_filters, &mut simple_list, name_len)?
         }
     };
@@ -296,7 +296,7 @@ fn compute_reprocess_rows<'b>(
     simple_list: &mut Vec<SimpleDisplay>,
     name_len: usize,
 ) -> Result<Vec<Row<'b>>, anyhow::Error> {
-    log::trace!("Reprocess path.");
+    log::debug!("Reprocess path.");
     let pairs_clone = if let Some(v) = cli_args
         .get_one::<String>(cli::DEBUG_ITEM_ID)
         .and_then(|x| x.parse::<i32>().ok())
