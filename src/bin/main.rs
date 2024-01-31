@@ -160,7 +160,8 @@ async fn run() -> Result<(), anyhow::Error> {
             .get_prices_for_items(auth.get_character_id(), parsed_items, station)
             .await?;
 
-        let prices = prices.iter().map(|x| x.price).join("\n");
+        // join reverted prices because order of items in multi sell are reversed
+        let prices = prices.iter().rev().map(|x| x.price).join("\n");
         cmd_lib::run_cmd!(
             echo "${prices}" | type-lines.sh
         )?;
