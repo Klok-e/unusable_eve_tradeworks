@@ -1,8 +1,10 @@
 use std::io::Read;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context, Ok};
 use chrono::Duration;
 
+use copypasta::{ClipboardContext, ClipboardProvider};
+use itertools::Itertools;
 use oauth2::TokenResponse;
 use rust_eveonline_esi::apis::configuration::Configuration;
 
@@ -18,21 +20,25 @@ use unusable_eve_tradeworks_lib::{
     good_items::sell_reprocess::{get_good_items_sell_reprocess, make_table_sell_reprocess},
     item_type::SystemMarketsItemData,
     items_list::{compute_pairs, compute_sell_buy, compute_sell_sell, SimpleDisplay},
+    items_prices::{ItemInput, ItemsPricesService},
     logger,
-    requests::{item_history::ItemHistoryEsiService, service::EsiRequestsService},
+    requests::{
+        item_history::ItemHistoryEsiService, service::EsiRequestsService,
+        transactions::WalletEsiService,
+    },
     Station,
 };
 
 #[tokio::main]
-async fn main() -> Result<(), anyhow::Error> {
+async fn main() {
     let result = run().await;
     if let Err(ref err) = result {
         log::error!("ERROR: {}", err);
         err.chain()
             .skip(1)
             .for_each(|cause| log::error!("because: {}", cause));
+        std::process::exit(1)
     }
-    result
 }
 
 async fn run() -> Result<(), anyhow::Error> {
@@ -43,23 +49,6 @@ async fn run() -> Result<(), anyhow::Error> {
     let quiet = cli_args.get_flag(cli::QUIET);
     let file_loud = cli_args.get_flag(cli::FILE_LOUD);
     logger::setup_logger(quiet, file_loud)?;
-
-    let source = cli_args.get_one::<String>(SOURCE_NAME).unwrap();
-    let dest = cli_args.get_one::<String>(DEST_NAME).unwrap();
-    let common = CommonConfig::from_file_json(CONFIG_COMMON)?;
-    let config = Config {
-        route: RouteConfig {
-            source: find_station(&common.stations, source)?,
-            destination: find_station(&common.stations, dest)?,
-        },
-        common,
-    };
-
-    log::info!(
-        "Calculating route {} ---> {}",
-        config.route.source.name,
-        config.route.destination.name
-    );
 
     let mut cache = CachedStuff::new();
 
@@ -113,10 +102,28 @@ async fn run() -> Result<(), anyhow::Error> {
 
     let esi_history = ItemHistoryEsiService::new(&esi_config);
 
+    let config_common = CommonConfig::from_file_json(CONFIG_COMMON)?;
+
     let sell_sell = cli_args.get_flag(cli::SELL_SELL);
     let sell_buy = cli_args.get_flag(cli::SELL_BUY);
     let reprocess_flag = cli_args.get_flag(cli::REPROCESS);
     if sell_sell || reprocess_flag || sell_buy {
+        let source = cli_args.get_one::<String>(SOURCE_NAME).unwrap();
+        let dest = cli_args.get_one::<String>(DEST_NAME).unwrap();
+        let config = Config {
+            route: RouteConfig {
+                source: find_station(&config_common.stations, source)?,
+                destination: find_station(&config_common.stations, dest)?,
+            },
+            common: config_common,
+        };
+
+        log::info!(
+            "Calculating route {} ---> {}",
+            config.route.source.name,
+            config.route.destination.name
+        );
+
         print_buy_tables(
             config,
             &cli_args,
@@ -130,15 +137,57 @@ async fn run() -> Result<(), anyhow::Error> {
             force_no_refresh,
         )
         .await?;
-    }
-
-    let items_prices = cli_args.get_flag(cli::ITEMS_PRICES);
-    if items_prices {
+    } else if cli_args.get_flag(cli::ITEMS_PRICES) {
         log::debug!("Items prices");
-        
+        let wallet_service = WalletEsiService {
+            esi_config: &esi_config,
+        };
+
+        let mut items_prices_service = ItemsPricesService {
+            wallet_esi_service: &wallet_service,
+            cache: &mut cache,
+            esi_requests: &esi_requests,
+            esi_history: &esi_history,
+            config: &config_common,
+        };
+
+        let source = cli_args.get_one::<String>(SOURCE_NAME).unwrap();
+        let station = find_station(&config_common.stations, source)?;
+
+        let parsed_items = parse_items_from_clipboard()?;
+
+        let prices = items_prices_service
+            .get_prices_for_items(auth.get_character_id(), parsed_items, station)
+            .await?;
+
+        for price in prices {
+            print!("{}", price.price);
+        }
     }
 
     Ok(())
+}
+
+fn parse_items_from_clipboard() -> Result<Vec<ItemInput>, anyhow::Error> {
+    log::info!("Copying items from clipboard...");
+    let mut ctx = ClipboardContext::new().unwrap();
+    let content = ctx.get_contents().unwrap();
+    log::debug!("Clipboard content: {content}");
+    let parsed_items = content
+        .lines()
+        .map(|line| {
+            let mut split = line.split(char::is_whitespace).collect_vec();
+            let pop = split.pop();
+            let amount: i32 = pop
+                .ok_or_else(|| anyhow!("Incorrect format: {line}"))?
+                .parse()
+                .with_context(|| format!("Couldn't parse item amount: {pop:?}"))?;
+            let name = split.join(" ");
+            Ok(ItemInput { name, amount })
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    log::debug!("Parsed: {parsed_items:?}");
+    Ok(parsed_items)
 }
 
 async fn print_buy_tables(

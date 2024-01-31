@@ -3,8 +3,8 @@ use num_format::{Locale, ToFormattedString};
 use term_table::{row::Row, table_cell::TableCell};
 
 use crate::{
-    config::Config,
-    item_type::{ItemTypeAveraged, SystemMarketsItemData},
+    config::{CommonConfig, Config},
+    item_type::{ItemTypeAveraged, MarketData, SystemMarketsItemData},
     order_ext::OrderIterExt,
     requests::service::to_not_nan,
     zkb::killmails::ItemFrequencies,
@@ -33,9 +33,8 @@ pub fn get_good_items_sell_sell(
             let dst_mkt_orders = market_data.destination.orders.clone();
             let dst_volume_on_market = dst_mkt_orders.iter().sell_order_volume();
 
-            let src_avgs = calculate_item_averages(config, &market_data.source.history).or(None);
-            let dst_avgs =
-                calculate_item_averages(config, &market_data.destination.history).or(None);
+            let src_avgs = calculate_item_averages(&config.common, &market_data.source.history);
+            let dst_avgs = calculate_item_averages(&config.common, &market_data.destination.history);
 
             let common = prepare_sell_sell(
                 config,
@@ -186,30 +185,12 @@ pub fn prepare_sell_sell(
 ) -> Option<PairCalculatedDataSellSell> {
     let src_lowest_sell_order = market_data.source.orders.iter().sell_order_min_price()?;
 
-    let dst_lowest_sell_order = if let Some(dst_avgs) = dst_avgs {
-        market_data
-            .destination
-            .orders
-            .iter()
-            .get_lowest_sell_order_over_volume(
-                dst_avgs.volume * config.common.sell_sell.dst_ignore_orders_under_volume_pct,
-            )
-    } else {
-        market_data.destination.orders.iter().sell_order_min_price()
-    };
-
-    let mut sell_with_markup =
-        src_lowest_sell_order * (1. + config.common.sell_sell.markup_if_no_orders_dest);
-
-    let weighted_price = calculate_weighted_price(config, &market_data.destination.history);
-    if let Ok(weighted_price) = weighted_price {
-        sell_with_markup = sell_with_markup.max(weighted_price)
-    }
-
-    let dest_sell_price = match dst_lowest_sell_order {
-        Some(dst_lowest_sell_order) => (dst_lowest_sell_order * 0.999).min(sell_with_markup),
-        None => sell_with_markup,
-    };
+    let dest_sell_price = calculate_sell_price(
+        dst_avgs,
+        &market_data.destination,
+        &config.common,
+        src_lowest_sell_order,
+    );
 
     let lost_per_day_scaled = lost_per_day
         * config
@@ -269,4 +250,32 @@ pub fn prepare_sell_sell(
         dst_avgs,
         lost_per_day,
     })
+}
+
+pub fn calculate_sell_price(
+    dst_avgs: Option<ItemTypeAveraged>,
+    dest_market: &MarketData,
+    config: &CommonConfig,
+    buy_price: f64,
+) -> f64 {
+    let dst_lowest_sell_order = if let Some(dst_avgs) = dst_avgs {
+        dest_market.orders.iter().get_lowest_sell_order_over_volume(
+            dst_avgs.volume * config.sell_sell.dst_ignore_orders_under_volume_pct,
+        )
+    } else {
+        dest_market.orders.iter().sell_order_min_price()
+    };
+
+    let mut sell_with_markup = buy_price * (1. + config.sell_sell.markup_if_no_orders_dest);
+
+    let weighted_price = calculate_weighted_price(config, &dest_market.history);
+    if let Ok(weighted_price) = weighted_price {
+        sell_with_markup = sell_with_markup.max(weighted_price)
+    }
+
+    let dest_sell_price = match dst_lowest_sell_order {
+        Some(dst_lowest_sell_order) => (dst_lowest_sell_order * 0.999).min(sell_with_markup),
+        None => sell_with_markup,
+    };
+    dest_sell_price
 }

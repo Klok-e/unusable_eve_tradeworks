@@ -1,7 +1,7 @@
 use rust_eveonline_esi::models::GetUniverseTypesTypeIdOk;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MarketsRegionHistory {
     pub average: Option<f64>,
     pub date: String,
@@ -11,13 +11,13 @@ pub struct MarketsRegionHistory {
     pub volume: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct ItemOrders {
     pub id: i32,
     pub orders: Vec<Order>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct ItemHistory {
     pub id: i32,
     pub history: Vec<MarketsRegionHistory>,

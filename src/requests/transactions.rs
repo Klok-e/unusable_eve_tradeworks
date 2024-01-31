@@ -17,7 +17,7 @@ use super::{
 };
 
 pub struct WalletEsiService<'a> {
-    pub config: &'a Configuration,
+    pub esi_config: &'a Configuration,
 }
 impl<'a> WalletEsiService<'a> {
     pub async fn get_transactions_history(
@@ -27,7 +27,7 @@ impl<'a> WalletEsiService<'a> {
         let transactions = retry_smart(|| async {
             Ok::<_, EsiApiError>(super::retry::Retry::Success(
                 wallet_api::get_characters_character_id_wallet_transactions(
-                    self.config,
+                    self.esi_config,
                     GetCharactersCharacterIdWalletTransactionsParams {
                         character_id: character_id,
                         from_id: None,

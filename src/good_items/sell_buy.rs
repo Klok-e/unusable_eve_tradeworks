@@ -31,8 +31,8 @@ fn calculate_pairs(x: SystemMarketsItemData, config: &Config) -> Option<PairCalc
     let dst_mkt_orders = x.destination.orders.clone();
     let dst_mkt_volume = dst_mkt_orders.iter().sell_order_volume();
 
-    let src_avgs = calculate_item_averages(config, &x.source.history);
-    let dst_avgs = calculate_item_averages(config, &x.destination.history);
+    let src_avgs = calculate_item_averages(&config.common, &x.source.history);
+    let dst_avgs = calculate_item_averages(&config.common, &x.destination.history);
 
     let (max_profitable_buy_volume, dest_sell_price, max_buy_price, avg_buy_price) =
         calculate_prices_volumes(&x, config)?;

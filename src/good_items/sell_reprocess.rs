@@ -95,8 +95,8 @@ fn process_item_pair(
     let dst_mkt_orders = x.destination.orders.clone();
     let dst_mkt_volume = dst_mkt_orders.iter().sell_order_volume();
 
-    let src_avgs = calculate_item_averages(config, &x.source.history);
-    let dst_avgs = calculate_item_averages(config, &x.destination.history);
+    let src_avgs = calculate_item_averages(&config.common, &x.source.history);
+    let dst_avgs = calculate_item_averages(&config.common, &x.destination.history);
 
     let (
         recommend_buy_vol,

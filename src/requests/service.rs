@@ -144,6 +144,7 @@ impl<'a> EsiRequestsService<'a> {
         };
 
         // get system constellation
+        // TODO: use into_ok instead
         let constellation = if let GetUniverseSystemsSystemIdSuccess::Status200(jita_const) =
             universe_api::get_universe_systems_system_id(
                 self.config,

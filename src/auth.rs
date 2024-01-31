@@ -96,6 +96,7 @@ async fn request_new_token(
         "esi-markets.structure_markets.v1",
         "esi-search.search_structures.v1",
         "esi-universe.read_structures.v1",
+        "esi-wallet.read_character_wallet.v1",
     ];
 
     let client = create_client(config);

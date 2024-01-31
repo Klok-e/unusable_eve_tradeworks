@@ -20,7 +20,7 @@ pub const DEST_NAME: &str = "destination-name";
 pub fn matches() -> ArgMatches {
     Command::new("Eve Tradeworks")
         .arg(Arg::new(SOURCE_NAME).required(true))
-        .arg(Arg::new(DEST_NAME).required(true))
+        .arg(Arg::new(DEST_NAME).required(false))
         .arg(
             Arg::new(SELL_SELL)
                 .short('s')

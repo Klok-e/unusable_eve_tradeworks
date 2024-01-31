@@ -4,7 +4,7 @@ use itertools::Itertools;
 use ordered_float::NotNan;
 
 use crate::{
-    config::Config,
+    config::{CommonConfig, Config},
     item_type::{ItemHistoryDay, ItemTypeAveraged, Order},
     requests::service::to_not_nan,
     stat::{AverageStat, MedianStat},
@@ -156,13 +156,13 @@ pub fn calculate_optimal_buy_volume(
 }
 
 pub fn calculate_item_averages(
-    config: &Config,
+    config: &CommonConfig,
     history: &[ItemHistoryDay],
 ) -> Option<ItemTypeAveraged> {
     let last_n_days = history
         .iter()
         .rev()
-        .take(config.common.days_average)
+        .take(config.days_average)
         .collect::<Vec<_>>();
 
     let avg_price = last_n_days
@@ -195,13 +195,13 @@ pub fn calculate_item_averages(
 }
 
 pub fn calculate_weighted_price(
-    config: &Config,
+    config: &CommonConfig,
     history: &[ItemHistoryDay],
 ) -> anyhow::Result<f64> {
     let last_n_days = history
         .iter()
         .rev()
-        .take(config.common.days_average)
+        .take(config.days_average)
         .collect::<Vec<_>>();
 
     let sum = last_n_days.iter().map(|x| x.volume).sum::<i64>();
