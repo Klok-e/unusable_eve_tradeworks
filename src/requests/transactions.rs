@@ -1,20 +1,13 @@
 use anyhow::anyhow;
 use rust_eveonline_esi::{
     apis::{
-        character_api,
         configuration::Configuration,
         wallet_api::{self, GetCharactersCharacterIdWalletTransactionsParams},
     },
     models::GetCharactersCharacterIdWalletTransactions200Ok,
 };
 
-use crate::cached_data::CachedStuff;
-
-use super::{
-    error::EsiApiError,
-    paged_all::OnlyOk,
-    retry::{retry_smart, Retry},
-};
+use super::{error::EsiApiError, paged_all::OnlyOk, retry::retry_smart};
 
 pub struct WalletEsiService<'a> {
     pub esi_config: &'a Configuration,
@@ -29,7 +22,7 @@ impl<'a> WalletEsiService<'a> {
                 wallet_api::get_characters_character_id_wallet_transactions(
                     self.esi_config,
                     GetCharactersCharacterIdWalletTransactionsParams {
-                        character_id: character_id,
+                        character_id,
                         from_id: None,
                         datasource: None,
                         if_none_match: None,

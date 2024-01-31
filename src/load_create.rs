@@ -15,7 +15,7 @@ pub async fn load_or_create_history(
     region: StationIdData,
     duration: Duration,
     esi_history: &ItemHistoryEsiService<'_>,
-    all_types: &Vec<i32>,
+    all_types: &[i32],
 ) -> anyhow::Result<HashMap<i32, ItemHistory>> {
     let item_history = cache
         .load_or_create_async(

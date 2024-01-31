@@ -2,11 +2,18 @@ use std::fmt::Display;
 
 use reqwest::StatusCode;
 use rust_eveonline_esi::apis::{
-    self, killmails_api::GetKillmailsKillmailIdKillmailHashError, market_api::{
+    self,
+    killmails_api::GetKillmailsKillmailIdKillmailHashError,
+    market_api::{
         GetMarketsGroupsError, GetMarketsPricesError, GetMarketsRegionIdHistoryError,
         GetMarketsRegionIdOrdersError, GetMarketsRegionIdTypesError,
         GetMarketsStructuresStructureIdError,
-    }, routes_api::GetRouteOriginDestinationError, search_api::GetCharactersCharacterIdSearchError, universe_api::GetUniverseTypesTypeIdError, wallet_api::GetCharactersCharacterIdWalletTransactionsError, ResponseContent
+    },
+    routes_api::GetRouteOriginDestinationError,
+    search_api::GetCharactersCharacterIdSearchError,
+    universe_api::GetUniverseTypesTypeIdError,
+    wallet_api::GetCharactersCharacterIdWalletTransactionsError,
+    ResponseContent,
 };
 use thiserror::Error;
 
@@ -49,7 +56,9 @@ enum EsiApiErrorEnum {
     #[error("Market prices error: {0}")]
     MarketsPrices(#[from] apis::Error<GetMarketsPricesError>),
     #[error("Character wallet transactions error: {0}")]
-    CharacterWalletTransactions(#[from] apis::Error<GetCharactersCharacterIdWalletTransactionsError>),
+    CharacterWalletTransactions(
+        #[from] apis::Error<GetCharactersCharacterIdWalletTransactionsError>,
+    ),
 }
 
 impl From<apis::Error<GetMarketsPricesError>> for EsiApiError {

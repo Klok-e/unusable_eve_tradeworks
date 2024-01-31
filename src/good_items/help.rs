@@ -4,7 +4,7 @@ use itertools::Itertools;
 use ordered_float::NotNan;
 
 use crate::{
-    config::{CommonConfig, Config},
+    config::CommonConfig,
     item_type::{ItemHistoryDay, ItemTypeAveraged, Order},
     requests::service::to_not_nan,
     stat::{AverageStat, MedianStat},

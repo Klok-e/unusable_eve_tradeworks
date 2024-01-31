@@ -34,7 +34,8 @@ pub fn get_good_items_sell_sell(
             let dst_volume_on_market = dst_mkt_orders.iter().sell_order_volume();
 
             let src_avgs = calculate_item_averages(&config.common, &market_data.source.history);
-            let dst_avgs = calculate_item_averages(&config.common, &market_data.destination.history);
+            let dst_avgs =
+                calculate_item_averages(&config.common, &market_data.destination.history);
 
             let common = prepare_sell_sell(
                 config,
@@ -273,9 +274,8 @@ pub fn calculate_sell_price(
         sell_with_markup = sell_with_markup.max(weighted_price)
     }
 
-    let dest_sell_price = match dst_lowest_sell_order {
+    match dst_lowest_sell_order {
         Some(dst_lowest_sell_order) => (dst_lowest_sell_order * 0.999).min(sell_with_markup),
         None => sell_with_markup,
-    };
-    dest_sell_price
+    }
 }

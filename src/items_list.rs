@@ -32,7 +32,6 @@ use crate::{
         killmails::{ItemFrequencies, KillmailService},
         zkb_requests::ZkbRequestsService,
     },
-    StationIdData,
 };
 
 pub async fn compute_sell_sell<'a>(
@@ -394,7 +393,6 @@ pub async fn compute_pairs<'a>(
         })
         .collect::<Vec<_>>())
 }
-
 
 pub struct SimpleDisplay {
     pub name: String,

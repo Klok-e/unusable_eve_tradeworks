@@ -1,4 +1,3 @@
-use good_lp::SolverModel;
 use itertools::Itertools;
 use num_format::{Locale, ToFormattedString};
 use ordered_float::NotNan;

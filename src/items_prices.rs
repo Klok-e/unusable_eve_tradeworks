@@ -8,16 +8,12 @@ use rust_eveonline_esi::models::GetCharactersCharacterIdWalletTransactions200Ok;
 
 use crate::{
     cached_data::CachedStuff,
-    config::{CommonConfig, Config},
+    config::CommonConfig,
     consts::CACHE_ALL_TYPE_DESC,
-    good_items::{
-        help::{calculate_item_averages, calculate_weighted_price},
-        sell_sell::calculate_sell_price,
-    },
+    good_items::{help::calculate_item_averages, sell_sell::calculate_sell_price},
     helper_ext::HashMapJoin,
     item_type::{MarketData, TypeDescription},
     load_create::{load_or_create_history, load_or_create_orders},
-    order_ext::OrderIterExt,
     requests::{
         item_history::ItemHistoryEsiService, service::EsiRequestsService,
         transactions::WalletEsiService,
@@ -49,9 +45,9 @@ impl<'a> ItemsPricesService<'a> {
         let all_type_descriptions: HashMap<i32, Option<TypeDescription>> = self
             .cache
             .load_or_create_async(CACHE_ALL_TYPE_DESC, vec![], None, |previous| async {
-                Ok(previous.ok_or(anyhow!(
+                previous.ok_or(anyhow!(
                     "Previous value for all type descriptions wasn't found"
-                ))?)
+                ))
             })
             .await?;
 
