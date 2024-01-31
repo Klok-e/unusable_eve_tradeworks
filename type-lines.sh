@@ -31,12 +31,17 @@ echo $line_counter > "$line_counter_file"
 # Read the specific line from the input file
 line=$(sed "${line_counter}q;d" "$input_file")
 
+rnd() {
+    echo $(( $RANDOM / 32767 * 40 + 40 )) # random range [40..80]
+}
+
 # If the line is not empty, type it out
 if [ ! -z "$line" ]; then
-    ydotool key -d 50 29:1 # Keycode for Ctrl key down
-    ydotool key -d 50 30:1 30:0 # Keycode for 'a' key
-    ydotool key -d 50 29:0 # Keycode for Ctrl key up
-    wtype -d 20 "$line"
+    wl-copy $line
+    ydotool key -d $(rnd) 29:1 # Keycode for Ctrl key down
+    ydotool key -d $(rnd) 30:1 30:0 # Keycode for 'a' key
+    ydotool key -d $(rnd) 47:1 47:0 # Keycode for 'v' key
+    ydotool key -d $(rnd) 29:0 # Keycode for Ctrl key up
 else
     # If no line is found (end of input), clean up
     echo "End of input reached or no lines left, cleaning up..."

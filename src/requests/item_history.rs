@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use rust_eveonline_esi::apis::configuration::Configuration;
 
-use crate::{consts::BUFFER_UNORDERED, requests::paged_all::OnlyOk, requests::retry};
+use crate::{consts::{BUFFER_UNORDERED, BUFFER_UNORDERED_SMALL}, requests::paged_all::OnlyOk, requests::retry};
 use crate::{
     consts::DATE_FMT,
     item_type::{ItemHistory, MarketsRegionHistory},
@@ -172,7 +172,7 @@ impl<'a> ItemHistoryEsiService<'a> {
     ) -> Result<Vec<ItemHistory>> {
         let hists = stream::iter(item_types)
             .map(|&item_type| self.get_item_type_history(region_id, item_type))
-            .buffer_unordered(BUFFER_UNORDERED);
+            .buffer_unordered(BUFFER_UNORDERED_SMALL);
         Ok(hists
             .collect::<Vec<_>>()
             .await

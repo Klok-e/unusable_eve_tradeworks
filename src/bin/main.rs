@@ -2,6 +2,7 @@ use std::io::Read;
 
 use anyhow::{anyhow, Context, Ok};
 use chrono::Duration;
+use cmd_lib;
 
 use copypasta::{ClipboardContext, ClipboardProvider};
 use itertools::Itertools;
@@ -160,9 +161,11 @@ async fn run() -> Result<(), anyhow::Error> {
             .get_prices_for_items(auth.get_character_id(), parsed_items, station)
             .await?;
 
-        for price in prices {
-            println!("{}", price.price);
-        }
+        let prices = prices.iter().map(|x| x.price).join("\n");
+        cmd_lib::run_cmd!(
+            echo "${prices}" | type-lines.sh
+        )?;
+        log::info!("Prices passed to type-lines.sh");
     }
 
     Ok(())

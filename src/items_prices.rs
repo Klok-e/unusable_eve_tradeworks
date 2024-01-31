@@ -12,7 +12,7 @@ use crate::{
     consts::CACHE_ALL_TYPE_DESC,
     good_items::{help::calculate_item_averages, sell_sell::calculate_sell_price},
     helper_ext::HashMapJoin,
-    item_type::{MarketData, TypeDescription},
+    item_type::{ItemOrders, MarketData, TypeDescription},
     load_create::{load_or_create_history, load_or_create_orders},
     requests::{
         item_history::ItemHistoryEsiService, service::EsiRequestsService,
@@ -76,7 +76,7 @@ impl<'a> ItemsPricesService<'a> {
             })
             .collect::<HashMap<_, _>>();
 
-        let item_order_history = item_history.inner_join(item_orders);
+        let item_order_history = item_history.outer_join(item_orders);
 
         let transactions = self.download_or_load_transactions(character_id).await?;
 
@@ -93,7 +93,20 @@ impl<'a> ItemsPricesService<'a> {
                         item_input.name
                     )
                 })?;
-                let market_data = MarketData::new(orders.clone(), history.clone());
+
+                let market_data = MarketData::new(
+                    orders
+                        .as_ref()
+                        .unwrap_or(&ItemOrders {
+                            id: item.type_id,
+                            orders: Vec::new(),
+                        })
+                        .clone(),
+                    history
+                        .as_ref()
+                        .ok_or_else(|| anyhow!("History not found for item {}", item_input.name))?
+                        .clone(),
+                );
                 let average_history = calculate_item_averages(self.config, &market_data.history);
 
                 let buy_price = transactions
