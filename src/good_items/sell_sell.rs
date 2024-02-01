@@ -76,7 +76,10 @@ pub fn get_good_items_sell_sell(
                 }
         })
         .collect::<Vec<_>>()
-        .take_maximizing_profit(config.common.cargo_capacity)
+        .take_maximizing_profit(
+            config.common.cargo_capacity,
+            config.common.items_take as i32,
+        )
 }
 
 pub fn make_table_sell_sell<'b>(
@@ -109,7 +112,7 @@ pub fn make_table_sell_sell<'b>(
             TableCell::new(short_name),
             TableCell::new(format!("{:.2}", it.src_buy_price)),
             TableCell::new(format!("{:.2}", it.dest_min_sell_price)),
-            TableCell::new(format!("{:.2}", it.expenses)),
+            TableCell::new(format!("{:.2}", it.expenses * it.recommend_buy as f64)),
             TableCell::new(format!("{:.2}", it.sell_price)),
             TableCell::new(format!("{:.2}", it.margin)),
             TableCell::new(format!(
@@ -170,7 +173,7 @@ impl From<PairCalculatedDataSellSell> for help::ItemProfitData {
             single_item_volume_m3: value.market.desc.volume as f64,
             expenses: value.expenses,
             sell_price: value.sell_price,
-            max_profitable_buy_size: value.recommend_buy,
+            max_item_amount: value.recommend_buy,
         }
     }
 }
@@ -215,6 +218,7 @@ pub fn prepare_sell_sell(
         config.route.source.broker_fee,
         config.route.destination.broker_fee,
         config.common.sales_tax,
+        config.common.max_investment_per_item,
     );
     let buy_price = buy_from_src_price * (1. + config.route.source.broker_fee);
     let expenses = buy_price

@@ -20,7 +20,10 @@ pub fn get_good_items_sell_buy(
         .filter_map(|x| calculate_pairs(x, config))
         .filter(|x| disable_filters || x.margin > config.common.margin_cutoff)
         .collect::<Vec<_>>()
-        .take_maximizing_profit(config.common.cargo_capacity)
+        .take_maximizing_profit(
+            config.common.cargo_capacity,
+            config.common.items_take as i32,
+        )
 }
 
 fn calculate_pairs(x: SystemMarketsItemData, config: &Config) -> Option<PairCalculatedDataSellBuy> {
@@ -89,7 +92,17 @@ fn calculate_prices_volumes(
     {
         let mut buy_order_fulfilled = buy_order.volume_remain;
         while buy_order_fulfilled > 0 {
-            let bought_volume = buy_order_fulfilled.min(curr_src_sell_order.volume_remain);
+            let mut bought_volume = buy_order_fulfilled.min(curr_src_sell_order.volume_remain);
+
+            // limit investment
+            if sum_buy_price + curr_src_sell_order.price * bought_volume as f64
+                > config.common.max_investment_per_item
+            {
+                bought_volume = ((config.common.max_investment_per_item - sum_buy_price)
+                    / curr_src_sell_order.price)
+                    .floor() as i64;
+            }
+
             buy_order_fulfilled -= bought_volume;
 
             let expenses = (curr_src_sell_order.price * (1. + config.route.source.broker_fee))
@@ -153,7 +166,10 @@ pub fn make_table_sell_buy<'b>(
             TableCell::new(short_name),
             TableCell::new(format!("{:.2}", item.src_buy_price)),
             TableCell::new(format!("{:.2}", item.dest_min_sell_price)),
-            TableCell::new(format!("{:.2}", item.expenses)),
+            TableCell::new(format!(
+                "{:.2}",
+                item.expenses * item.max_profitable_buy_volume as f64
+            )),
             TableCell::new(format!("{:.2}", item.sell_price)),
             TableCell::new(format!("{:.2}", item.margin)),
             TableCell::new(format!(
@@ -207,7 +223,7 @@ impl From<PairCalculatedDataSellBuy> for help::ItemProfitData {
             single_item_volume_m3: value.market.desc.volume as f64,
             expenses: value.expenses,
             sell_price: value.sell_price,
-            max_profitable_buy_size: value.max_profitable_buy_volume,
+            max_item_amount: value.max_profitable_buy_volume,
         }
     }
 }

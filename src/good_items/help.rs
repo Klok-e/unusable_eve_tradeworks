@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use good_lp::SolverModel;
+use good_lp::{IntoAffineExpression, SolverModel};
 use itertools::Itertools;
 use ordered_float::NotNan;
 
@@ -15,7 +15,7 @@ pub struct ItemProfitData {
     pub single_item_volume_m3: f64,
     pub expenses: f64,
     pub sell_price: f64,
-    pub max_profitable_buy_size: i64,
+    pub max_item_amount: i64,
 }
 
 #[derive(Debug)]
@@ -37,6 +37,7 @@ pub trait DataVecExt<T> {
     fn take_maximizing_profit(
         self,
         max_cargo: i32,
+        max_number_of_items: i32,
     ) -> Result<ProfitableItemsSummary<T>, anyhow::Error>;
 }
 
@@ -47,16 +48,21 @@ where
     fn take_maximizing_profit(
         self,
         max_cargo: i32,
+        max_number_of_items: i32,
     ) -> Result<ProfitableItemsSummary<T>, anyhow::Error> {
         use good_lp::{default_solver, variable, Expression, ProblemVariables, Solution, Variable};
         let mut vars = ProblemVariables::new();
+
+        let mut binary_var_refs = Vec::new();
+        for _ in &self {
+            let binary_var_def = variable().binary();
+            binary_var_refs.push(vars.add(binary_var_def));
+        }
+
         let mut var_refs = Vec::new();
         for item in &self {
             let item: ItemProfitData = (*item).clone().into();
-            let var_def = variable()
-                .integer()
-                .min(0)
-                .max(item.max_profitable_buy_size as i32);
+            let var_def = variable().integer().min(0).max(item.max_item_amount as i32);
             var_refs.push(vars.add(var_def));
         }
 
@@ -81,7 +87,26 @@ where
 
         let mut solution = vars.maximise(&goal).using(default_solver);
         solution.set_parameter("log", "0");
-        let solution = solution.with(space_constraint).solve()?;
+
+        // link binary variables to variables
+        for ((&var, &binary_var), item) in
+            var_refs.iter().zip(binary_var_refs.iter()).zip(self.iter())
+        {
+            let item: ItemProfitData = (*item).clone().into();
+            let max_buy_constraint = var
+                .into_expression()
+                .leq(binary_var * (item.max_item_amount as f64));
+            solution = solution.with(max_buy_constraint);
+        }
+        let max_items_constraint = binary_var_refs
+            .iter()
+            .sum::<Expression>()
+            .leq(max_number_of_items as f64);
+
+        let solution = solution
+            .with(max_items_constraint)
+            .with(space_constraint)
+            .solve()?;
 
         let recommended_items = var_refs
             .into_iter()
@@ -125,8 +150,9 @@ pub fn calculate_optimal_buy_volume(
     buy_broker_fee: f64,
     sell_broker_fee: f64,
     sell_tax: f64,
+    max_investment: f64,
 ) -> (f64, i64) {
-    let mut recommend_bought_volume = 0;
+    let mut current_bought_volume = 0;
     let mut max_price = 0.;
     for order in orders
         .iter()
@@ -136,9 +162,16 @@ pub fn calculate_optimal_buy_volume(
         if max_price == 0. {
             max_price = order.price;
         }
-        let current_buy = order
+
+        let mut current_buy = order
             .volume_remain
-            .min(recommend_buy_vol - recommend_bought_volume);
+            .min(recommend_buy_vol - current_bought_volume);
+
+        // limit investment
+        if max_price * (current_bought_volume + current_buy) as f64 > max_investment {
+            current_buy = ((max_investment - max_price * current_bought_volume as f64) / max_price)
+                .floor() as i64;
+        }
 
         let profit =
             sell_price * (1. - sell_broker_fee - sell_tax) - order.price * (1. + buy_broker_fee);
@@ -146,13 +179,13 @@ pub fn calculate_optimal_buy_volume(
             break;
         }
 
-        recommend_bought_volume += current_buy;
+        current_bought_volume += current_buy;
         max_price = order.price.max(max_price);
-        if recommend_buy_vol <= recommend_bought_volume {
+        if recommend_buy_vol <= current_bought_volume {
             break;
         }
     }
-    (max_price, recommend_bought_volume)
+    (max_price, current_bought_volume)
 }
 
 pub fn calculate_item_averages(
