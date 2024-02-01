@@ -38,9 +38,10 @@ rnd() {
 # If the line is not empty, type it out
 if [ ! -z "$line" ]; then
     wl-copy $line
+    ydotool click -d $(rnd) 0xC0
     ydotool key -d $(rnd) 29:1 # Keycode for Ctrl key down
-    ydotool key -d $(rnd) 30:1 30:0 # Keycode for 'a' key
-    ydotool key -d $(rnd) 47:1 47:0 # Keycode for 'v' key
+    ydotool key -d $(rnd) 30:1 -d $(rnd) 30:0 # Keycode for 'a' key
+    ydotool key -d $(rnd) 47:1 -d $(rnd) 47:0 # Keycode for 'v' key
     ydotool key -d $(rnd) 29:0 # Keycode for Ctrl key up
 else
     # If no line is found (end of input), clean up
