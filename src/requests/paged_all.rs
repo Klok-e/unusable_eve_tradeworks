@@ -50,11 +50,13 @@ where
                 }) => Ok(Retry::Success(Vec::new())),
 
                 // 403 Forbidden is sometimes thrown randomly??? retry in this case
-                Err(EsiApiError {
-                    status: StatusCode::FORBIDDEN,
-                    ..
-                }) => {
-                    log::warn!("403 Forbidden when getting pages, retrying...");
+                Err(
+                    err @ EsiApiError {
+                        status: StatusCode::FORBIDDEN,
+                        ..
+                    },
+                ) => {
+                    log::warn!("{err} when getting pages, retrying...");
                     Ok(Retry::Retry)
                 }
 

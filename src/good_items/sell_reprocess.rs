@@ -250,7 +250,7 @@ pub fn make_table_sell_reprocess<'b>(
         TableCell::new("mkt dst"),
         TableCell::new("rough prft"),
         TableCell::new("rcmnd"),
-        TableCell::new("prtn sz"),
+        TableCell::new("portion"),
     ]))
     .chain(good_items.items.iter().map(|it| {
         let short_name =
