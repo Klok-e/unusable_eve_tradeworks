@@ -176,6 +176,11 @@ fn parse_items_from_clipboard() -> Result<Vec<ItemInput>, anyhow::Error> {
     let mut ctx = ClipboardContext::new().unwrap();
     let content = ctx.get_contents().unwrap();
     log::debug!("Clipboard content: {content}");
+
+    if content.trim().is_empty(){
+        return Err(anyhow!("Clipboard is empty! Fill it with item names and item amounts."))
+    }
+
     let parsed_items = content
         .lines()
         .map(|line| {
