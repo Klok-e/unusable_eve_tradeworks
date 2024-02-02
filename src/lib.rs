@@ -9,7 +9,6 @@ pub mod good_items;
 pub mod helper_ext;
 pub mod item_type;
 pub mod items_list;
-pub mod items_prices;
 pub mod load_create;
 pub mod logger;
 pub mod order_ext;

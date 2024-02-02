@@ -279,7 +279,7 @@ pub fn calculate_sell_price(
     }
 
     match dst_lowest_sell_order {
-        Some(dst_lowest_sell_order) => (dst_lowest_sell_order * 0.999).min(sell_with_markup),
+        Some(dst_lowest_sell_order) => dst_lowest_sell_order * 0.999,
         None => sell_with_markup,
     }
 }

@@ -7,6 +7,7 @@ pub const SELL_SELL: &str = "sell-sell";
 pub const SELL_BUY: &str = "sell-buy";
 pub const REPROCESS: &str = "reprocess";
 pub const ITEMS_PRICES: &str = "items-prices";
+pub const STATION_TRADING: &str = "station-trading";
 pub const DISPLAY_SIMPLE_LIST: &str = "simple-list";
 pub const DISPLAY_SIMPLE_LIST_PRICE: &str = "simple-list-price";
 pub const DEBUG_ITEM_ID: &str = "debug-item";
@@ -47,16 +48,14 @@ pub fn matches() -> ArgMatches {
                 .short('i')
                 .long("items-prices")
                 .action(ArgAction::SetTrue)
-                .conflicts_with_all([
-                    SELL_SELL,
-                    SELL_BUY,
-                    REPROCESS,
-                    DISPLAY_SIMPLE_LIST,
-                    DISPLAY_SIMPLE_LIST_PRICE,
-                    NAME_LENGTH,
-                    DEBUG_ITEM_ID,
-                    FORCE_NO_REFRESH,
-                ]),
+                .conflicts_with_all([SELL_SELL, SELL_BUY, REPROCESS]),
+        )
+        .arg(
+            Arg::new(STATION_TRADING)
+                .short('t')
+                .long("station-trading")
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all([SELL_SELL, SELL_BUY, REPROCESS]),
         )
         .arg(
             Arg::new(DISPLAY_SIMPLE_LIST)

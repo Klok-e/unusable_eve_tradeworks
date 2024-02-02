@@ -23,7 +23,10 @@ use crate::{
         ItemHistory, ItemOrders, MarketData, SystemMarketsItem, SystemMarketsItemData,
         TypeDescription,
     },
-    load_create::{load_or_create_history, load_or_create_orders},
+    load_create::{
+        create_load_all_types, create_load_item_descriptions, create_load_prices,
+        load_or_create_history, load_or_create_orders,
+    },
     requests::{
         item_history::ItemHistoryEsiService,
         service::{EsiRequestsService, Killmail},
@@ -222,65 +225,10 @@ pub async fn compute_pairs<'a>(
         .find_region_id_station(config.route.destination.clone(), character_id)
         .await
         .unwrap();
-    let all_types = cache
-        .load_or_create_json_async(
-            CACHE_ALL_TYPES,
-            vec![],
-            Some(Duration::days(7)),
-            |_| async {
-                let all_types_src = esi_requests.get_all_item_types(source_region.region_id);
-                let all_types_dest = esi_requests.get_all_item_types(dest_region.region_id);
-                let (all_types_src, all_types_dest) = join!(all_types_src, all_types_dest);
-                let (mut all_types, all_types_dest) = (all_types_src?, all_types_dest?);
-
-                all_types.extend(all_types_dest);
-                all_types.sort_unstable();
-                all_types.dedup();
-                Ok(all_types)
-            },
-        )
-        .await?;
-    let all_type_descriptions: HashMap<i32, Option<TypeDescription>> = cache
-        .load_or_create_async(
-            CACHE_ALL_TYPE_DESC,
-            vec![CACHE_ALL_TYPES],
-            Some(Duration::days(7)),
-            |_| async {
-                let res = stream::iter(all_types.clone())
-                    .map(|id| {
-                        let esi_requests = &esi_requests;
-                        async move {
-                            let req_res = esi_requests.get_item_description(id).await?;
-
-                            Ok((id, req_res.map(|x| x.into())))
-                        }
-                    })
-                    .buffer_unordered(BUFFER_UNORDERED)
-                    .collect::<Vec<error::Result<_>>>()
-                    .await
-                    .into_iter()
-                    .collect::<error::Result<Vec<_>>>()?
-                    .into_iter()
-                    .collect();
-
-                Ok(res)
-            },
-        )
-        .await?;
-    let all_type_prices: HashMap<i32, f64> = cache
-        .load_or_create_async(
-            CACHE_ALL_TYPE_PRICES,
-            vec![CACHE_ALL_TYPES],
-            Some(Duration::days(1)),
-            |_| async {
-                let prices = esi_requests.get_ajusted_prices().await?.unwrap();
-                Ok(prices
-                    .into_iter()
-                    .map(|x| (x.type_id, x.adjusted_price.unwrap()))
-                    .collect())
-            },
-        )
-        .await?;
+    let all_types = create_load_all_types(cache, esi_requests, source_region, dest_region).await?;
+    let all_type_descriptions =
+        create_load_item_descriptions(cache, &all_types, esi_requests).await?;
+    let all_type_prices = create_load_prices(cache, esi_requests).await?;
 
     let source_item_history = load_or_create_history(
         cache,

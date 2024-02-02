@@ -17,10 +17,9 @@ use unusable_eve_tradeworks_lib::{
     config::{AuthConfig, CommonConfig, Config, RouteConfig},
     consts::{self, CACHE_AUTH, CACHE_DATADUMP, CONFIG_COMMON},
     datadump_service::DatadumpService,
-    good_items::sell_reprocess::{get_good_items_sell_reprocess, make_table_sell_reprocess},
+    good_items::{items_prices::{ItemInput, ItemsPricesService}, sell_reprocess::{get_good_items_sell_reprocess, make_table_sell_reprocess}},
     item_type::SystemMarketsItemData,
     items_list::{compute_pairs, compute_sell_buy, compute_sell_sell, SimpleDisplay},
-    items_prices::{ItemInput, ItemsPricesService},
     logger,
     requests::{
         item_history::ItemHistoryEsiService, service::EsiRequestsService,
@@ -166,6 +165,9 @@ async fn run() -> Result<(), anyhow::Error> {
             echo "${prices}" | type-lines.sh
         )?;
         log::info!("Prices passed to type-lines.sh");
+    } else if cli_args.get_flag(cli::STATION_TRADING) {
+        log::debug!("Station trading");
+        
     }
 
     Ok(())
