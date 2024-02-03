@@ -1,5 +1,5 @@
-pub fn setup_logger(quiet: bool, log_file_debug: bool) -> Result<(), fern::InitError> {
-    fern::Dispatch::new()
+pub fn setup_logger(quiet: bool, log_file_debug: bool, file: bool) -> Result<(), fern::InitError> {
+    let mut chain = fern::Dispatch::new()
         .format(|out, message, record| {
             out.finish(format_args!(
                 "{}[{}][{}] {}",
@@ -22,14 +22,16 @@ pub fn setup_logger(quiet: bool, log_file_debug: bool) -> Result<(), fern::InitE
                     log::LevelFilter::Info
                 })
                 .chain(std::io::stdout()),
-        )
-        .chain(
+        );
+    if file {
+        chain = chain.chain(
             std::fs::OpenOptions::new()
                 .write(true)
                 .create(true)
                 .truncate(true)
                 .open("cache/output.log")?,
-        )
-        .apply()?;
+        );
+    }
+    chain.apply()?;
     Ok(())
 }

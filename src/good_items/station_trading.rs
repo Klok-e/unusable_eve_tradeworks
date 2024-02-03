@@ -261,4 +261,16 @@ impl StationTradeData {
         .collect::<Vec<_>>();
         rows
     }
+
+    pub fn get_buy_order_data<'a>(&'a self) -> impl Iterator<Item = BuyOrderData> + 'a {
+        self.item_data.iter().map(|x| BuyOrderData {
+            item_price: x.buy_price,
+            item_quantity: x.recommend_buy,
+        })
+    }
+}
+
+pub struct BuyOrderData {
+    pub item_price: f64,
+    pub item_quantity: i64,
 }

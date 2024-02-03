@@ -1,9 +1,16 @@
-use std::io::Read;
+use std::{
+    fs::remove_file,
+    io::{self, Read, Write},
+    net::Shutdown,
+    path::Path,
+};
 
-use anyhow::{anyhow, Context, Ok};
+use anyhow::{anyhow, Context};
 use chrono::Duration;
+use rand::Rng;
 
 use copypasta::{ClipboardContext, ClipboardProvider};
+use interprocess::os::unix::udsocket::{UdStream, UdStreamListener};
 use itertools::Itertools;
 use oauth2::TokenResponse;
 use rust_eveonline_esi::apis::configuration::Configuration;
@@ -14,13 +21,17 @@ use unusable_eve_tradeworks_lib::{
     auth::Auth,
     cached_data::CachedStuff,
     cli::{self, DEST_NAME, SOURCE_NAME},
+    commands::{
+        communicate_paste_into_game, communicate_paste_sell_order_prices,
+        parse_items_from_clipboard,
+    },
     config::{AuthConfig, CommonConfig, Config, RouteConfig},
-    consts::{self, CACHE_AUTH, CACHE_DATADUMP, CONFIG_COMMON},
+    consts::{self, CACHE_AUTH, CACHE_DATADUMP, CONFIG_COMMON, UD_SOCKET_PATH},
     datadump_service::DatadumpService,
     good_items::{
         items_prices::{ItemInput, ItemsPricesService},
         sell_reprocess::{get_good_items_sell_reprocess, make_table_sell_reprocess},
-        station_trading::StationTradingService,
+        station_trading::{StationTradeData, StationTradingService},
     },
     item_type::SystemMarketsItemData,
     items_list::{compute_pairs, compute_sell_buy, compute_sell_sell, SimpleDisplay},
@@ -51,7 +62,7 @@ async fn run() -> Result<(), anyhow::Error> {
 
     let quiet = cli_args.get_flag(cli::QUIET);
     let file_loud = cli_args.get_flag(cli::FILE_LOUD);
-    logger::setup_logger(quiet, file_loud)?;
+    logger::setup_logger(quiet, file_loud, true)?;
 
     let mut cache = CachedStuff::new();
 
@@ -164,10 +175,9 @@ async fn run() -> Result<(), anyhow::Error> {
             .await?;
 
         // join reverted prices because order of items in multi sell are reversed
-        let prices = prices.iter().rev().map(|x| x.price).join("\n");
-        cmd_lib::run_cmd!(
-            echo "${prices}" | type-lines.sh
-        )?;
+        let prices = prices.iter().rev().map(|x| x.price).collect();
+        communicate_paste_sell_order_prices(prices)?;
+
         log::info!("Prices passed to type-lines.sh");
     } else if cli_args.get_flag(cli::STATION_TRADING) {
         log::debug!("Station trading");
@@ -187,38 +197,11 @@ async fn run() -> Result<(), anyhow::Error> {
         let rows = items.make_table_station_trade(get_name_len(&cli_args));
         let table = TableBuilder::new().rows(rows).build();
         println!("{}", table.render());
+
+        communicate_paste_into_game(&items)?;
     }
 
     Ok(())
-}
-
-fn parse_items_from_clipboard() -> Result<Vec<ItemInput>, anyhow::Error> {
-    log::info!("Copying items from clipboard...");
-    let mut ctx = ClipboardContext::new().unwrap();
-    let content = ctx.get_contents().unwrap();
-    log::debug!("Clipboard content: {content}");
-
-    if content.trim().is_empty() {
-        return Err(anyhow!(
-            "Clipboard is empty! Fill it with item names and item amounts."
-        ));
-    }
-
-    let parsed_items = content
-        .lines()
-        .map(|line| {
-            let mut split = line.split(char::is_whitespace).collect_vec();
-            let pop = split.pop();
-            let amount: i32 = pop
-                .ok_or_else(|| anyhow!("Incorrect format: {line}"))?
-                .parse()
-                .with_context(|| format!("Couldn't parse item amount: {pop:?}"))?;
-            let name = split.join(" ");
-            Ok(ItemInput { name, amount })
-        })
-        .collect::<anyhow::Result<Vec<_>>>()?;
-    log::debug!("Parsed: {parsed_items:?}");
-    Ok(parsed_items)
 }
 
 async fn print_buy_tables(

@@ -36,6 +36,8 @@ anyhow = "1.0.69"
 rayon = "1.7.0"
 copypasta = "0.10.0"
 cmd_lib = "1.9.3"
+interprocess = "1.2.1"
+rand = "0.8.5"
 
 [dependencies.reqwest]
 version = "0.11.4"
@@ -48,6 +50,10 @@ path = "src/lib.rs"
 [[bin]]
 name = "unusable_eve_tradeworks"
 path = "src/bin/main.rs"
+
+[[bin]]
+name = "unusable_eve_tradeworks_hotkey_trigger"
+path = "src/bin/hotkey_trigger.rs"
 
 
 [profile.dev.package."*"]
