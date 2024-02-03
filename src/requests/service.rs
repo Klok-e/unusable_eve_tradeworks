@@ -56,7 +56,7 @@ impl<'a> EsiRequestsService<'a> {
 
     pub async fn find_region_id_station(
         &self,
-        station: Station,
+        station: &Station,
         character_id: i32,
     ) -> Result<StationIdData> {
         // find system id

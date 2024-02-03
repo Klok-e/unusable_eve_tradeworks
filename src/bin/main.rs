@@ -17,7 +17,11 @@ use unusable_eve_tradeworks_lib::{
     config::{AuthConfig, CommonConfig, Config, RouteConfig},
     consts::{self, CACHE_AUTH, CACHE_DATADUMP, CONFIG_COMMON},
     datadump_service::DatadumpService,
-    good_items::{items_prices::{ItemInput, ItemsPricesService}, sell_reprocess::{get_good_items_sell_reprocess, make_table_sell_reprocess}},
+    good_items::{
+        items_prices::{ItemInput, ItemsPricesService},
+        sell_reprocess::{get_good_items_sell_reprocess, make_table_sell_reprocess},
+        station_trading::StationTradingService,
+    },
     item_type::SystemMarketsItemData,
     items_list::{compute_pairs, compute_sell_buy, compute_sell_sell, SimpleDisplay},
     logger,
@@ -167,7 +171,22 @@ async fn run() -> Result<(), anyhow::Error> {
         log::info!("Prices passed to type-lines.sh");
     } else if cli_args.get_flag(cli::STATION_TRADING) {
         log::debug!("Station trading");
-        
+        let mut items_prices_service = StationTradingService {
+            cache: &mut cache,
+            esi_requests: &esi_requests,
+            esi_history: &esi_history,
+            config: &config_common,
+        };
+
+        let source = cli_args.get_one::<String>(SOURCE_NAME).unwrap();
+        let station = find_station(&config_common.stations, source)?;
+        let items = items_prices_service
+            .get_prices_for_items(station, auth.get_character_id(), get_debug_item(&cli_args))
+            .await?;
+
+        let rows = items.make_table_station_trade(get_name_len(&cli_args));
+        let table = TableBuilder::new().rows(rows).build();
+        println!("{}", table.render());
     }
 
     Ok(())
@@ -179,8 +198,10 @@ fn parse_items_from_clipboard() -> Result<Vec<ItemInput>, anyhow::Error> {
     let content = ctx.get_contents().unwrap();
     log::debug!("Clipboard content: {content}");
 
-    if content.trim().is_empty(){
-        return Err(anyhow!("Clipboard is empty! Fill it with item names and item amounts."))
+    if content.trim().is_empty() {
+        return Err(anyhow!(
+            "Clipboard is empty! Fill it with item names and item amounts."
+        ));
     }
 
     let parsed_items = content
@@ -223,10 +244,7 @@ async fn print_buy_tables(
     .await?;
     let reprocess_flag = cli_args.get_flag(cli::REPROCESS);
     let mut disable_filters = false;
-    if let Some(v) = cli_args
-        .get_one::<String>(cli::DEBUG_ITEM_ID)
-        .and_then(|x| x.parse::<i32>().ok())
-    {
+    if let Some(v) = get_debug_item(cli_args) {
         let reprocess = if reprocess_flag {
             data_service
                 .get_reprocess_items(v)?
@@ -244,17 +262,7 @@ async fn print_buy_tables(
     let esi_config = &esi_config;
     let mut simple_list: Vec<_> = Vec::new();
     let rows = {
-        let cli_in = cli_args.get_one::<String>(cli::NAME_LENGTH);
-        let name_len = if let Some(v) = cli_in.and_then(|x| x.parse::<usize>().ok()) {
-            v
-        } else {
-            log::warn!(
-                "Value '{:?}' can't be parsed as an int. Using '{}'",
-                cli_in,
-                consts::ITEM_NAME_LEN
-            );
-            consts::ITEM_NAME_LEN.parse().unwrap()
-        };
+        let name_len = get_name_len(cli_args);
 
         if sell_sell {
             log::debug!("Sell sell path.");
@@ -295,6 +303,27 @@ async fn print_buy_tables(
         print_simple_list_with_price(simple_list);
     };
     Ok(())
+}
+
+fn get_debug_item(cli_args: &clap::ArgMatches) -> Option<i32> {
+    cli_args
+        .get_one::<String>(cli::DEBUG_ITEM_ID)
+        .and_then(|x| x.parse::<i32>().ok())
+}
+
+fn get_name_len(cli_args: &clap::ArgMatches) -> usize {
+    let cli_in = cli_args.get_one::<String>(cli::NAME_LENGTH);
+    let name_len = if let Some(v) = cli_in.and_then(|x| x.parse::<usize>().ok()) {
+        v
+    } else {
+        log::warn!(
+            "Value '{:?}' can't be parsed as an int. Using '{}'",
+            cli_in,
+            consts::ITEM_NAME_LEN
+        );
+        consts::ITEM_NAME_LEN.parse().unwrap()
+    };
+    name_len
 }
 
 fn compute_reprocess_rows<'b>(

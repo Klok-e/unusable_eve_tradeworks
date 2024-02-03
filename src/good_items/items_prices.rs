@@ -38,7 +38,7 @@ impl<'a> ItemsPricesService<'a> {
     ) -> anyhow::Result<Vec<ItemSellPrice>> {
         let station = self
             .esi_requests
-            .find_region_id_station(station, character_id)
+            .find_region_id_station(&station, character_id)
             .await
             .unwrap();
 

@@ -40,6 +40,8 @@ pub struct Order {
 #[derive(Debug, Serialize, Deserialize, Default, Copy, Clone)]
 pub struct ItemTypeAveraged {
     pub average: f64,
+    pub low_average: f64,
+    pub high_average: f64,
     pub volume: f64,
 }
 

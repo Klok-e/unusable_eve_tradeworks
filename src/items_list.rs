@@ -218,11 +218,11 @@ pub async fn compute_pairs<'a>(
     data_service: &DatadumpService,
 ) -> anyhow::Result<Vec<SystemMarketsItemData>> {
     let source_region = esi_requests
-        .find_region_id_station(config.route.source.clone(), character_id)
+        .find_region_id_station(&config.route.source.clone(), character_id)
         .await
         .unwrap();
     let dest_region = esi_requests
-        .find_region_id_station(config.route.destination.clone(), character_id)
+        .find_region_id_station(&config.route.destination.clone(), character_id)
         .await
         .unwrap();
     let all_types = create_load_all_types(cache, esi_requests, source_region, dest_region).await?;

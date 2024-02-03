@@ -10,7 +10,7 @@ use crate::{
     zkb::killmails::ItemFrequencies,
 };
 
-use super::help::{self, calculate_item_averages, calculate_optimal_buy_volume};
+use super::help::{self, calculate_item_averages, calculate_optimal_buy_volume, outbid_price};
 use super::help::{calculate_weighted_price, DataVecExt};
 
 pub fn get_good_items_sell_sell(
@@ -279,7 +279,7 @@ pub fn calculate_sell_price(
     }
 
     match dst_lowest_sell_order {
-        Some(dst_lowest_sell_order) => dst_lowest_sell_order * 0.999,
+        Some(dst_lowest_sell_order) => outbid_price(dst_lowest_sell_order, false),
         None => sell_with_markup,
     }
 }

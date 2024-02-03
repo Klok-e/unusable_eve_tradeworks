@@ -203,7 +203,21 @@ pub fn calculate_item_averages(
         .filter_map(|x| x.average)
         .map(to_not_nan)
         .median()
-        .map(|x| *x);
+        .map(|x| *x)?;
+
+    let avg_low_price = last_n_days
+        .iter()
+        .filter_map(|x| x.lowest)
+        .map(to_not_nan)
+        .median()
+        .map(|x| *x)?;
+
+    let avg_high_price = last_n_days
+        .iter()
+        .filter_map(|x| x.highest)
+        .map(to_not_nan)
+        .median()
+        .map(|x| *x)?;
 
     let mut avg_volume = *last_n_days
         .iter()
@@ -218,13 +232,12 @@ pub fn calculate_item_averages(
             .average()?;
     }
 
-    match (avg_price, avg_volume) {
-        (Some(p), v) => Some(ItemTypeAveraged {
-            average: p,
-            volume: v,
-        }),
-        _ => None,
-    }
+    Some(ItemTypeAveraged {
+        average: avg_price,
+        low_average: avg_low_price,
+        high_average: avg_high_price,
+        volume: avg_volume,
+    })
 }
 
 pub fn calculate_weighted_price(
@@ -320,4 +333,144 @@ pub fn match_buy_from_sell_orders<'a>(
     }
 
     (max_price, recommend_bought_volume)
+}
+
+pub fn outbid_price(price: f64, is_buy_order: bool) -> f64 {
+    // Determine the scale of the price to find out the position of the fourth digit
+    let scale = price.log10().floor() as i32 + 1;
+
+    let a = 10f64.powi(-(4 - scale));
+    let mut price = (price / a);
+    if is_buy_order {
+        let floor = price.floor();
+        price = if (price - floor).abs() > 0.99 {
+            price.round()
+        } else {
+            floor
+        } * a;
+    } else {
+        let ceil = price.ceil();
+        price = if (price - ceil).abs() < 0.001 {
+            price.round()
+        } else {
+            ceil
+        } * a;
+    }
+
+    // Calculate the minimum increment based on the scale
+    let increment = 10f64.powi(-(4 - scale));
+
+    // Adjust the price based on whether it's a buy or sell order
+    if is_buy_order {
+        price + increment
+    } else {
+        price - increment
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_outbid_price_buy_order_small_scale() {
+        let price = 0.0001; // Small scale price
+        let expected = 0.0002; // Expected to increase by the minimum increment
+        let result = outbid_price(price, true);
+        assert!(
+            (result - expected).abs() < 0.0001,
+            "Failed to correctly outbid a small scale buy order: {result} != {expected}"
+        );
+    }
+
+    #[test]
+    fn test_outbid_price_buy_order_one_scale() {
+        let price = 1.001; // Small scale price
+        let expected = 1.002; // Expected to increase by the minimum increment
+        let result = outbid_price(price, true);
+        assert!(
+            (result - expected).abs() < 0.0001,
+            "Failed to correctly outbid a one scale buy order: {result} != {expected}"
+        );
+    }
+
+    #[test]
+    fn test_outbid_price_sell_order_one_scale() {
+        let price = 1.001;
+        let expected = 1.000;
+        let result = outbid_price(price, false);
+        assert!(
+            (result - expected).abs() < 0.0001,
+            "Failed to correctly outbid a one scale sell order: {result} != {expected}"
+        );
+    }
+
+    #[test]
+    fn test_outbid_price_sell_order_small_scale() {
+        let price = 0.0002; // Small scale price
+        let expected = 0.0001; // Expected to decrease by the minimum increment
+        let result = outbid_price(price, false);
+        assert!(
+            (result - expected).abs() < 0.0001,
+            "Failed to correctly outbid a small scale sell order: {result} != {expected}"
+        );
+    }
+
+    #[test]
+    fn test_outbid_price_buy_order_large_scale() {
+        let price = 10000.0; // Large scale price
+        let expected = 10010.0; // Expected to increase by the minimum increment at this scale
+        let result = outbid_price(price, true);
+        assert!(
+            (result - expected).abs() < 0.0001,
+            "Failed to correctly outbid a large scale buy order: {result} != {expected}"
+        );
+    }
+
+    #[test]
+    fn test_outbid_price_sell_order_large_scale() {
+        let price = 10010.0; // Large scale price
+        let expected = 10000.0; // Expected to decrease by the minimum increment at this scale
+        let result = outbid_price(price, false);
+        assert!(
+            (result - expected).abs() < 0.0001,
+            "Failed to correctly outbid a large scale sell order: {result} != {expected}"
+        );
+    }
+
+    #[test]
+    fn test_outbid_price_edge_case() {
+        let price = 9999.0; // Edge case near a significant digit change
+        let expected_buy = 10000.0; // Expected to increase and round up for a buy order
+        let result_buy = outbid_price(price, true);
+        assert!(
+            (result_buy - expected_buy).abs() < 0.0001,
+            "Failed at edge case for buy order: {result_buy} != {expected_buy}"
+        );
+
+        let expected_sell = 9998.0; // Expected to decrease and round down for a sell order
+        let result_sell = outbid_price(price, false);
+        assert!(
+            (result_sell - expected_sell).abs() < 0.0001,
+            "Failed at edge case for sell order: {result_sell} != {expected_sell}"
+        );
+    }
+
+    #[test]
+    fn test_outbid_price_significant_digits() {
+        let price = 1234.5678; // Test price with more than 4 significant digits
+        let expected_buy = 1235.0; // Expected to round to 4 significant digits for a buy order
+        let result_buy = outbid_price(price, true);
+        assert!(
+            (result_buy - expected_buy).abs() < 0.0001,
+            "Failed to maintain 4 significant digits for buy order: {result_buy} != {expected_buy}"
+        );
+
+        let expected_sell = 1234.0; // Expected to round to 4 significant digits for a sell order
+        let result_sell = outbid_price(price, false);
+        assert!(
+            (result_sell - expected_sell).abs() < 0.0001,
+            "Failed to maintain 4 significant digits for sell order: {result_sell} != {expected_sell}"
+        );
+    }
 }
