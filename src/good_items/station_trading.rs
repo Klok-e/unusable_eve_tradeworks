@@ -64,7 +64,7 @@ impl<'a> StationTradingService<'a> {
 
         let item_orders = load_or_create_orders(
             self.cache,
-            Duration::hours(self.config.item_history_timeout_hours),
+            Duration::seconds((self.config.refresh_timeout_hours * 60. * 60.) as i64),
             self.esi_requests,
             station,
         )
@@ -113,6 +113,7 @@ impl<'a> StationTradingService<'a> {
                 {
                     buy_price
                 } else {
+                    log::debug!("No calculate_buy_price for item {}", desc.name);
                     return Ok(None);
                 };
                 log::debug!("Item {} buy price: {}", type_id, buy_price);
@@ -130,9 +131,15 @@ impl<'a> StationTradingService<'a> {
                     .map(|x| x.volume)
                     .expect("No average history");
 
-                let max_buy_vol = (expected_item_volume_per_day
+                let mut max_buy_vol = (expected_item_volume_per_day
                     * self.config.station_trade.daily_volume_pct)
                     .floor() as i64;
+
+                // limit investment
+                if buy_price_with_taxes * max_buy_vol as f64 > self.config.max_investment_per_item {
+                    max_buy_vol =
+                        (self.config.max_investment_per_item / buy_price_with_taxes).floor() as i64;
+                }
 
                 let rough_profit =
                     (sell_price_with_taxes - buy_price_with_taxes) * max_buy_vol as f64;
@@ -225,8 +232,8 @@ impl StationTradeData {
         let rows = std::iter::once(Row::new(vec![
             TableCell::new("id"),
             TableCell::new("itm nm"),
-            TableCell::new("src p"),
-            TableCell::new("dst p"),
+            TableCell::new("buy p"),
+            TableCell::new("sell p"),
             TableCell::new("expns"),
             TableCell::new("sll p"),
             TableCell::new("mrgn"),

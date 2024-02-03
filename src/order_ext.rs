@@ -60,6 +60,7 @@ where
                 if accumulated_volume >= volume {
                     Some(*price)
                 } else {
+                    log::debug!("Order {price}, remain {vol_remain}, lower than min volume {volume}; skipping...");
                     None
                 }
             })
