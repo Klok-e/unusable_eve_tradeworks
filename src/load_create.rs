@@ -90,7 +90,7 @@ pub async fn create_load_all_types(
 
 pub async fn create_load_item_descriptions(
     cache: &mut CachedStuff,
-    all_types: &Vec<i32>,
+    all_types: &[i32],
     esi_requests: &EsiRequestsService<'_>,
 ) -> Result<HashMap<i32, Option<TypeDescription>>, anyhow::Error> {
     let all_type_descriptions: HashMap<i32, Option<TypeDescription>> = cache
@@ -99,7 +99,7 @@ pub async fn create_load_item_descriptions(
             vec![CACHE_ALL_TYPES],
             Some(Duration::days(7)),
             |_| async {
-                let res = stream::iter(all_types.clone())
+                let res = stream::iter(all_types.iter().copied())
                     .map(|id| {
                         let esi_requests = &esi_requests;
                         async move {

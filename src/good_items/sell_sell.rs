@@ -278,8 +278,13 @@ pub fn calculate_sell_price(
         sell_with_markup = sell_with_markup.max(weighted_price)
     }
 
-    match dst_lowest_sell_order {
-        Some(dst_lowest_sell_order) => outbid_price(dst_lowest_sell_order, false),
-        None => sell_with_markup,
+    match (dst_lowest_sell_order, dst_avgs) {
+        (Some(dst_lowest_sell_order), Some(dst_avgs))
+            if dst_lowest_sell_order > dst_avgs.high_average =>
+        {
+            dst_avgs.high_average
+        }
+        (Some(dst_lowest_sell_order), _) => outbid_price(dst_lowest_sell_order, false),
+        (None, _) => sell_with_markup,
     }
 }

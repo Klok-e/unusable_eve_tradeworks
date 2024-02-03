@@ -340,7 +340,7 @@ pub fn outbid_price(price: f64, is_buy_order: bool) -> f64 {
     let scale = price.log10().floor() as i32 + 1;
 
     let a = 10f64.powi(-(4 - scale));
-    let mut price = (price / a);
+    let mut price = price / a;
     if is_buy_order {
         let floor = price.floor();
         price = if (price - floor).abs() > 0.99 {

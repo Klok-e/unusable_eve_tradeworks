@@ -313,7 +313,8 @@ fn get_debug_item(cli_args: &clap::ArgMatches) -> Option<i32> {
 
 fn get_name_len(cli_args: &clap::ArgMatches) -> usize {
     let cli_in = cli_args.get_one::<String>(cli::NAME_LENGTH);
-    let name_len = if let Some(v) = cli_in.and_then(|x| x.parse::<usize>().ok()) {
+
+    if let Some(v) = cli_in.and_then(|x| x.parse::<usize>().ok()) {
         v
     } else {
         log::warn!(
@@ -322,8 +323,7 @@ fn get_name_len(cli_args: &clap::ArgMatches) -> usize {
             consts::ITEM_NAME_LEN
         );
         consts::ITEM_NAME_LEN.parse().unwrap()
-    };
-    name_len
+    }
 }
 
 fn compute_reprocess_rows<'b>(

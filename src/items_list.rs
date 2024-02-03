@@ -1,28 +1,21 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use chrono::Duration;
-use futures::{stream, StreamExt};
 
 use rust_eveonline_esi::apis::configuration::Configuration;
 
 use term_table::row::Row;
-use tokio::join;
 
 use crate::{
     cached_data::CachedStuff,
     config::Config,
-    consts::{BUFFER_UNORDERED, CACHE_ALL_TYPES, CACHE_ALL_TYPE_DESC, CACHE_ALL_TYPE_PRICES},
     datadump_service::DatadumpService,
-    error,
     good_items::{
         sell_buy::{get_good_items_sell_buy, make_table_sell_buy},
         sell_sell::{get_good_items_sell_sell, make_table_sell_sell},
     },
     helper_ext::HashMapJoin,
-    item_type::{
-        ItemHistory, ItemOrders, MarketData, SystemMarketsItem, SystemMarketsItemData,
-        TypeDescription,
-    },
+    item_type::{ItemHistory, ItemOrders, MarketData, SystemMarketsItem, SystemMarketsItemData},
     load_create::{
         create_load_all_types, create_load_item_descriptions, create_load_prices,
         load_or_create_history, load_or_create_orders,

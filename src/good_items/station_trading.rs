@@ -1,19 +1,17 @@
 use std::result::Result::Ok;
-use std::{collections::HashMap, convert::identity};
 
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use chrono::Duration;
 use itertools::Itertools;
-use rust_eveonline_esi::models::GetCharactersCharacterIdWalletTransactions200Ok;
+
 use term_table::{row::Row, table_cell::TableCell};
 
 use crate::{
     cached_data::CachedStuff,
     config::CommonConfig,
-    consts::CACHE_ALL_TYPE_DESC,
     good_items::{help::calculate_item_averages, sell_sell::calculate_sell_price},
     helper_ext::HashMapJoin,
-    item_type::{ItemOrders, ItemTypeAveraged, MarketData, SystemMarketsItemData, TypeDescription},
+    item_type::{ItemOrders, ItemTypeAveraged, MarketData, TypeDescription},
     load_create::{
         create_load_all_types, create_load_item_descriptions, load_or_create_history,
         load_or_create_orders,
@@ -22,12 +20,11 @@ use crate::{
     requests::{
         item_history::ItemHistoryEsiService,
         service::{to_not_nan, EsiRequestsService},
-        transactions::WalletEsiService,
     },
-    Station, StationIdData,
+    Station,
 };
 
-use super::help::{self, calculate_weighted_price, outbid_price};
+use super::help::{calculate_weighted_price, outbid_price};
 
 pub struct StationTradingService<'a> {
     pub cache: &'a mut CachedStuff,
@@ -83,8 +80,7 @@ impl<'a> StationTradingService<'a> {
             .map(|(type_id, (history, orders))| {
                 let desc = if let Some(desc) = all_type_descriptions
                     .get(&type_id)
-                    .map(|x| x.as_ref().cloned())
-                    .flatten()
+                    .and_then(|x| x.as_ref().cloned())
                     .clone()
                 {
                     desc
@@ -108,8 +104,8 @@ impl<'a> StationTradingService<'a> {
                 );
                 let average_history = calculate_item_averages(self.config, &market_data.history);
 
-                let buy_price = if let Some(buy_price) =
-                    calculate_buy_price(average_history, &market_data, self.config).ok()
+                let buy_price = if let Ok(buy_price) =
+                    calculate_buy_price(average_history, &market_data, self.config)
                 {
                     buy_price
                 } else {
@@ -136,7 +132,8 @@ impl<'a> StationTradingService<'a> {
                     .floor() as i64;
 
                 // limit investment
-                if buy_price_with_taxes * max_buy_vol as f64 > self.config.max_investment_per_item {
+                if (buy_price_with_taxes * max_buy_vol as f64) > self.config.max_investment_per_item
+                {
                     max_buy_vol =
                         (self.config.max_investment_per_item / buy_price_with_taxes).floor() as i64;
                 }
@@ -149,10 +146,10 @@ impl<'a> StationTradingService<'a> {
                 Ok(Some(PairCalculatedDataStationTrade {
                     desc,
                     market: market_data,
-                    margin: margin,
-                    rough_profit: rough_profit,
+                    margin,
+                    rough_profit,
                     recommend_buy: max_buy_vol,
-                    expenses: buy_price_with_taxes,
+                    expenses: buy_price_with_taxes * max_buy_vol as f64,
                     gain_per_item: sell_price_with_taxes,
                     buy_price,
                     sell_price,
@@ -162,7 +159,7 @@ impl<'a> StationTradingService<'a> {
             })
             .collect::<anyhow::Result<Vec<_>>>()?
             .into_iter()
-            .filter_map(identity)
+            .flatten()
             .filter(|x| {
                 disable_filters
                     || x.margin > self.config.margin_cutoff
@@ -234,8 +231,8 @@ impl StationTradeData {
             TableCell::new("itm nm"),
             TableCell::new("buy p"),
             TableCell::new("sell p"),
-            TableCell::new("expns"),
-            TableCell::new("sll p"),
+            TableCell::new("total expenses"),
+            TableCell::new("gain per item"),
             TableCell::new("mrgn"),
             TableCell::new("vlm src"),
             TableCell::new("mkt src"),
@@ -249,7 +246,7 @@ impl StationTradeData {
                 TableCell::new(short_name),
                 TableCell::new(format!("{:.2}", it.buy_price)),
                 TableCell::new(format!("{:.2}", it.sell_price)),
-                TableCell::new(format!("{:.2}", it.expenses * it.recommend_buy as f64)),
+                TableCell::new(format!("{:.2}", it.expenses)),
                 TableCell::new(format!("{:.2}", it.gain_per_item)),
                 TableCell::new(format!("{:.2}", it.margin)),
                 TableCell::new(format!(
