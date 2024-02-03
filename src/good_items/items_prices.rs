@@ -62,7 +62,7 @@ impl<'a> ItemsPricesService<'a> {
 
         let item_orders = load_or_create_orders(
             self.cache,
-            Duration::hours(self.config.item_history_timeout_hours),
+            Duration::seconds((self.config.refresh_timeout_hours * 60. * 60.) as i64),
             self.esi_requests,
             station,
         )

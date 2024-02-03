@@ -77,24 +77,36 @@ pub fn paste_string_cmd(line: &str) -> anyhow::Result<()> {
     let rnd5: i64 = rng.gen_range(40..80);
     let rnd6: i64 = rng.gen_range(40..80);
     let rnd7: i64 = rng.gen_range(40..80);
-    cmd_lib::run_cmd!(
-        wl-copy ${line}
-    )?;
+    log::debug!("wl-copy '{line}'");
+    cmd_lib::spawn! {
+        wl-copy "${line}"
+    }?;
+
+    log::debug!("ydotool click --next-delay {rnd1} 0xC0");
     cmd_lib::run_cmd!(
         ydotool click --next-delay ${rnd1} 0xC0
     )?;
+
+    log::debug!("ydotool key -d {rnd2} 29:1");
     cmd_lib::run_cmd!(
         ydotool key -d ${rnd2} 29:1 // Keycode for Ctrl key down
     )?;
+
+    log::debug!("ydotool key -d {rnd3} 30:1 -d {rnd6} 30:0");
     cmd_lib::run_cmd!(
         ydotool key -d ${rnd3} 30:1 -d ${rnd6} 30:0 // Keycode for 'a' key
     )?;
+
+    log::debug!("ydotool key -d {rnd4} 47:1 -d {rnd7} 47:0");
     cmd_lib::run_cmd!(
         ydotool key -d ${rnd4} 47:1 -d ${rnd7} 47:0 // Keycode for 'v' key
     )?;
+
+    log::debug!("ydotool key -d {rnd5} 29:0");
     cmd_lib::run_cmd!(
         ydotool key -d ${rnd5} 29:0 // Keycode for Ctrl key up
     )?;
+
     Ok(())
 }
 
