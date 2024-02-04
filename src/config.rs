@@ -51,6 +51,7 @@ pub struct CommonConfig {
     pub include_groups: Option<Vec<String>>,
     pub sell_sell: ConfigSellSell,
     pub station_trade: ConfigStationTrade,
+    pub ignore_difference_between_history_and_order_pct: f64,
     pub cargo_capacity: i32,
     pub max_investment_per_item: f64,
     pub sell_reprocess: ConfigSellReprocess,

@@ -1,5 +1,3 @@
-use std::result::Result::Ok;
-
 use anyhow::anyhow;
 use chrono::Duration;
 use itertools::Itertools;
@@ -24,7 +22,7 @@ use crate::{
     Station,
 };
 
-use super::help::{calculate_weighted_price, outbid_price};
+use super::help::outbid_price;
 
 pub struct StationTradingService<'a> {
     pub cache: &'a mut CachedStuff,
@@ -123,9 +121,10 @@ impl<'a> StationTradingService<'a> {
 
                 let margin = (sell_price_with_taxes - buy_price_with_taxes) / buy_price_with_taxes;
 
-                let expected_item_volume_per_day = average_history
-                    .map(|x| x.volume)
-                    .expect("No average history");
+                let Some(expected_item_volume_per_day) = average_history.map(|x| x.volume) else {
+                    log::debug!("No average_history for item {}", desc.name);
+                    return Ok(None);
+                };
 
                 let mut max_buy_vol = (expected_item_volume_per_day
                     * self.config.station_trade.daily_volume_pct)
@@ -206,21 +205,17 @@ fn calculate_buy_price(
         dest_market.orders.iter().sell_order_min_price()
     };
 
-    let weighted_price = calculate_weighted_price(config, &dest_market.history);
-    let item_lowest_historical_avg = if let Ok(weighted_price) = weighted_price {
-        weighted_price
-    } else {
-        return Err(anyhow!("No weighted_price"));
-    };
-
     Ok(match (dst_highest_buy_order, dst_avgs) {
         (Some(dst_highest_buy_order), Some(dst_avgs))
-            if dst_highest_buy_order < dst_avgs.low_average =>
+            if dst_avgs.low_average > dst_highest_buy_order
+                && ((dst_avgs.low_average - dst_highest_buy_order) / dst_highest_buy_order)
+                    > config.ignore_difference_between_history_and_order_pct =>
         {
             dst_avgs.low_average
         }
         (Some(dst_highest_buy_order), _) => outbid_price(dst_highest_buy_order, true),
-        (None, _) => item_lowest_historical_avg,
+        (_, Some(dst_avgs)) => dst_avgs.low_average,
+        (_, _) => return Err(anyhow!("No buy orders or market history")),
     })
 }
 
