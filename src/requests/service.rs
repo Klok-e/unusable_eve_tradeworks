@@ -12,6 +12,7 @@ use crate::{
     Station, StationIdData,
 };
 use chrono::NaiveDateTime;
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 
 use super::error::{EsiApiError, Result};
@@ -525,15 +526,26 @@ impl<'a> EsiRequestsService<'a> {
         Ok(pages)
     }
 
-    pub async fn open_market_type(&self, type_id: i32) -> anyhow::Result<()> {
-        user_interface_api::post_ui_openwindow_marketdetails(
-            self.config,
-            PostUiOpenwindowMarketdetailsParams {
-                type_id,
-                datasource: None,
-                token: None,
-            },
-        )
+    pub async fn open_market_type(&self, type_id: i32) -> Result<()> {
+        retry::retry_smart(|| async {
+            let response_content = user_interface_api::post_ui_openwindow_marketdetails(
+                self.config,
+                PostUiOpenwindowMarketdetailsParams {
+                    type_id,
+                    datasource: None,
+                    token: None,
+                },
+            )
+            .await;
+            match response_content.map_err(|x| x.into()) {
+                Ok(ok) => Ok::<_, EsiApiError>(Retry::Success(ok)),
+                Err(EsiApiError {
+                    status: StatusCode::FORBIDDEN,
+                    ..
+                }) => Ok::<_, EsiApiError>(Retry::Retry),
+                Err(err) => Err(err),
+            }
+        })
         .await?;
 
         Ok(())

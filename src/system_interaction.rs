@@ -33,7 +33,7 @@ pub async fn communicate_paste_into_game<'a>(
         let conn = listener.accept()?;
         // user clicks "create buy order"
         click_cmd()?;
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
         save_to_clipboard_cmd(&format!("{}", item.item_price))?;
         paste_from_clipboard_cmd()?;
 

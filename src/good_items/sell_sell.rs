@@ -285,6 +285,7 @@ pub fn calculate_sell_price(
             dst_avgs.high_average
         }
         (Some(dst_lowest_sell_order), _) => outbid_price(dst_lowest_sell_order, false),
-        (None, _) => sell_with_markup,
+        (_, Some(dst_avgs)) => dst_avgs.average,
+        (_, _) => sell_with_markup,
     }
 }

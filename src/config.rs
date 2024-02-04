@@ -87,7 +87,6 @@ pub struct ConfigSellSell {
 pub struct ConfigStationTrade {
     pub daily_volume_pct: f64,
     pub min_item_volume: f64,
-    pub markup_if_no_orders_dest: f64,
     pub dst_ignore_orders_under_volume_pct: f64,
     pub exclude_groups: Option<Vec<String>>,
     pub include_groups: Option<Vec<String>>,

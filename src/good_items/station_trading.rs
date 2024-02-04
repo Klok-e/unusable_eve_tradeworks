@@ -213,9 +213,14 @@ fn calculate_buy_price(
         return Err(anyhow!("No weighted_price"));
     };
 
-    Ok(match dst_highest_buy_order {
-        Some(dst_highest_buy_order) => outbid_price(dst_highest_buy_order, true),
-        None => item_lowest_historical_avg,
+    Ok(match (dst_highest_buy_order, dst_avgs) {
+        (Some(dst_highest_buy_order), Some(dst_avgs))
+            if dst_highest_buy_order < dst_avgs.low_average =>
+        {
+            dst_avgs.low_average
+        }
+        (Some(dst_highest_buy_order), _) => outbid_price(dst_highest_buy_order, true),
+        (None, _) => item_lowest_historical_avg,
     })
 }
 

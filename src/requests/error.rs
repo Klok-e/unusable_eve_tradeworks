@@ -12,6 +12,7 @@ use rust_eveonline_esi::apis::{
     routes_api::GetRouteOriginDestinationError,
     search_api::GetCharactersCharacterIdSearchError,
     universe_api::GetUniverseTypesTypeIdError,
+    user_interface_api::PostUiOpenwindowMarketdetailsError,
     wallet_api::GetCharactersCharacterIdWalletTransactionsError,
     ResponseContent,
 };
@@ -59,6 +60,8 @@ enum EsiApiErrorEnum {
     CharacterWalletTransactions(
         #[from] apis::Error<GetCharactersCharacterIdWalletTransactionsError>,
     ),
+    #[error("Ui open window error: {0}")]
+    UiOpenWindow(#[from] apis::Error<PostUiOpenwindowMarketdetailsError>),
 }
 
 impl From<apis::Error<GetMarketsPricesError>> for EsiApiError {
@@ -209,6 +212,19 @@ impl From<apis::Error<GetMarketsRegionIdHistoryError>> for EsiApiError {
 
 impl From<apis::Error<GetCharactersCharacterIdWalletTransactionsError>> for EsiApiError {
     fn from(x: apis::Error<GetCharactersCharacterIdWalletTransactionsError>) -> Self {
+        let code = match &x {
+            apis::Error::ResponseError(x) => x.status,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        EsiApiError {
+            internal: x.into(),
+            status: code,
+        }
+    }
+}
+
+impl From<apis::Error<PostUiOpenwindowMarketdetailsError>> for EsiApiError {
+    fn from(x: apis::Error<PostUiOpenwindowMarketdetailsError>) -> Self {
         let code = match &x {
             apis::Error::ResponseError(x) => x.status,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
