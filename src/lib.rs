@@ -14,8 +14,8 @@ pub mod logger;
 pub mod order_ext;
 pub mod requests;
 pub mod stat;
+pub mod system_interaction;
 pub mod zkb;
-pub mod commands;
 
 use serde::{Deserialize, Serialize};
 

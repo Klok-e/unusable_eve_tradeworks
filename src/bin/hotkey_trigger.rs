@@ -1,5 +1,5 @@
-use interprocess::os::unix::udsocket::{UdSocket, UdStream};
-use unusable_eve_tradeworks_lib::{cli, consts::UD_SOCKET_PATH, logger};
+use interprocess::os::unix::udsocket::UdStream;
+use unusable_eve_tradeworks_lib::{consts::UD_SOCKET_PATH, logger};
 
 #[tokio::main]
 async fn main() {

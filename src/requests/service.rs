@@ -36,6 +36,7 @@ use rust_eveonline_esi::{
             GetUniverseStructuresStructureIdParams, GetUniverseSystemsSystemIdParams,
             GetUniverseSystemsSystemIdSuccess, GetUniverseTypesTypeIdParams,
         },
+        user_interface_api::{self, PostUiOpenwindowMarketdetailsParams},
     },
     models::{
         get_markets_region_id_orders_200_ok, GetKillmailsKillmailIdKillmailHashItem,
@@ -522,6 +523,20 @@ impl<'a> EsiRequestsService<'a> {
         .await?;
 
         Ok(pages)
+    }
+
+    pub async fn open_market_type(&self, type_id: i32) -> anyhow::Result<()> {
+        user_interface_api::post_ui_openwindow_marketdetails(
+            self.config,
+            PostUiOpenwindowMarketdetailsParams {
+                type_id,
+                datasource: None,
+                token: None,
+            },
+        )
+        .await?;
+
+        Ok(())
     }
 }
 

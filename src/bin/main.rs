@@ -1,16 +1,8 @@
-use std::{
-    fs::remove_file,
-    io::{self, Read, Write},
-    net::Shutdown,
-    path::Path,
-};
+use std::io::Read;
 
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use chrono::Duration;
-use rand::Rng;
 
-use copypasta::{ClipboardContext, ClipboardProvider};
-use interprocess::os::unix::udsocket::{UdStream, UdStreamListener};
 use itertools::Itertools;
 use oauth2::TokenResponse;
 use rust_eveonline_esi::apis::configuration::Configuration;
@@ -21,17 +13,13 @@ use unusable_eve_tradeworks_lib::{
     auth::Auth,
     cached_data::CachedStuff,
     cli::{self, DEST_NAME, SOURCE_NAME},
-    commands::{
-        communicate_paste_into_game, communicate_paste_sell_order_prices,
-        parse_items_from_clipboard,
-    },
     config::{AuthConfig, CommonConfig, Config, RouteConfig},
-    consts::{self, CACHE_AUTH, CACHE_DATADUMP, CONFIG_COMMON, UD_SOCKET_PATH},
+    consts::{self, CACHE_AUTH, CACHE_DATADUMP, CONFIG_COMMON},
     datadump_service::DatadumpService,
     good_items::{
-        items_prices::{ItemInput, ItemsPricesService},
+        items_prices::ItemsPricesService,
         sell_reprocess::{get_good_items_sell_reprocess, make_table_sell_reprocess},
-        station_trading::{StationTradeData, StationTradingService},
+        station_trading::StationTradingService,
     },
     item_type::SystemMarketsItemData,
     items_list::{compute_pairs, compute_sell_buy, compute_sell_sell, SimpleDisplay},
@@ -39,6 +27,10 @@ use unusable_eve_tradeworks_lib::{
     requests::{
         item_history::ItemHistoryEsiService, service::EsiRequestsService,
         transactions::WalletEsiService,
+    },
+    system_interaction::{
+        communicate_paste_into_game, communicate_paste_sell_order_prices,
+        parse_items_from_clipboard,
     },
     Station,
 };
@@ -177,8 +169,6 @@ async fn run() -> Result<(), anyhow::Error> {
         // join reverted prices because order of items in multi sell are reversed
         let prices = prices.iter().rev().map(|x| x.price).collect();
         communicate_paste_sell_order_prices(prices)?;
-
-        log::info!("Prices passed to type-lines.sh");
     } else if cli_args.get_flag(cli::STATION_TRADING) {
         log::debug!("Station trading");
         let mut items_prices_service = StationTradingService {
@@ -198,7 +188,7 @@ async fn run() -> Result<(), anyhow::Error> {
         let table = TableBuilder::new().rows(rows).build();
         println!("{}", table.render());
 
-        communicate_paste_into_game(&items)?;
+        communicate_paste_into_game(&esi_requests, &items).await?;
     }
 
     Ok(())

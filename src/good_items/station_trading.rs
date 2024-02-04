@@ -262,8 +262,9 @@ impl StationTradeData {
         rows
     }
 
-    pub fn get_buy_order_data<'a>(&'a self) -> impl Iterator<Item = BuyOrderData> + 'a {
+    pub fn get_buy_order_data(&self) -> impl Iterator<Item = BuyOrderData> + '_ {
         self.item_data.iter().map(|x| BuyOrderData {
+            type_id: x.desc.type_id,
             item_price: x.buy_price,
             item_quantity: x.recommend_buy,
         })
@@ -271,6 +272,7 @@ impl StationTradeData {
 }
 
 pub struct BuyOrderData {
+    pub type_id: i32,
     pub item_price: f64,
     pub item_quantity: i64,
 }
