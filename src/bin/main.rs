@@ -3,7 +3,6 @@ use std::io::Read;
 use anyhow::anyhow;
 use chrono::Duration;
 
-use itertools::Itertools;
 use oauth2::TokenResponse;
 use rust_eveonline_esi::apis::configuration::Configuration;
 
