@@ -1,31 +1,50 @@
 {
-  "days_average": 20,
-  "margin_cutoff": 0.01,
+  "days_average": 14,
+  "margin_cutoff": 0.02,
   "sales_tax": 0.036,
-  "items_take": 20,
+  "items_take": 50,
   "zkill_entity": {
     "id": 498125261,
     "tp": "Alliance"
   },
-  "refresh_timeout_hours": 1,
-  "item_history_timeout_hours": 168,
-  "min_profit": 100000.0,
+  "refresh_timeout_hours": 0.3,
+  "item_history_timeout_hours": 140,
+  "min_profit": 1000000.0,
   "include_groups": null,
   "sell_sell": {
-    "rcmnd_fill_days": 0.1,
-    "min_src_volume": 0.0,
-    "min_dst_volume": 1.0,
-    "max_filled_for_days_cutoff": 50.0,
-    "freight_cost_iskm3": 600.0,
-    "freight_cost_collateral_percent": 0.015,
+    "rcmnd_fill_days": 3.0,
+    "min_src_volume": 100.0,
+    "min_dst_volume": 0.0,
+    "max_filled_for_days_cutoff": 7.0,
+    "freight_cost_iskm3": 0.0,
+    "freight_cost_collateral_percent": 0.0,
     "sell_sell_zkb": {
-      "min_dst_zkb_lost_volume": 1.0,
-      "zkb_download_pages": 20
-    }
+      "min_dst_zkb_lost_volume": 0.0,
+      "zkb_download_pages": 20,
+      "zkb_losses_volume_multiplier": 0.8
+    },
+    "markup_if_no_orders_dest": 0.35,
+    "dst_ignore_orders_under_volume_pct": 0.01,
+    "exclude_groups": [
+      "Various materials used in manufacturing",
+      "Overseer's Personal Effects",
+      "Services available to capsuleers include PLEX, Multiple Pilot Training, Pilot's Body Resculpt Certificates, and Skill Trading items",
+      "Bounty Encrypted Bonds",
+      "Research Equipment",
+      "Special Edition Assets"
+    ],
+    "include_groups": null
   },
-  "sell_buy": {
-    "cargo_capacity": 12000
+  "station_trade": {
+    "daily_volume_pct": 0.1,
+    "min_item_volume": 100.0,
+    "dst_ignore_orders_under_volume_pct": 0.01,
+    "exclude_groups": null,
+    "include_groups": null
   },
+  "ignore_difference_between_history_and_order_pct": 0.5,
+  "cargo_capacity": 60000,
+  "max_investment_per_item": 100000000.0,
   "sell_reprocess": {
     "repro_portion": 0.5,
     "repro_tax": 0.02
