@@ -2,7 +2,7 @@
   "days_average": 14,
   "margin_cutoff": 0.02,
   "sales_tax": 0.036,
-  "items_take": 50,
+  "items_take": 13,
   "zkill_entity": {
     "id": 498125261,
     "tp": "Alliance"
@@ -44,10 +44,10 @@
   },
   "ignore_difference_between_history_and_order_pct": 0.5,
   "cargo_capacity": 60000,
-  "max_investment_per_item": 100000000.0,
+  "max_investment_per_item": 200000000.0,
   "sell_reprocess": {
-    "repro_portion": 0.5,
-    "repro_tax": 0.02
+    "repro_portion": 0.55,
+    "repro_tax": 0.0
   },
   "stations": [
     {
