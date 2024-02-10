@@ -284,10 +284,10 @@ pub fn calculate_sell_price(
                 && ((dst_lowest_sell_order - dst_avgs.high_average) / dst_avgs.high_average)
                     > config.ignore_difference_between_history_and_order_pct =>
         {
-            dst_avgs.high_average
+            dst_avgs.high_average.max(sell_with_markup)
         }
         (Some(dst_lowest_sell_order), _) => outbid_price(dst_lowest_sell_order, false),
-        (_, Some(dst_avgs)) => dst_avgs.high_average,
+        (_, Some(dst_avgs)) => dst_avgs.high_average.max(sell_with_markup),
         (_, _) => sell_with_markup,
     }
 }
