@@ -36,7 +36,7 @@ impl<'a> ItemsPricesService<'a> {
         items: Vec<ItemInput>,
         station: Station,
     ) -> anyhow::Result<Vec<ItemSellPrice>> {
-        let station = self
+        let station_id = self
             .esi_requests
             .find_region_id_station(&station, character_id)
             .await
@@ -53,7 +53,7 @@ impl<'a> ItemsPricesService<'a> {
 
         let item_history = load_or_create_history(
             self.cache,
-            station,
+            station_id,
             Duration::hours(self.config.item_history_timeout_hours),
             self.esi_history,
             &all_type_descriptions.iter().map(|x| *x.0).collect_vec(),
@@ -64,7 +64,7 @@ impl<'a> ItemsPricesService<'a> {
             self.cache,
             Duration::seconds((self.config.refresh_timeout_hours * 60. * 60.) as i64),
             self.esi_requests,
-            station,
+            station_id,
         )
         .await?;
 
@@ -117,6 +117,14 @@ impl<'a> ItemsPricesService<'a> {
 
                 let sell_price =
                     calculate_sell_price(average_history, &market_data, self.config, buy_price);
+
+                log::debug!("Item {} sell price: {}", item.name, sell_price);
+
+                log::debug!(
+                    "Item {} sell price with taxes: {}",
+                    item.name,
+                    sell_price * (1. - self.config.sales_tax) * (1. - station.broker_fee)
+                );
 
                 Ok(ItemSellPrice {
                     price: sell_price,
