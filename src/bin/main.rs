@@ -171,6 +171,7 @@ async fn run() -> Result<(), anyhow::Error> {
     } else if cli_args.get_flag(cli::STATION_TRADING) {
         log::debug!("Station trading");
         let mut items_prices_service = StationTradingService {
+            datadump: &data_service,
             cache: &mut cache,
             esi_requests: &esi_requests,
             esi_history: &esi_history,

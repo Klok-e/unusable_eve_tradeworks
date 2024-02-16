@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use anyhow::anyhow;
 use chrono::Duration;
 use itertools::Itertools;
@@ -7,6 +9,7 @@ use term_table::{row::Row, table_cell::TableCell};
 use crate::{
     cached_data::CachedStuff,
     config::CommonConfig,
+    datadump_service::DatadumpService,
     good_items::{help::calculate_item_averages, sell_sell::calculate_sell_price},
     helper_ext::HashMapJoin,
     item_type::{ItemOrders, ItemTypeAveraged, MarketData, TypeDescription},
@@ -26,6 +29,7 @@ use super::help::outbid_price;
 
 pub struct StationTradingService<'a> {
     pub cache: &'a mut CachedStuff,
+    pub datadump: &'a DatadumpService,
     pub esi_requests: &'a EsiRequestsService<'a>,
     pub esi_history: &'a ItemHistoryEsiService<'a>,
     pub config: &'a CommonConfig,
@@ -72,6 +76,13 @@ impl<'a> StationTradingService<'a> {
             item_order_history.retain(|&k, _| k == v);
             disable_filters = true;
         }
+
+        retain_item_groups(
+            self.config,
+            self.datadump,
+            &mut item_order_history,
+            &all_type_descriptions,
+        )?;
 
         let item_data = item_order_history
             .into_iter()
@@ -175,6 +186,65 @@ impl<'a> StationTradingService<'a> {
 
         Ok(StationTradeData { item_data })
     }
+}
+
+fn retain_item_groups<T>(
+    config: &CommonConfig,
+    data_service: &DatadumpService,
+    items: &mut HashMap<i32, T>,
+    descriptions: &HashMap<i32, Option<TypeDescription>>,
+) -> Result<(), anyhow::Error> {
+    let exclude_group_ids = config
+        .station_trade
+        .exclude_groups
+        .as_ref()
+        .map(|exclude_groups| data_service.get_group_ids_for_groups(exclude_groups))
+        .transpose()?;
+    log::debug!("Station trade exclude groups {exclude_group_ids:?}");
+    let include_group_ids = config
+        .station_trade
+        .include_groups
+        .as_ref()
+        .map(|include_groups| data_service.get_group_ids_for_groups(include_groups))
+        .transpose()?;
+    log::debug!("Station trade include groups {include_group_ids:?}");
+    items.retain(|k, _| {
+        let desc = if let Some(desc) = descriptions
+            .get(k)
+            .and_then(|x| x.as_ref().cloned())
+            .clone()
+        {
+            desc
+        } else {
+            log::debug!("Couldn't find description for item {k} in cache");
+            return true;
+        };
+
+        let x = include_group_ids
+            .as_ref()
+            .map(|include_group_ids| {
+                desc.market_group_id
+                    .map(|market_group_id| include_group_ids.contains(&market_group_id))
+                    .unwrap_or(false)
+            })
+            .unwrap_or(true)
+            && exclude_group_ids
+                .as_ref()
+                .map(|exclude_group_ids| {
+                    desc.market_group_id
+                        .map(|market_group_id| !exclude_group_ids.contains(&market_group_id))
+                        .unwrap_or(true)
+                })
+                .unwrap_or(true);
+        log::debug!(
+            "Item {}, market group id {:?}, excluded: {}",
+            desc.name,
+            desc.market_group_id,
+            !x
+        );
+        x
+    });
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
