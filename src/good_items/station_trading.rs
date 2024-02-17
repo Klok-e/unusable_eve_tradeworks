@@ -106,10 +106,14 @@ impl<'a> StationTradingService<'a> {
                             orders: Vec::new(),
                         })
                         .clone(),
-                    history
-                        .as_ref()
-                        .ok_or_else(|| anyhow!("History not found for item {}", type_id))?
-                        .clone(),
+                    match history.as_ref() {
+                        Some(v) => v,
+                        None => {
+                            log::debug!("History not found for item {}", type_id);
+                            return Ok(None);
+                        }
+                    }
+                    .clone(),
                 );
                 let average_history = calculate_item_averages(self.config, &market_data.history);
 
