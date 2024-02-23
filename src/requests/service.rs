@@ -83,7 +83,7 @@ impl<'a> EsiRequestsService<'a> {
             .into_ok()
             .unwrap()
             .structure
-            .unwrap()[0]
+            .expect("Citadel not found")[0]
         } else {
             get_characters_character_id_search(
                 self.config,
