@@ -63,27 +63,27 @@ impl<'a> EsiRequestsService<'a> {
     ) -> Result<StationIdData> {
         // find system id
         let station_id = if station.is_citadel {
-            get_characters_character_id_search(
-                self.config,
-                GetCharactersCharacterIdSearchParams {
-                    categories: vec!["structure".to_string()],
-                    character_id,
-                    search: station.name.to_string(),
-                    accept_language: None,
-                    datasource: None,
-                    if_none_match: None,
-                    language: None,
-                    strict: None,
-                    token: None,
-                },
-            )
-            .await?
-            .entity
-            .unwrap()
-            .into_ok()
-            .unwrap()
-            .structure
-            .expect("Citadel not found")[0]
+                get_characters_character_id_search(
+                    self.config,
+                    GetCharactersCharacterIdSearchParams {
+                        categories: vec!["structure".to_string()],
+                        character_id,
+                        search: station.name.to_string(),
+                        accept_language: None,
+                        datasource: None,
+                        if_none_match: None,
+                        language: None,
+                        strict: None,
+                        token: None,
+                    },
+                )
+                .await?
+                .entity
+                .unwrap()
+                .into_ok()
+                .unwrap()
+                .structure
+                .expect("Citadel not found")[0]
         } else {
             get_characters_character_id_search(
                 self.config,

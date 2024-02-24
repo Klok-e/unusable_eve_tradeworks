@@ -29,7 +29,7 @@ use unusable_eve_tradeworks_lib::{
     },
     system_interaction::{
         communicate_paste_into_game, communicate_paste_sell_order_prices,
-        parse_items_from_clipboard,
+        parse_items_from_clipboard, send_notification,
     },
     Station,
 };

@@ -14,11 +14,20 @@ use crate::{
     requests::service::EsiRequestsService,
 };
 
+pub fn send_notification(notification: &str)->anyhow::Result<()>{
+    log::debug!("Sending notification {notification}");
+    cmd_lib::spawn! {
+        notify-send "Unusable Eve Tradeworks" ${notification}
+    }?;
+    Ok(())
+}
+
 pub async fn communicate_paste_into_game<'a>(
     esi_requests: &EsiRequestsService<'a>,
     items: &StationTradeData,
 ) -> anyhow::Result<()> {
     log::info!("Listening for hotkeys...");
+    send_notification("Listening to hotkeys")?;
 
     let path = &Path::new(UD_SOCKET_PATH);
     if path.exists() {
@@ -52,6 +61,7 @@ pub async fn communicate_paste_into_game<'a>(
 
 pub fn communicate_paste_sell_order_prices(prices: Vec<f64>) -> anyhow::Result<()> {
     log::info!("Listening for hotkeys...");
+    send_notification("Listening to hotkeys")?;
 
     let path = &Path::new(UD_SOCKET_PATH);
     if path.exists() {
