@@ -29,7 +29,7 @@ use unusable_eve_tradeworks_lib::{
     },
     system_interaction::{
         communicate_paste_into_game, communicate_paste_sell_order_prices,
-        parse_items_from_clipboard,
+        parse_items_from_clipboard, send_notification,
     },
     Station,
 };
@@ -52,8 +52,7 @@ async fn run() -> Result<(), anyhow::Error> {
     let cli_args = cli::matches();
 
     let quiet = cli_args.get_flag(cli::QUIET);
-    let file_loud = cli_args.get_flag(cli::FILE_LOUD);
-    logger::setup_logger(quiet, file_loud, true)?;
+    logger::setup_logger(quiet, true)?;
 
     let mut cache = CachedStuff::new();
 
@@ -142,6 +141,7 @@ async fn run() -> Result<(), anyhow::Error> {
             force_no_refresh,
         )
         .await?;
+        send_notification("Items table finished")?;
     } else if cli_args.get_flag(cli::ITEMS_PRICES) {
         log::debug!("Items prices");
         let wallet_service = WalletEsiService {

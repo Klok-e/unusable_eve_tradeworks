@@ -12,7 +12,7 @@ use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, CsrfToken, EmptyExtraTokenFields, PkceCodeChallenge,
     RedirectUrl, Scope, StandardTokenResponse, TokenResponse, TokenUrl,
 };
-use reqwest::{self, Url};
+use reqwest::Url;
 use serde::{Deserialize, Serialize};
 
 use self::models::CharacterInfo;

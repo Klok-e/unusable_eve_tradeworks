@@ -13,7 +13,7 @@ async fn main() {
     }
 }
 async fn run() -> Result<(), anyhow::Error> {
-    logger::setup_logger(false, false, false)?;
+    logger::setup_logger(false, false)?;
 
     let conn = UdStream::connect(UD_SOCKET_PATH)?;
 

@@ -1,8 +1,12 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, num::NonZeroU32};
 
+use governor::{DefaultDirectRateLimiter, Jitter, Quota, RateLimiter};
 use rust_eveonline_esi::apis::configuration::Configuration;
 
-use crate::{consts::BUFFER_UNORDERED_SMALL, requests::paged_all::OnlyOk, requests::retry};
+use crate::{
+    consts::BUFFER_UNORDERED,
+    requests::{paged_all::OnlyOk, retry},
+};
 use crate::{
     consts::DATE_FMT,
     item_type::{ItemHistory, MarketsRegionHistory},
@@ -105,8 +109,14 @@ impl<'a> ItemHistoryEsiService<'a> {
         &self,
         region_id: i32,
         item_type: i32,
+        rate_limiter: &DefaultDirectRateLimiter,
     ) -> Result<Option<ItemHistory>> {
         let res: Option<ItemHistory> = retry::retry_smart(|| async {
+            log::debug!("Waiting for rate limit...");
+            rate_limiter
+                .until_ready_with_jitter(Jitter::up_to(std::time::Duration::from_millis(100)))
+                .await;
+
             let hist_for_type: Result<_> = async {
                 Ok(market_api::get_markets_region_id_history(
                     self.config,
@@ -170,9 +180,12 @@ impl<'a> ItemHistoryEsiService<'a> {
         item_types: &[i32],
         region_id: i32,
     ) -> Result<Vec<ItemHistory>> {
+        let limiter = RateLimiter::direct(Quota::per_minute(NonZeroU32::new(300).unwrap()));
+
         let hists = stream::iter(item_types)
-            .map(|&item_type| self.get_item_type_history(region_id, item_type))
-            .buffer_unordered(BUFFER_UNORDERED_SMALL);
+            .map(|&item_type| self.get_item_type_history(region_id, item_type, &limiter))
+            .buffer_unordered(BUFFER_UNORDERED);
+
         Ok(hists
             .collect::<Vec<_>>()
             .await
