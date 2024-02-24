@@ -1,6 +1,6 @@
-use std::{collections::HashMap, num::NonZeroU32};
+use std::collections::HashMap;
 
-use governor::{DefaultDirectRateLimiter, Jitter, Quota, RateLimiter};
+use governor::DefaultDirectRateLimiter;
 use rust_eveonline_esi::apis::configuration::Configuration;
 
 use crate::{
