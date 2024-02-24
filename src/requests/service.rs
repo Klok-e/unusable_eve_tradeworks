@@ -8,7 +8,7 @@ use crate::{
 };
 use crate::{
     item_type::ItemOrders,
-    requests::{paged_all::get_all_pages, retry::Retry},
+    requests::{paged_all::get_all_pages, retry::RetryResult},
     Station, StationIdData,
 };
 use chrono::NaiveDateTime;
@@ -214,7 +214,7 @@ impl<'a> EsiRequestsService<'a> {
             .await?
             .entity
             .unwrap();
-            Ok(Retry::Success(res.into_ok().unwrap()))
+            Ok(RetryResult::Success(res.into_ok().unwrap()))
         })
         .await?;
 
@@ -233,7 +233,7 @@ impl<'a> EsiRequestsService<'a> {
             .await?
             .entity
             .unwrap();
-            Ok(Retry::Success(res.into_ok().unwrap()))
+            Ok(RetryResult::Success(res.into_ok().unwrap()))
         })
         .await?;
 
@@ -299,7 +299,7 @@ impl<'a> EsiRequestsService<'a> {
                                         .entity
                                         .unwrap();
 
-                                        Ok::<_,EsiApiError>(Retry::Success(res.into_ok().unwrap()))
+                                        Ok::<_,EsiApiError>(RetryResult::Success(res.into_ok().unwrap()))
                                     },
                                 )
                                 .await?
@@ -461,7 +461,7 @@ impl<'a> EsiRequestsService<'a> {
             .await?
             .entity
             .unwrap();
-            Ok(Retry::Success(res.into_ok().unwrap()))
+            Ok(RetryResult::Success(res.into_ok().unwrap()))
         })
         .await?;
         let km = match km {
@@ -538,11 +538,11 @@ impl<'a> EsiRequestsService<'a> {
             )
             .await;
             match response_content.map_err(|x| x.into()) {
-                Ok(ok) => Ok::<_, EsiApiError>(Retry::Success(ok)),
+                Ok(ok) => Ok::<_, EsiApiError>(RetryResult::Success(ok)),
                 Err(EsiApiError {
                     status: StatusCode::FORBIDDEN,
                     ..
-                }) => Ok::<_, EsiApiError>(Retry::Retry),
+                }) => Ok::<_, EsiApiError>(RetryResult::Retry),
                 Err(err) => Err(err),
             }
         })

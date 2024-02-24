@@ -1,8 +1,9 @@
-use std::io::Read;
+use std::{io::Read, num::NonZeroU32};
 
 use anyhow::anyhow;
 use chrono::Duration;
 
+use governor::{Quota, RateLimiter};
 use oauth2::TokenResponse;
 use rust_eveonline_esi::apis::configuration::Configuration;
 
@@ -104,7 +105,12 @@ async fn run() -> Result<(), anyhow::Error> {
 
     let force_no_refresh = cli_args.get_flag(cli::FORCE_NO_REFRESH);
 
-    let esi_history = ItemHistoryEsiService::new(&esi_config);
+    let error_limiter = RateLimiter::direct(Quota::per_minute(NonZeroU32::new(100).unwrap()));
+
+    let esi_history = ItemHistoryEsiService {
+        config: &esi_config,
+        error_limiter: &error_limiter,
+    };
 
     let config_common = CommonConfig::from_file_json(CONFIG_COMMON)?;
 

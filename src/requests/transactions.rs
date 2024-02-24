@@ -18,7 +18,7 @@ impl<'a> WalletEsiService<'a> {
         character_id: i32,
     ) -> anyhow::Result<Vec<GetCharactersCharacterIdWalletTransactions200Ok>> {
         let transactions = retry_smart(|| async {
-            Ok::<_, EsiApiError>(super::retry::Retry::Success(
+            Ok::<_, EsiApiError>(super::retry::RetryResult::Success(
                 wallet_api::get_characters_character_id_wallet_transactions(
                     self.esi_config,
                     GetCharactersCharacterIdWalletTransactionsParams {

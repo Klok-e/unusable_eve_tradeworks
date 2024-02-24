@@ -10,7 +10,7 @@ use crate::{
 use crate::{
     consts::DATE_FMT,
     item_type::{ItemHistory, MarketsRegionHistory},
-    requests::retry::Retry,
+    requests::retry::RetryResult,
 };
 use chrono::{Duration, NaiveDate, Utc};
 use reqwest::StatusCode;
@@ -29,12 +29,9 @@ use rust_eveonline_esi::apis::market_api::{self, GetMarketsRegionIdHistoryParams
 
 pub struct ItemHistoryEsiService<'a> {
     pub config: &'a Configuration,
+    pub error_limiter: &'a DefaultDirectRateLimiter,
 }
 impl<'a> ItemHistoryEsiService<'a> {
-    pub fn new(config: &'a Configuration) -> Self {
-        Self { config }
-    }
-
     pub async fn all_item_history(
         &self,
         item_types: &[i32],
@@ -109,69 +106,65 @@ impl<'a> ItemHistoryEsiService<'a> {
         &self,
         region_id: i32,
         item_type: i32,
-        rate_limiter: &DefaultDirectRateLimiter,
     ) -> Result<Option<ItemHistory>> {
-        let res: Option<ItemHistory> = retry::retry_smart(|| async {
-            log::debug!("Waiting for rate limit...");
-            rate_limiter
-                .until_ready_with_jitter(Jitter::up_to(std::time::Duration::from_millis(100)))
+        let res: Option<ItemHistory> =
+            retry::retry_smart_with_error_limiter(self.error_limiter, || async {
+                log::debug!("Downloading market history, type {item_type}, region_id {region_id}");
+                let hist_for_type: Result<_> = async {
+                    Ok(market_api::get_markets_region_id_history(
+                        self.config,
+                        GetMarketsRegionIdHistoryParams {
+                            region_id,
+                            type_id: item_type,
+                            datasource: None,
+                            if_none_match: None,
+                        },
+                    )
+                    .await?
+                    .entity
+                    .unwrap()
+                    .into_ok()
+                    .unwrap())
+                }
                 .await;
 
-            let hist_for_type: Result<_> = async {
-                Ok(market_api::get_markets_region_id_history(
-                    self.config,
-                    GetMarketsRegionIdHistoryParams {
-                        region_id,
-                        type_id: item_type,
-                        datasource: None,
-                        if_none_match: None,
-                    },
-                )
-                .await?
-                .entity
-                .unwrap()
-                .into_ok()
-                .unwrap())
-            }
-            .await;
+                // turn all 404 errors into empty vecs
+                let hist_for_type = match hist_for_type {
+                    Ok(ok) => ok,
+                    Err(
+                        api_err @ EsiApiError {
+                            status: StatusCode::NOT_FOUND | StatusCode::BAD_REQUEST,
+                            ..
+                        },
+                    ) => {
+                        log::debug!("Making empty hist_for_type: {api_err:?}");
+                        Vec::new()
+                    }
+                    Err(e) => {
+                        log::debug!(
+                            "Region id: {region_id}; Item type: {item_type} Returning error: {e:?}"
+                        );
+                        return Err(e);
+                    }
+                };
 
-            // turn all 404 errors into empty vecs
-            let hist_for_type = match hist_for_type {
-                Ok(ok) => ok,
-                Err(
-                    api_err @ EsiApiError {
-                        status: StatusCode::NOT_FOUND | StatusCode::BAD_REQUEST,
-                        ..
-                    },
-                ) => {
-                    log::debug!("Making empty hist_for_type: {api_err:?}");
-                    Vec::new()
-                }
-                Err(e) => {
-                    log::debug!(
-                        "Region id: {region_id}; Item type: {item_type} Returning error: {e:?}"
-                    );
-                    return Err(e);
-                }
-            };
-
-            let item = ItemHistory {
-                id: item_type,
-                history: hist_for_type
-                    .into_iter()
-                    .map(|x| MarketsRegionHistory {
-                        average: Some(x.average),
-                        date: x.date,
-                        highest: Some(x.highest),
-                        lowest: Some(x.lowest),
-                        order_count: x.order_count,
-                        volume: x.volume,
-                    })
-                    .collect(),
-            };
-            Ok(Retry::Success(item))
-        })
-        .await?;
+                let item = ItemHistory {
+                    id: item_type,
+                    history: hist_for_type
+                        .into_iter()
+                        .map(|x| MarketsRegionHistory {
+                            average: Some(x.average),
+                            date: x.date,
+                            highest: Some(x.highest),
+                            lowest: Some(x.lowest),
+                            order_count: x.order_count,
+                            volume: x.volume,
+                        })
+                        .collect(),
+                };
+                Ok(RetryResult::Success(item))
+            })
+            .await?;
         Ok(res)
     }
 
@@ -180,10 +173,8 @@ impl<'a> ItemHistoryEsiService<'a> {
         item_types: &[i32],
         region_id: i32,
     ) -> Result<Vec<ItemHistory>> {
-        let limiter = RateLimiter::direct(Quota::per_minute(NonZeroU32::new(300).unwrap()));
-
         let hists = stream::iter(item_types)
-            .map(|&item_type| self.get_item_type_history(region_id, item_type, &limiter))
+            .map(|&item_type| self.get_item_type_history(region_id, item_type))
             .buffer_unordered(BUFFER_UNORDERED);
 
         Ok(hists

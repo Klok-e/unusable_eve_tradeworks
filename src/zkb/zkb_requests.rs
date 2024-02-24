@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::requests::retry::{retry_smart, Retry};
+use crate::requests::retry::{retry_smart, RetryResult};
 
 pub struct ZkbRequestsService<'a> {
     client: &'a reqwest::Client,
@@ -68,7 +68,7 @@ impl<'a> ZkbRequestsService<'a> {
             let response = self.client.get(url.clone()).send().await?;
             if response.status() == 429 {
                 log::warn!("Zkill returned status 429. Retrying in 60 seconds...");
-                return Ok(Retry::Retry);
+                return Ok(RetryResult::Retry);
             }
 
             let full = response.bytes().await?;
@@ -90,7 +90,7 @@ impl<'a> ZkbRequestsService<'a> {
             // zkillboard allows only one request per second
             tokio::time::sleep(std::time::Duration::from_secs_f32(1.)).await;
 
-            Ok(Retry::Success(kills_page))
+            Ok(RetryResult::Success(kills_page))
         })
         .await?
         .unwrap();

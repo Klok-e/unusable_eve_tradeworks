@@ -26,7 +26,7 @@ use rust_eveonline_esi::{
     },
 };
 
-use crate::requests::retry::{self, Retry};
+use crate::requests::retry::{self, RetryResult};
 
 use super::error::EsiApiError;
 
@@ -41,13 +41,13 @@ where
     loop {
         let page_items = retry::retry_smart(|| async {
             match get(page).await {
-                Ok(x) => Ok(Retry::Success(x)),
+                Ok(x) => Ok(RetryResult::Success(x)),
 
                 // 404 means that page is empty
                 Err(EsiApiError {
                     status: StatusCode::NOT_FOUND,
                     ..
-                }) => Ok(Retry::Success(Vec::new())),
+                }) => Ok(RetryResult::Success(Vec::new())),
 
                 // 403 Forbidden is sometimes thrown randomly??? retry in this case
                 Err(
@@ -57,7 +57,7 @@ where
                     },
                 ) => {
                     log::warn!("{err} when getting pages, retrying...");
-                    Ok(Retry::Retry)
+                    Ok(RetryResult::Retry)
                 }
 
                 Err(e) => Err(e),
