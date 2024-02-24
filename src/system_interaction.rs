@@ -14,7 +14,7 @@ use crate::{
     requests::service::EsiRequestsService,
 };
 
-pub fn send_notification(notification: &str)->anyhow::Result<()>{
+pub fn send_notification(notification: &str) -> anyhow::Result<()> {
     log::debug!("Sending notification {notification}");
     cmd_lib::spawn! {
         notify-send "Unusable Eve Tradeworks" ${notification}

@@ -280,11 +280,9 @@ pub fn calculate_sell_price(
 
     match (dst_lowest_sell_order, dst_avgs) {
         (Some(dst_lowest_sell_order), Some(dst_avgs)) => {
-            if dst_lowest_sell_order > dst_avgs.high_average
-            {
+            if dst_lowest_sell_order > dst_avgs.high_average {
                 return dst_avgs.high_average;
             }
-
         }
         _ => {}
     };
