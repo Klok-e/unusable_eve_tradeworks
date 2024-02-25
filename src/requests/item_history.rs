@@ -30,6 +30,7 @@ use rust_eveonline_esi::apis::market_api::{self, GetMarketsRegionIdHistoryParams
 pub struct ItemHistoryEsiService<'a> {
     pub config: &'a Configuration,
     pub error_limiter: &'a DefaultDirectRateLimiter,
+    pub request_limiter: &'a DefaultDirectRateLimiter,
 }
 impl<'a> ItemHistoryEsiService<'a> {
     pub async fn all_item_history(
@@ -107,8 +108,10 @@ impl<'a> ItemHistoryEsiService<'a> {
         region_id: i32,
         item_type: i32,
     ) -> Result<Option<ItemHistory>> {
-        let res: Option<ItemHistory> =
-            retry::retry_smart_with_error_limiter(self.error_limiter, || async {
+        let res: Option<ItemHistory> = retry::retry_smart_with_error_limiter(
+            self.request_limiter,
+            self.error_limiter,
+            || async {
                 log::debug!("Downloading market history, type {item_type}, region_id {region_id}");
                 let hist_for_type: Result<_> = async {
                     Ok(market_api::get_markets_region_id_history(
@@ -137,10 +140,12 @@ impl<'a> ItemHistoryEsiService<'a> {
                             ..
                         },
                     ) => {
+                        self.error_limiter.until_ready().await;
                         log::debug!("Making empty hist_for_type: {api_err:?}");
                         Vec::new()
                     }
                     Err(e) => {
+                        self.error_limiter.until_ready().await;
                         log::debug!(
                             "Region id: {region_id}; Item type: {item_type} Returning error: {e:?}"
                         );
@@ -163,8 +168,9 @@ impl<'a> ItemHistoryEsiService<'a> {
                         .collect(),
                 };
                 Ok(RetryResult::Success(item))
-            })
-            .await?;
+            },
+        )
+        .await?;
         Ok(res)
     }
 

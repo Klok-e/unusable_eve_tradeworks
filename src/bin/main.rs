@@ -106,10 +106,12 @@ async fn run() -> Result<(), anyhow::Error> {
     let force_no_refresh = cli_args.get_flag(cli::FORCE_NO_REFRESH);
 
     let error_limiter = RateLimiter::direct(Quota::per_minute(NonZeroU32::new(100).unwrap()));
+    let request_limiter = RateLimiter::direct(Quota::per_minute(NonZeroU32::new(300).unwrap()));
 
     let esi_history = ItemHistoryEsiService {
         config: &esi_config,
         error_limiter: &error_limiter,
+        request_limiter: &request_limiter,
     };
 
     let config_common = CommonConfig::from_file_json(CONFIG_COMMON)?;

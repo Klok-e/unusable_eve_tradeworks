@@ -278,13 +278,13 @@ pub fn calculate_sell_price(
         sell_with_markup = sell_with_markup.max(weighted_price)
     }
 
-    match (dst_lowest_sell_order, dst_avgs) {
-        (Some(dst_lowest_sell_order), Some(dst_avgs)) => {
-            if dst_lowest_sell_order > dst_avgs.high_average {
-                return dst_avgs.high_average;
-            }
+    if let (Some(dst_lowest_sell_order), Some(dst_avgs)) = (dst_lowest_sell_order, dst_avgs) {
+        if dst_lowest_sell_order > dst_avgs.high_average
+            && ((dst_lowest_sell_order - dst_avgs.high_average) / dst_avgs.high_average)
+                > config.ignore_difference_between_history_and_order_pct
+        {
+            return dst_avgs.high_average.max(sell_with_markup);
         }
-        _ => {}
     };
 
     if let Some(dst_lowest_sell_order) = dst_lowest_sell_order {
