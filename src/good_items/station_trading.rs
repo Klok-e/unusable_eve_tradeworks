@@ -127,8 +127,13 @@ impl<'a> StationTradingService<'a> {
                 };
                 log::debug!("Item {} buy price: {}", type_id, buy_price);
 
-                let sell_price =
-                    calculate_sell_price(average_history, &market_data, self.config, buy_price);
+                let sell_price = calculate_sell_price(
+                    average_history,
+                    &market_data,
+                    self.config,
+                    buy_price,
+                    true,
+                );
 
                 let buy_price_with_taxes = buy_price * (1. + station_config.broker_fee);
                 let sell_price_with_taxes =

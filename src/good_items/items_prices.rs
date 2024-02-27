@@ -114,8 +114,13 @@ impl<'a> ItemsPricesService<'a> {
 
                 log::debug!("Item {} buy price: {}", item.name, buy_price);
 
-                let sell_price =
-                    calculate_sell_price(average_history, &market_data, self.config, buy_price);
+                let sell_price = calculate_sell_price(
+                    average_history,
+                    &market_data,
+                    self.config,
+                    buy_price,
+                    false,
+                );
 
                 log::debug!("Item {} sell price: {}", item.name, sell_price);
 

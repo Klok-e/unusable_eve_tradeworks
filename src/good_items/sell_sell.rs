@@ -194,6 +194,7 @@ pub fn prepare_sell_sell(
         &market_data.destination,
         &config.common,
         src_lowest_sell_order,
+        false,
     );
 
     let lost_per_day_scaled = lost_per_day
@@ -262,6 +263,7 @@ pub fn calculate_sell_price(
     dest_market: &MarketData,
     config: &CommonConfig,
     buy_price: f64,
+    conservative: bool,
 ) -> f64 {
     let dst_lowest_sell_order = if let Some(dst_avgs) = dst_avgs {
         dest_market.orders.iter().get_lowest_sell_order_over_volume(
@@ -279,6 +281,10 @@ pub fn calculate_sell_price(
     }
 
     if let (Some(dst_lowest_sell_order), Some(dst_avgs)) = (dst_lowest_sell_order, dst_avgs) {
+        if conservative && dst_lowest_sell_order > dst_avgs.high_average {
+            return dst_avgs.high_average;
+        }
+
         if dst_lowest_sell_order > dst_avgs.high_average
             && ((dst_lowest_sell_order - dst_avgs.high_average) / dst_avgs.high_average)
                 > config.ignore_difference_between_history_and_order_pct
