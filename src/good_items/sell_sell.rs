@@ -54,7 +54,10 @@ pub fn get_good_items_sell_sell(
             disable_filters
                 || x.src_avgs.map(|x| x.volume).unwrap_or(0f64)
                     >= config.common.sell_sell.min_src_volume
-                    && x.dst_avgs.map(|x| x.volume).unwrap_or(0f64)
+                    && x.dst_avgs
+                        .map(|x| x.volume)
+                        .unwrap_or(0f64)
+                        .max(x.lost_per_day)
                         >= config.common.sell_sell.min_dst_volume
                     && x.lost_per_day
                         >= config
