@@ -171,6 +171,9 @@ pub fn calculate_optimal_buy_volume(
         if max_price * (current_bought_volume + current_buy) as f64 > max_investment {
             current_buy = ((max_investment - max_price * current_bought_volume as f64) / max_price)
                 .floor() as i64;
+            if current_buy == 0 {
+                break;
+            }
         }
 
         let profit =
