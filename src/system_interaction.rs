@@ -75,8 +75,10 @@ pub fn communicate_paste_sell_order_prices(prices: Vec<f64>) -> anyhow::Result<(
         log::info!("Pasting {price}");
 
         save_to_clipboard_cmd(&format!("{}", price))?;
-        click_cmd()?;
+        // click_cmd()?;
         paste_from_clipboard_cmd()?;
+        tab_cmd()?;
+        tab_cmd()?;
 
         conn.shutdown(Shutdown::Write)?;
     }
