@@ -55,7 +55,7 @@ impl<'a> StationTradingService<'a> {
         let item_history = load_or_create_history(
             self.cache,
             station,
-            Duration::hours(self.config.item_history_timeout_hours),
+            Duration::try_hours(self.config.item_history_timeout_hours).unwrap(),
             self.esi_history,
             &all_type_descriptions.iter().map(|x| *x.0).collect_vec(),
         )
@@ -63,7 +63,7 @@ impl<'a> StationTradingService<'a> {
 
         let item_orders = load_or_create_orders(
             self.cache,
-            Duration::seconds((self.config.refresh_timeout_hours * 60. * 60.) as i64),
+            Duration::try_seconds((self.config.refresh_timeout_hours * 60. * 60.) as i64).unwrap(),
             self.esi_requests,
             station,
         )

@@ -71,7 +71,7 @@ pub async fn create_load_all_types(
         .load_or_create_json_async(
             CACHE_ALL_TYPES,
             vec![],
-            Some(Duration::days(7)),
+            Some(Duration::try_days(7).unwrap()),
             |_| async {
                 let all_types_src = esi_requests.get_all_item_types(source_region.region_id);
                 let all_types_dest = esi_requests.get_all_item_types(dest_region.region_id);
@@ -97,7 +97,7 @@ pub async fn create_load_item_descriptions(
         .load_or_create_async(
             CACHE_ALL_TYPE_DESC,
             vec![CACHE_ALL_TYPES],
-            Some(Duration::days(7)),
+            Some(Duration::try_days(7).unwrap()),
             |_| async {
                 let res = stream::iter(all_types.iter().copied())
                     .map(|id| {
@@ -131,7 +131,7 @@ pub async fn create_load_prices(
         .load_or_create_async(
             CACHE_ALL_TYPE_PRICES,
             vec![CACHE_ALL_TYPES],
-            Some(Duration::days(1)),
+            Some(Duration::try_days(1).unwrap()),
             |_| async {
                 let prices = esi_requests.get_ajusted_prices().await?.unwrap();
                 Ok(prices

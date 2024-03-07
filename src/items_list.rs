@@ -138,7 +138,7 @@ async fn get_zkb_frequencies(
             if force_no_refresh {
                 None
             } else {
-                Some(Duration::hours(24))
+                Some(Duration::try_hours(24).unwrap())
             },
             |previous: Option<Vec<Killmail>>| {
                 let km_service = &km_service;
@@ -226,7 +226,7 @@ pub async fn compute_pairs<'a>(
     let source_item_history = load_or_create_history(
         cache,
         source_region,
-        Duration::hours(config.common.item_history_timeout_hours),
+        Duration::try_hours(config.common.item_history_timeout_hours).unwrap(),
         esi_history,
         &all_types,
     )
@@ -234,7 +234,7 @@ pub async fn compute_pairs<'a>(
     let dest_item_history = load_or_create_history(
         cache,
         dest_region,
-        Duration::hours(config.common.item_history_timeout_hours),
+        Duration::try_hours(config.common.item_history_timeout_hours).unwrap(),
         esi_history,
         &all_types,
     )
@@ -242,7 +242,7 @@ pub async fn compute_pairs<'a>(
 
     let source_item_orders = load_or_create_orders(
         cache,
-        Duration::seconds((config.common.refresh_timeout_hours * 60. * 60.) as i64),
+        Duration::try_seconds((config.common.refresh_timeout_hours * 60. * 60.) as i64).unwrap(),
         esi_requests,
         source_region,
     )
@@ -250,7 +250,7 @@ pub async fn compute_pairs<'a>(
 
     let dest_item_orders = load_or_create_orders(
         cache,
-        Duration::seconds((config.common.refresh_timeout_hours * 60. * 60.) as i64),
+        Duration::try_seconds((config.common.refresh_timeout_hours * 60. * 60.) as i64).unwrap(),
         esi_requests,
         dest_region,
     )

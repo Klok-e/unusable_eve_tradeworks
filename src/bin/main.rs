@@ -76,7 +76,7 @@ async fn run() -> Result<(), anyhow::Error> {
         .load_or_create_json_async(
             CACHE_DATADUMP,
             vec![],
-            Some(Duration::days(14)),
+            Some(Duration::try_days(14).unwrap()),
             |_| async {
                 let client = &esi_config.client;
                 let res = client

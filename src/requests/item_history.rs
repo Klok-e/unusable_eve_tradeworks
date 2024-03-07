@@ -71,7 +71,7 @@ impl<'a> ItemHistoryEsiService<'a> {
                 })
                 .collect::<HashMap<_, _>>();
             let current_date = Utc::now().naive_utc().date();
-            let past_date = current_date - Duration::days(360);
+            let past_date = current_date - Duration::try_days(360).unwrap();
 
             for date in past_date.iter_days() {
                 if dates.contains_key(&date) {
